@@ -3,18 +3,16 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import DateTime, func, text
-from sqlmodel import Field, SQLModel
-
-
-class Role(str, Enum):
-    CUSTOMER = 'CUSTOMER'
-    ADMIN = 'ADMIN'
-    AGENT = 'AGENT'
+from sqlalchemy import DateTime, func, text, CheckConstraint, Index, Sequence
+from sqlmodel import Field, SQLModel, Relationship
+from app.enums.enums import Role
 
 
 class User(SQLModel, table=True):
     __tablename__ = 'users'
+    __table_args__ = (
+        CheckConstraint('email = lower(email)', name='ck_users_email_lowercase')
+    )
 
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -79,3 +77,18 @@ class User(SQLModel, table=True):
             'onupdate': func.now(),
         },
     )
+
+    created_tickets: list["Ticket"] = Relationship(
+        back_populates="created_by",
+        sa_relationship_kwargs={"foreign_keys": "Ticket.created_by_user_id"},
+    )
+    assigned_tickets: list["Ticket"] = Relationship(
+        back_populates="assignee",
+        sa_relationship_kwargs={"foreign_keys": "Ticket.assignee_user_id"},
+    )
+    comments: list["Comment"] = Relationship(back_populates="author")
+    history_events: list["TicketHistory"] = Relationship(back_populates="actor")
+    attachments: list["Attachment"] = Relationship(back_populates="uploaded_by")
+    notifications: list["Notification"] = Relationship(back_populates="recipient")
+
+
