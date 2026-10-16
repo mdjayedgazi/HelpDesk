@@ -68,6 +68,14 @@ class User(SQLModel, table=True):
         },
     )
 
+    clerk_id: str | None = Field(
+        default=None,
+        max_length=255,
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),
