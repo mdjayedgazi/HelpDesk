@@ -1,8 +1,8 @@
 from enum import Enum
 class Role(str, Enum):
-    CUSTOMER = "CUSTOMER"
-    ADMIN = "ADMIN"
-    AGENT = "AGENT"
+    CUSTOMER = "customer"
+    ADMIN = "admin"
+    AGENT = "agent"
 
 
 class TicketStatus(str, Enum):
