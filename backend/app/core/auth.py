@@ -204,7 +204,40 @@ async def get_current_user(
     return user
 
 
+def require_roles(*allowed_roles: Role):
+    async def role_checker(
+            current_user: Annotated[
+                User,
+                Depends(get_current_user)
+            ],
+    ) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Uou do not have permission to access this resource',
+            )
+        return current_user
+    return role_checker
+
 user_dependency = Annotated[
     User,
     Depends(get_current_user),
+]
+
+# Admin only
+admin_dependency = Annotated[
+    User,
+    Depends(require_roles(Role.ADMIN)),
+]
+
+# Agent only
+agency_dependency = Annotated[
+    User,
+    Depends(require_roles(Role.AGENT)),
+]
+
+# Customer only
+customer_dependency = Annotated[
+    User,
+    Depends(require_roles(Role.CUSTOMER)),
 ]
