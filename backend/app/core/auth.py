@@ -1,62 +1,69 @@
-
 from typing import Annotated
-from uuid import UUID
 
-import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jwt.exceptions import InvalidTokenError
-from sqlalchemy.ext.asyncio import AsyncSession
+from clerk_backend_api import Clerk
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
 
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl='auth/login',
+clerk = Clerk(
+    bearer_auth=settings.CLERK_SECRET_KEY,
 )
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail='Could not validate credentials',
-        headers={'WWW-Authenticate': 'Bearer'},
-    )
+    authorization = request.headers.get("Authorization", "")
 
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
-            options={'require': ['exp', 'sub']},
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-        subject = payload.get('sub')
+    token = authorization.removeprefix("Bearer ").strip()
 
-        if not isinstance(subject, str):
-            raise credentials_exception
+    try:
+        claims = clerk.verify_token(token)
+        clerk_user_id = claims.get("sub")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Clerk session",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
 
-        user_id = UUID(subject)
+    if not isinstance(clerk_user_id, str):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Clerk user ID",
+        )
 
-    except (InvalidTokenError, ValueError):
-        raise credentials_exception from None
-
-    user = await session.get(User, user_id)
+    result = await session.exec(
+        select(User).where(User.clerk_id == clerk_user_id)
+    )
+    user = result.first()
 
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="HelpDesk profile not found",
+        )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='Inactive user',
+            detail="Inactive user",
         )
 
     return user
+
 
 user_dependency = Annotated[User, Depends(get_current_user)]
