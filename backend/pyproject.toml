@@ -7,11 +7,10 @@ requires-python = ">=3.13.1"
 dependencies = [
     "clerk-backend-api>=7.0.0",
     "fastapi[standard]==0.143.2",
+    "httpx>=0.28.1",
     "psycopg[binary]>=3.3.6",
-    "pwdlib[argon2]>=0.3.1",
     "pydantic-settings==2.16.0",
     "pydantic[email]>=2.14.1",
-    "pyjwt==2.15.1",
     "pyrefly==1.4.0",
     "python-multipart>=0.0.32",
     "sqlalchemy==2.1.4",
