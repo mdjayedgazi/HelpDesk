@@ -4,9 +4,9 @@ __pycache__/
 *.pyo
 
 # Virtual Enviromments
-.venv/
+backend/.venv/
 venv/
-env/
+backend/.env/
 
 # Enviromment variables
 .env
