@@ -1,4 +1,3 @@
-
 import uuid
 from datetime import datetime
 
@@ -6,15 +5,6 @@ from pydantic import ConfigDict, EmailStr
 from sqlmodel import Field, SQLModel
 
 from app.enums.enums import Role
-
-
-class UserCreate(SQLModel):
-    model_config = ConfigDict(extra="forbid")
-
-    full_name: str = Field(min_length=2, max_length=100)
-    username: str = Field(min_length=2, max_length=90)
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
 
 
 class UserUpdate(SQLModel):
