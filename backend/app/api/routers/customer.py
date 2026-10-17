@@ -18,6 +18,14 @@ async def me(
     session: session_Dependency,
     user: user_dependency,
 ) -> User:
+    """Return the stored profile matching the authenticated user's ID.
+
+    Database query errors propagate to the caller.
+
+    Raises:
+        HTTPException: If no authenticated user is supplied (401) or no
+            matching local profile exists (404).
+    """
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
