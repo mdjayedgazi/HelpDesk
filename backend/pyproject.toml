@@ -7,7 +7,7 @@ requires-python = ">=3.13.1"
 dependencies = [
     "aiosqlite>=0.22.1",
     "clerk-backend-api>=7.0.0",
-    "fastapi[standard]==0.143.2",
+    "fastapi[standard]==0.143.3",
     "httpx>=0.28.1",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings==2.16.0",
@@ -15,7 +15,7 @@ dependencies = [
     "pyrefly==1.4.0",
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.32",
-    "sqlalchemy==2.1.4",
+    "sqlalchemy==2.1.5",
     "sqlmodel>=0.0.47",
     "svix>=2.8.0",
 ]
