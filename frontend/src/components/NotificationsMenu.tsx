@@ -87,7 +87,7 @@ export function NotificationsMenu() {
             borderWidth='1px'
             borderColor={palette.border}
             borderRadius='l3'
-            boxShadow='0 18px 48px -20px rgba(0,0,0,0.26)'
+            boxShadow={palette.shadowMd}
             overflow='hidden'
           >
             <Popover.Header px='4' py='3' borderBottomWidth='1px' borderColor={palette.border}>

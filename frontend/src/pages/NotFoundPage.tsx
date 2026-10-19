@@ -16,7 +16,7 @@ export function NotFoundPage() {
         description='The link may be broken or the page may have moved.'
         action={
           <Button asChild size='sm' variant='outline' borderColor={palette.border}>
-            <Link to='/'>Back to dashboard</Link>
+            <Link to='/dashboard'>Back to dashboard</Link>
           </Button>
         }
       />

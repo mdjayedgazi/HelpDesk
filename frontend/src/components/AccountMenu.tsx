@@ -54,7 +54,7 @@ export function AccountMenu() {
             borderWidth='1px'
             borderColor={palette.border}
             borderRadius='l2'
-            boxShadow='0 12px 32px -16px rgba(0,0,0,0.22)'
+            boxShadow={palette.shadowMd}
             py='1.5'
           >
             <Box px='3' py='2'>

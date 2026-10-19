@@ -6,6 +6,7 @@ import { palette } from '../theme/palette.ts'
 import { AccountMenu } from './AccountMenu.tsx'
 import { Logo } from './Logo.tsx'
 import { NotificationsMenu } from './NotificationsMenu.tsx'
+import { ThemeToggle } from './ThemeToggle.tsx'
 import { sectionTitleForPath } from './nav.ts'
 
 export function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
@@ -22,7 +23,7 @@ export function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
       gap='3'
       height='14'
       px={{ base: '3', md: '6' }}
-      bg='rgba(255,255,255,0.85)'
+      bg={palette.glass}
       backdropFilter='blur(8px)'
       borderBottomWidth='1px'
       borderColor={palette.border}
@@ -53,6 +54,7 @@ export function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
         </Text>
       </Flex>
       <Flex align='center' gap='1'>
+        <ThemeToggle />
         <NotificationsMenu />
         <AccountMenu />
       </Flex>
