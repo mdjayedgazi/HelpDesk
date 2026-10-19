@@ -4,6 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 
 import type { User } from '../lib/types.ts'
 import { palette } from '../theme/palette.ts'
+import { Container } from './Container.tsx'
 import { navSectionsForRole } from './nav.ts'
 import { SidebarNav } from './Sidebar.tsx'
 import { TopBar } from './TopBar.tsx'
@@ -26,7 +27,7 @@ export function AppShell({ me }: { me: User }) {
   }, [location.pathname])
 
   return (
-    <Flex className='min-h-screen' bg={palette.page}>
+    <Flex minH='100dvh' bg={palette.page}>
       <Box
         as='aside'
         display={{ base: 'none', lg: 'block' }}
@@ -46,9 +47,9 @@ export function AppShell({ me }: { me: User }) {
       <Flex direction='column' flex='1' minW='0' ml={{ base: '0', lg: '64' }}>
         <TopBar onOpenNav={() => setNavOpen(true)} />
         <Box as='main' flex='1' minW='0'>
-          <Box className='mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8'>
+          <Container size='content' py={{ base: '6', md: '8' }}>
             <Outlet />
-          </Box>
+          </Container>
         </Box>
       </Flex>
 
@@ -58,7 +59,7 @@ export function AppShell({ me }: { me: User }) {
         placement='start'
       >
         <Portal>
-          <Drawer.Backdrop bg='rgba(17,17,17,0.32)' />
+          <Drawer.Backdrop bg={palette.overlay} />
           <Drawer.Positioner>
             <Drawer.Content
               bg={palette.surface}

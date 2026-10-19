@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.tsx'
 import { Toaster } from './components/Toaster.tsx'
 import { queryClient } from './lib/queryClient.ts'
+import { ThemeProvider } from './theme/colorMode.tsx'
 import { palette } from './theme/palette.ts'
 import { system } from './theme/system.ts'
 import './index.css'
@@ -53,10 +54,12 @@ function Root() {
     <ClerkProvider publishableKey={publishableKey} afterSignOutUrl='/'>
       <QueryClientProvider client={queryClient}>
         <ChakraProvider value={system}>
-          <BrowserRouter>
-            <App />
-            <Toaster />
-          </BrowserRouter>
+          <ThemeProvider>
+            <BrowserRouter>
+              <App />
+              <Toaster />
+            </BrowserRouter>
+          </ThemeProvider>
         </ChakraProvider>
       </QueryClientProvider>
     </ClerkProvider>

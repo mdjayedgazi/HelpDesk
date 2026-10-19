@@ -15,6 +15,11 @@ const monoStack =
  * neutral gray tokens replace the default hue scale and every semantic color
  * (including error/success/warning/info) collapses to grayscale so that no
  * component can accidentally introduce a rainbow accent.
+ *
+ * Theme-able values resolve to the CSS custom properties declared in
+ * `tokens.css` (via `palette`). Because those properties change under
+ * `html.dark`, every semantic token — and every component that reads them —
+ * follows the active light/dark theme without any per-component branching.
  */
 const config = defineConfig({
   cssVarsPrefix: 'hd',
@@ -26,6 +31,9 @@ const config = defineConfig({
     html: {
       textSizeAdjust: '100%',
       scrollBehavior: 'smooth',
+      // Paint the base surface from one place so the marketing chrome and the
+      // authenticated shell never disagree about the page background.
+      backgroundColor: palette.page,
     },
     body: {
       fontFamily: 'body',
@@ -49,6 +57,9 @@ const config = defineConfig({
     },
     a: {
       color: 'inherit',
+    },
+    img: {
+      maxWidth: '100%',
     },
     '@media (prefers-reduced-motion: reduce)': {
       '*, *::before, *::after': {
@@ -85,42 +96,44 @@ const config = defineConfig({
         l1: { value: '4px' },
         l2: { value: '6px' },
         l3: { value: '8px' },
+        l4: { value: '12px' },
+        l5: { value: '16px' },
       },
     },
     semanticTokens: {
       colors: {
         bg: {
-          DEFAULT: { value: { _light: palette.page } },
-          subtle: { value: { _light: palette.surfaceMuted } },
-          muted: { value: { _light: palette.inset } },
-          emphasized: { value: { _light: palette.border } },
-          inverted: { value: { _light: palette.ink } },
-          panel: { value: { _light: palette.surface } },
-          error: { value: { _light: palette.inset } },
-          warning: { value: { _light: palette.inset } },
-          success: { value: { _light: palette.inset } },
-          info: { value: { _light: palette.inset } },
+          DEFAULT: { value: palette.page },
+          subtle: { value: palette.surfaceMuted },
+          muted: { value: palette.inset },
+          emphasized: { value: palette.border },
+          inverted: { value: palette.ink },
+          panel: { value: palette.surface },
+          error: { value: palette.inset },
+          warning: { value: palette.inset },
+          success: { value: palette.inset },
+          info: { value: palette.inset },
         },
         fg: {
-          DEFAULT: { value: { _light: palette.text } },
-          muted: { value: { _light: palette.textSecondary } },
-          subtle: { value: { _light: palette.textMuted } },
-          inverted: { value: { _light: palette.textOnInk } },
-          error: { value: { _light: palette.text } },
-          warning: { value: { _light: palette.text } },
-          success: { value: { _light: palette.text } },
-          info: { value: { _light: palette.text } },
+          DEFAULT: { value: palette.text },
+          muted: { value: palette.textSecondary },
+          subtle: { value: palette.textMuted },
+          inverted: { value: palette.textOnInk },
+          error: { value: palette.text },
+          warning: { value: palette.text },
+          success: { value: palette.text },
+          info: { value: palette.text },
         },
         border: {
-          DEFAULT: { value: { _light: palette.border } },
-          muted: { value: { _light: palette.borderSubtle } },
-          subtle: { value: { _light: palette.borderSubtle } },
-          emphasized: { value: { _light: palette.borderStrong } },
-          inverted: { value: { _light: palette.ink } },
-          error: { value: { _light: palette.border } },
-          warning: { value: { _light: palette.border } },
-          success: { value: { _light: palette.border } },
-          info: { value: { _light: palette.border } },
+          DEFAULT: { value: palette.border },
+          muted: { value: palette.borderSubtle },
+          subtle: { value: palette.borderSubtle },
+          emphasized: { value: palette.borderStrong },
+          inverted: { value: palette.ink },
+          error: { value: palette.border },
+          warning: { value: palette.border },
+          success: { value: palette.border },
+          info: { value: palette.border },
         },
       },
     },

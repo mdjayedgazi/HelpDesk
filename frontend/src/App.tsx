@@ -14,6 +14,7 @@ import { AdminUsersPage } from './pages/admin/AdminUsersPage.tsx'
 import { AgentQueuePage } from './pages/agent/AgentQueuePage.tsx'
 import { SignInPage } from './pages/auth/SignInPage.tsx'
 import { SignUpPage } from './pages/auth/SignUpPage.tsx'
+import { HomePage } from './pages/marketing/HomePage.tsx'
 import { AccountRequestDetailPage } from './pages/staff/AccountRequestDetailPage.tsx'
 import { AccountRequestsPage } from './pages/staff/AccountRequestsPage.tsx'
 import { MessagesPage } from './pages/staff/MessagesPage.tsx'
@@ -21,11 +22,14 @@ import { MessagesPage } from './pages/staff/MessagesPage.tsx'
 export function App() {
   return (
     <Routes>
+      {/* Public marketing homepage. Authenticated visitors are *not* redirected
+          away from here; they get an explicit workspace action instead. */}
+      <Route path='/' element={<HomePage />} />
       <Route path='/sign-in/*' element={<SignInPage />} />
       <Route path='/sign-up/*' element={<SignUpPage />} />
 
       <Route element={<ProtectedLayout />}>
-        <Route index element={<DashboardPage />} />
+        <Route path='dashboard' element={<DashboardPage />} />
         <Route path='tickets' element={<TicketsPage />} />
         <Route
           path='tickets/new'
