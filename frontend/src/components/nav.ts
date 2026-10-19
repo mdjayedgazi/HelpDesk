@@ -38,7 +38,7 @@ export function navSectionsForRole(role: Role): NavSection[] {
     return [
       {
         label: 'Overview',
-        items: [{ label: 'Dashboard', to: '/', icon: Gauge, end: true }],
+        items: [{ label: 'Dashboard', to: '/dashboard', icon: Gauge, end: true }],
       },
       {
         label: 'Management',
@@ -78,7 +78,7 @@ export function navSectionsForRole(role: Role): NavSection[] {
     return [
       {
         label: 'Overview',
-        items: [{ label: 'Dashboard', to: '/', icon: Gauge, end: true }],
+        items: [{ label: 'Dashboard', to: '/dashboard', icon: Gauge, end: true }],
       },
       {
         label: 'Workspace',
@@ -125,7 +125,7 @@ export function navSectionsForRole(role: Role): NavSection[] {
 }
 
 export function sectionTitleForPath(pathname: string): string {
-  if (pathname === '/') return 'Dashboard'
+  if (pathname === '/dashboard') return 'Dashboard'
   if (pathname.startsWith('/admin/users')) return 'Users'
   if (pathname.startsWith('/admin')) return 'Admin'
   if (pathname.startsWith('/tickets/new')) return 'New ticket'

@@ -31,7 +31,7 @@ export function ConfirmDialog({
       role='alertdialog'
     >
       <Portal>
-        <Dialog.Backdrop bg='rgba(17,17,17,0.32)' />
+        <Dialog.Backdrop bg={palette.overlay} />
         <Dialog.Positioner>
           <Dialog.Content
             bg={palette.surface}
@@ -39,7 +39,7 @@ export function ConfirmDialog({
             borderColor={palette.border}
             borderRadius='l3'
             maxW='md'
-            boxShadow='0 24px 60px -24px rgba(0,0,0,0.28)'
+            boxShadow={palette.shadowLg}
           >
             <Dialog.Header px='6' pt='6' pb='2'>
               <Dialog.Title fontSize='md' fontWeight='medium' color={palette.text}>

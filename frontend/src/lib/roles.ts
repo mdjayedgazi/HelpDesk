@@ -33,5 +33,5 @@ export function canManageUsers(role: Role | undefined | null): boolean {
 
 /** The landing route for a role. The dashboard itself is role-aware. */
 export function homePathForRole(_role: Role): string {
-  return '/'
+  return '/dashboard'
 }

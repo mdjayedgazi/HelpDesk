@@ -1,50 +1,73 @@
 /**
  * The single source of truth for the monochrome HelpDesk palette.
  *
- * Every surface, border and text tone in the product resolves back to one of
- * these neutrals. Components read from here (or from the matching Chakra
- * semantic tokens defined in `system.ts`) instead of inventing new colors, so
- * the interface stays deliberately black, white and gray.
+ * Every value points at a CSS custom property declared in
+ * `src/theme/tokens.css`, which flips between its light and dark value when the
+ * `dark` class is present on `<html>`. Components therefore keep reading plain
+ * names (`palette.surface`) while the rendered colour follows the active theme
+ * automatically — no component needs to know which theme is active.
+ *
+ * The `gray` scale is intentionally *static*: it is a neutral ramp shared by
+ * both themes and is only used to seed Chakra's own colour tokens.
  */
 export const palette = {
   /** Primary page background. */
-  page: '#FAFAFA',
+  page: 'var(--hd-page)',
   /** Main content surface (cards, panels, sidebar). */
-  surface: '#FFFFFF',
+  surface: 'var(--hd-surface)',
   /** Slightly recessed surface for hover and inset areas. */
-  surfaceMuted: '#F5F5F5',
+  surfaceMuted: 'var(--hd-surface-muted)',
+  /** Raised surface that reads as elevated above the page. */
+  elevated: 'var(--hd-elevated)',
   /** Hover surface for interactive rows and menu items. */
-  hover: '#F3F3F3',
+  hover: 'var(--hd-hover)',
   /** Stronger inset surface (e.g. code, chips). */
-  inset: '#F0F0F0',
+  inset: 'var(--hd-inset)',
 
   /** Primary text. */
-  text: '#111111',
+  text: 'var(--hd-text)',
   /** Secondary text. */
-  textSecondary: '#525252',
+  textSecondary: 'var(--hd-text-secondary)',
   /** Muted metadata text. */
-  textMuted: '#6B6B6B',
+  textMuted: 'var(--hd-text-muted)',
   /** Faint text (timestamps, placeholders). */
-  textFaint: '#737373',
+  textFaint: 'var(--hd-text-faint)',
   /** Text on ink surfaces. */
-  textOnInk: '#FFFFFF',
+  textOnInk: 'var(--hd-text-on-ink)',
 
   /** Ink used for primary actions and emphasis. */
-  ink: '#111111',
+  ink: 'var(--hd-ink)',
   /** Ink hover. */
-  inkHover: '#000000',
+  inkHover: 'var(--hd-ink-hover)',
 
   /** Main border. */
-  border: '#E5E5E5',
+  border: 'var(--hd-border)',
   /** Subtle border. */
-  borderSubtle: '#F0F0F0',
+  borderSubtle: 'var(--hd-border-subtle)',
   /** Stronger border for emphasis. */
-  borderStrong: '#D4D4D4',
+  borderStrong: 'var(--hd-border-strong)',
 
   /** Focus ring. */
-  focus: '#111111',
+  focus: 'var(--hd-focus)',
 
-  /** Neutral scale used for grayscale pills and depth. */
+  /** Translucent overlay for dialogs, drawers and lightboxes. */
+  overlay: 'var(--hd-overlay)',
+  /** Translucent chrome for sticky headers. */
+  glass: 'var(--hd-glass)',
+  /** Fine grid/texture stroke. */
+  grid: 'var(--hd-grid)',
+
+  /** Elevation presets. */
+  shadowSm: 'var(--hd-shadow-sm)',
+  shadowMd: 'var(--hd-shadow-md)',
+  shadowLg: 'var(--hd-shadow-lg)',
+  shadowXl: 'var(--hd-shadow-xl)',
+  shadowPanel: 'var(--hd-shadow-panel)',
+
+  /**
+   * Static neutral ramp. Deliberately identical in both themes so Chakra's own
+   * semantic tokens (which pair `gray.50` with `gray.950`, etc.) keep working.
+   */
   gray: {
     50: '#FAFAFA',
     100: '#F5F5F5',
