@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import JSON, Column, DateTime, func
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.ticket import Ticket
@@ -15,8 +15,12 @@ class TicketHistory(SQLModel, table=True):
     ticket_id: uuid.UUID = Field(foreign_key="tickets.id", index=True, nullable=False)
     actor_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
     event_type: str = Field(max_length=40, nullable=False)
-    old_value: dict | None = Field(default=None, sa_type=None)
-    new_value: dict | None = Field(default=None, sa_type=None)
+
+    # JSON keeps a snapshot of the value before and after a change, e.g.
+    # {"status": "OPEN"} -> {"status": "IN_PROGRESS"}.
+    old_value: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    new_value: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),

@@ -6,12 +6,16 @@ from sqlmodel import Field, SQLModel
 
 
 class CommentCreate(SQLModel):
-    body: str = Field(min_length=1, max_length=10000)
+    """A comment on a ticket.
 
+    ``is_internal`` marks an internal note (staff only). Customers may send
+    the field only when it is ``False``; the router rejects ``True`` for them.
+    """
 
-class InternalCommentCreate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
     body: str = Field(min_length=1, max_length=10000)
-    is_internal: bool = True
+    is_internal: bool = False
 
 
 class CommentRead(SQLModel):
@@ -27,6 +31,8 @@ class CommentRead(SQLModel):
 
 
 class PublicCommentRead(SQLModel):
+    """Comment shape shown to customers: internal notes are never included."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, func, text
+from sqlalchemy import DateTime, Text, func, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.ticket import Ticket
@@ -13,7 +13,9 @@ class Comment(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     ticket_id: uuid.UUID = Field(foreign_key="tickets.id", index=True, nullable=False)
     author_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
-    body: str = Field(nullable=False)
+    # ``sa_type=Text`` keeps the model metadata identical to the migration
+    # DDL (``sa.Text``) so ``alembic check`` reports no spurious type drift.
+    body: str = Field(nullable=False, sa_type=Text)
     is_internal: bool = Field(
         default=False,
         nullable=False,

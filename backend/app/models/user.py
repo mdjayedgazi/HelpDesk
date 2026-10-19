@@ -1,10 +1,18 @@
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, func, text
+from sqlalchemy import CheckConstraint, DateTime, Index, func, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.enums.enums import Role
+
+if TYPE_CHECKING:
+    from app.models.attachment import Attachment
+    from app.models.comment import Comment
+    from app.models.notification import Notification
+    from app.models.ticket import Ticket
+    from app.models.ticketHistory import TicketHistory
 
 
 class User(SQLModel, table=True):
@@ -14,6 +22,16 @@ class User(SQLModel, table=True):
         CheckConstraint(
             "email = lower(email)",
             name="ck_users_email_lowercase",
+        ),
+        # At most one OWNER may exist. This partial unique index is the database
+        # half of the "single, permanent Owner" rule; the bootstrap command and
+        # the user-management endpoints enforce it transactionally on top.
+        Index(
+            "uq_users_single_owner",
+            "role",
+            unique=True,
+            postgresql_where=text("role = 'OWNER'"),
+            sqlite_where=text("role = 'OWNER'"),
         ),
     )
 
@@ -47,6 +65,16 @@ class User(SQLModel, table=True):
         unique=True,
         index=True,
         nullable=False,
+    )
+
+    # Clerk-hosted profile image URL (``user.image_url``). Clerk is the source
+    # of truth; this cached copy lets the app render other users' photos
+    # (comments, conversations, staff tables) without exposing the Clerk secret.
+    # Only ever written from verified Clerk data server-side.
+    image_url: str | None = Field(
+        default=None,
+        max_length=512,
+        nullable=True,
     )
 
     # Clerk manages passwords. Keep this nullable during migration
