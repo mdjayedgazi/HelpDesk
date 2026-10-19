@@ -15,6 +15,12 @@ class Notification(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     recipient_user_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
     related_ticket_id: uuid.UUID | None = Field(default=None, foreign_key="tickets.id")
+    # Optional deep link for notifications about a private staff conversation.
+    # Customers never receive these notifications, and the conversation itself
+    # enforces its own authorization.
+    related_conversation_id: uuid.UUID | None = Field(
+        default=None, foreign_key="staff_conversations.id"
+    )
     type: NotificationType = Field(max_length=40, nullable=False)
     title: str = Field(max_length=180, nullable=False)
     message: str = Field(max_length=500, nullable=False)

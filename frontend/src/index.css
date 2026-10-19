@@ -1,0 +1,13 @@
+/*
+ * Tailwind is loaded as a *utility layer only*.
+ *
+ * Chakra UI owns the component system and the global reset, so Tailwind's
+ * preflight is intentionally omitted to avoid two competing resets fighting
+ * over the same base elements. Tailwind is used for a small set of layout and
+ * spacing utilities inside the application shell; all color and component
+ * styling comes from the monochrome Chakra theme in `src/theme/system.ts`.
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);

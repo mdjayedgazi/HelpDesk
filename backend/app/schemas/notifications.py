@@ -11,6 +11,9 @@ class NotificationRead(SQLModel):
     id: uuid.UUID
     recipient_user_id: uuid.UUID
     related_ticket_id: uuid.UUID | None
+    # Present on private staff <-> Owner message notifications so the client
+    # can deep-link into the conversation. Always ``None`` for customers.
+    related_conversation_id: uuid.UUID | None = None
     type: NotificationType
     title: str
     message: str
@@ -19,4 +22,8 @@ class NotificationRead(SQLModel):
 
 
 class NotificationUpdate(SQLModel):
+    """The only field a client may change on a notification."""
+
+    model_config = ConfigDict(extra="forbid")
+
     is_read: bool
