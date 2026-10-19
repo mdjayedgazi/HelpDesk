@@ -376,7 +376,7 @@ function CreateRequestDialog({
   return (
     <Dialog.Root open={open} onOpenChange={(details) => onOpenChange(details.open)}>
       <Portal>
-        <Dialog.Backdrop bg='rgba(17,17,17,0.32)' />
+        <Dialog.Backdrop bg={palette.overlay} />
         <Dialog.Positioner>
           <Dialog.Content
             bg={palette.surface}
@@ -384,7 +384,7 @@ function CreateRequestDialog({
             borderColor={palette.border}
             borderRadius='l3'
             maxW='xl'
-            boxShadow='0 24px 60px -24px rgba(0,0,0,0.28)'
+            boxShadow={palette.shadowLg}
           >
             <form onSubmit={onSubmit} noValidate>
               <Dialog.Header px='6' pt='6' pb='2'>

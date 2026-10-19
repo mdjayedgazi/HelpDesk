@@ -9,7 +9,7 @@ export function SignUpPage() {
   const { isLoaded, isSignedIn } = useAuth()
 
   if (!isLoaded) return <FullPageLoading />
-  if (isSignedIn) return <Navigate to='/' replace />
+  if (isSignedIn) return <Navigate to='/dashboard' replace />
 
   return (
     <AuthLayout>
@@ -17,7 +17,7 @@ export function SignUpPage() {
         routing='path'
         path='/sign-up'
         signInUrl='/sign-in'
-        fallbackRedirectUrl='/'
+        fallbackRedirectUrl='/dashboard'
         appearance={clerkAppearance}
       />
     </AuthLayout>

@@ -28,7 +28,7 @@ export function Toaster() {
             bg={palette.surface}
             color={palette.text}
             borderRadius='l2'
-            boxShadow='0 8px 24px -12px rgba(0,0,0,0.18)'
+            boxShadow={palette.shadowSm}
           >
             <Toast.Indicator color={palette.text} />
             <Stack gap='0.5' flex='1' maxWidth='100%'>
