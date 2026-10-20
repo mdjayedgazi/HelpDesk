@@ -12,9 +12,11 @@ from fastapi import HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.enums.enums import InternalAudience, Role
+from app.enums.enums import InternalAudience, NotificationType, Role
 from app.models.internal_message import InternalMessage, InternalMessageRecipient
+from app.models.notification import Notification
 from app.models.user import User
+from app.services.notifications import create_notification
 
 # Body preview length used by the sent/inbox lists.
 PREVIEW_LENGTH = 140
@@ -123,6 +125,22 @@ def create_message(
                 recipient_email_snapshot=recipient.email,
             )
         )
+        # One notification per addressed employee, in the same transaction as
+        # the recipient row. The body is never copied into the notification -
+        # the employee opens the message to read it. A retry cannot duplicate
+        # either row: the unique (message_id, recipient) constraint aborts the
+        # whole transaction before commit.
+        create_notification(
+            session,
+            recipient_user_id=recipient.id,
+            related_internal_message_id=message.id,
+            type=NotificationType.INTERNAL_MESSAGE_RECEIVED,
+            title="New message from the Owner",
+            message=(
+                "The Owner sent you an internal message. Open it to read the "
+                "details."
+            ),
+        )
 
     return message
 
@@ -155,5 +173,29 @@ async def mark_message_read(
     if row.read_at is None:
         row.read_at = datetime.now(timezone.utc)
         session.add(row)
+        # Keep the notification centre and the message's own read state
+        # consistent: opening the message clears its notification's unread
+        # badge in the same transaction.
+        await _mark_message_notifications_read(
+            session, message_id=message_id, reader_id=reader.id
+        )
         return 1
     return 0
+
+
+async def _mark_message_notifications_read(
+    session: AsyncSession, *, message_id: uuid.UUID, reader_id: uuid.UUID
+) -> None:
+    """Mark the reader's own internal-message notifications read."""
+    rows = (
+        await session.exec(
+            select(Notification).where(
+                Notification.recipient_user_id == reader_id,
+                Notification.related_internal_message_id == message_id,
+                Notification.is_read.is_(False),
+            )
+        )
+    ).all()
+    for row in rows:
+        row.is_read = True
+        session.add(row)

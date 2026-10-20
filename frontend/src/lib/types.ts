@@ -103,6 +103,9 @@ export type NotificationType =
   | 'OWNER_MESSAGE_RECEIVED'
   | 'ESCALATION_CREATED'
   | 'ESCALATION_UPDATED'
+  | 'TICKET_CREATED'
+  | 'TICKET_RESOLVED'
+  | 'INTERNAL_MESSAGE_RECEIVED'
 
 export interface User {
   id: string
@@ -171,6 +174,10 @@ export interface Notification {
   recipient_user_id: string
   related_ticket_id: string | null
   related_conversation_id: string | null
+  /** Set on Owner-composed internal message notifications (employee deep link). */
+  related_internal_message_id: string | null
+  /** Set on account-management (escalation) notifications. */
+  related_account_request_id: string | null
   type: NotificationType
   title: string
   message: string
@@ -473,8 +480,47 @@ export type UserListParams = {
 
 export type NotificationListParams = {
   is_read?: boolean
+  /** Server-side grouping of notification types for the panel filters. */
+  category?: NotificationCategory
   limit?: number
   offset?: number
+}
+
+export type NotificationCategory = 'tickets' | 'messages' | 'account_requests'
+
+/** The current user's unread totals, bucketed for the panel filters. */
+export interface NotificationUnreadCount {
+  count: number
+  tickets: number
+  messages: number
+  account_requests: number
+}
+
+/* -------------------------------------------------------------------------- */
+/* Customer feedback on a resolved ticket                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface TicketFeedback {
+  id: string
+  ticket_id: string
+  customer_user_id: string
+  rating: number
+  comment: string | null
+  created_at: string
+}
+
+export interface TicketFeedbackInput {
+  rating: number
+  comment?: string | null
+}
+
+/** What the current viewer may see and do for a ticket's feedback. */
+export interface TicketFeedbackState {
+  feedback: TicketFeedback | null
+  /** True only when the backend would accept a submission right now. */
+  can_submit: boolean
+  /** True when the ticket is resolved and the customer has not answered yet. */
+  awaiting_feedback: boolean
 }
 
 export type AccountRequestListParams = {

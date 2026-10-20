@@ -19,6 +19,7 @@ from app.models.account_request import (
     AccountRequestEvent,
 )
 from app.models.internal_message import InternalMessage, InternalMessageRecipient
+from app.models.ticket_feedback import TicketFeedback
 
 __all__ = [
     "User",
@@ -34,4 +35,5 @@ __all__ = [
     "AccountRequestEvent",
     "InternalMessage",
     "InternalMessageRecipient",
+    "TicketFeedback",
 ]
