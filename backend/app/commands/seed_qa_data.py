@@ -1096,13 +1096,9 @@ async def _seed_notifications(
             Notification(
                 id=notification_id,
                 recipient_user_id=users[spec["recipient"]].id,
-                related_ticket_id=(
-                    tickets[ticket_key].id if ticket_key else None
-                ),
+                related_ticket_id=(tickets[ticket_key].id if ticket_key else None),
                 related_conversation_id=(
-                    conversations[conversation_key].id
-                    if conversation_key
-                    else None
+                    conversations[conversation_key].id if conversation_key else None
                 ),
                 type=spec["type"],
                 title=spec["title"],
@@ -1203,9 +1199,7 @@ async def _seed_account_requests(
                 internal_details=spec["internal_details"],
                 status=spec["status"],
                 decision_reason=decision["reason"] if decision else None,
-                decided_by_user_id=(
-                    users[decision["by"]].id if decision else None
-                ),
+                decided_by_user_id=(users[decision["by"]].id if decision else None),
                 decided_at=_at(decision["at"]) if decision else None,
                 created_by_user_id=users[spec["creator"]].id,
                 created_at=_at(spec["at"]),
@@ -1302,9 +1296,7 @@ async def seed(upload_root: Path, session_factory=None) -> dict[str, int]:
         )
 
         totals = {
-            "users": (
-                await session.exec(select(func.count()).select_from(User))
-            ).one(),
+            "users": (await session.exec(select(func.count()).select_from(User))).one(),
             "tickets": (
                 await session.exec(select(func.count()).select_from(Ticket))
             ).one(),
@@ -1321,9 +1313,7 @@ async def seed(upload_root: Path, session_factory=None) -> dict[str, int]:
                 await session.exec(select(func.count()).select_from(Attachment))
             ).one(),
             "staff_conversations": (
-                await session.exec(
-                    select(func.count()).select_from(StaffConversation)
-                )
+                await session.exec(select(func.count()).select_from(StaffConversation))
             ).one(),
             "staff_messages": (
                 await session.exec(select(func.count()).select_from(StaffMessage))

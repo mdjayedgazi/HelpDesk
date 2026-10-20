@@ -25,9 +25,7 @@ BASE = "/api/v1/staff-messages/conversations"
 
 async def _start(client, user, subject=None):
     payload = {} if subject is None else {"subject": subject}
-    return await client.post(
-        BASE, headers={"X-Test-User": user.username}, json=payload
-    )
+    return await client.post(BASE, headers={"X-Test-User": user.username}, json=payload)
 
 
 async def _send(client, user, conversation_id, body):
@@ -56,13 +54,9 @@ async def test_customer_is_denied_everywhere(client, make_user):
     assert (
         await client.get(f"{BASE}/{conversation_id}", headers=headers)
     ).status_code == 403
+    assert (await _send(client, customer, conversation_id, "hello?")).status_code == 403
     assert (
-        await _send(client, customer, conversation_id, "hello?")
-    ).status_code == 403
-    assert (
-        await client.post(
-            f"{BASE}/{conversation_id}/read", headers=headers
-        )
+        await client.post(f"{BASE}/{conversation_id}/read", headers=headers)
     ).status_code == 403
 
 
@@ -124,9 +118,7 @@ async def test_customer_cannot_read_other_agents_threads(client, make_user):
         await _send(client, bob, alice_conversation, "reading your mail")
     ).status_code == 404
     assert (
-        await client.post(
-            f"{BASE}/{alice_conversation}/read", headers=bob_headers
-        )
+        await client.post(f"{BASE}/{alice_conversation}/read", headers=bob_headers)
     ).status_code == 404
 
 
@@ -139,9 +131,7 @@ async def test_message_flow_notifications_and_read_tracking(
 
     conversation_id = (await _start(client, agent, subject="Escalation")).json()["id"]
 
-    sent = await _send(
-        client, agent, conversation_id, "Can you review ticket #10042?"
-    )
+    sent = await _send(client, agent, conversation_id, "Can you review ticket #10042?")
     assert sent.status_code == 201
     message = sent.json()
     assert message["sender_user_id"] == str(agent.id)
@@ -192,15 +182,11 @@ async def test_message_flow_notifications_and_read_tracking(
     assert agent_inbox.json()[0]["message_count"] == 2
     assert agent_inbox.json()[0]["last_message_preview"] == "Reviewing it now."
 
-    detail = await client.get(
-        f"{BASE}/{conversation_id}", headers=agent_headers
-    )
+    detail = await client.get(f"{BASE}/{conversation_id}", headers=agent_headers)
     assert detail.status_code == 200
     assert len(detail.json()["messages"]) == 2
 
-    read = await client.post(
-        f"{BASE}/{conversation_id}/read", headers=agent_headers
-    )
+    read = await client.post(f"{BASE}/{conversation_id}/read", headers=agent_headers)
     assert read.status_code == 200
     assert read.json() == {"updated": 1}
 
@@ -231,17 +217,13 @@ async def test_owner_inbox_covers_every_staff_thread(client, make_user):
     agent_thread = (await _start(client, agent)).json()["id"]
     admin_thread = (await _start(client, admin)).json()["id"]
 
-    owner_inbox = await client.get(
-        BASE, headers={"X-Test-User": owner.username}
-    )
+    owner_inbox = await client.get(BASE, headers={"X-Test-User": owner.username})
     assert owner_inbox.status_code == 200
     ids = {c["id"] for c in owner_inbox.json()}
     assert ids == {agent_thread, admin_thread}
 
     # An agent still only sees their own thread.
-    agent_inbox = await client.get(
-        BASE, headers={"X-Test-User": agent.username}
-    )
+    agent_inbox = await client.get(BASE, headers={"X-Test-User": agent.username})
     assert {c["id"] for c in agent_inbox.json()} == {agent_thread}
 
 
@@ -279,7 +261,9 @@ async def test_no_owner_configured_is_a_clear_conflict(client, make_user):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_thread_creation_is_impossible(client, make_user, session_factory):
+async def test_duplicate_thread_creation_is_impossible(
+    client, make_user, session_factory
+):
     await make_user(role=Role.OWNER)
     agent = await make_user(role=Role.AGENT)
 
@@ -289,9 +273,7 @@ async def test_duplicate_thread_creation_is_impossible(client, make_user, sessio
 
     async with session_factory() as session:
         count = (
-            await session.exec(
-                select(func.count()).select_from(StaffConversation)
-            )
+            await session.exec(select(func.count()).select_from(StaffConversation))
         ).one()
     assert count == 1
 

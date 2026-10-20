@@ -26,9 +26,7 @@ PREVIEW_LENGTH = 140
 
 async def get_owner(session: AsyncSession) -> User:
     """The single active Owner, or a clear error when none is configured."""
-    owner = (
-        await session.exec(select(User).where(User.role == Role.OWNER))
-    ).first()
+    owner = (await session.exec(select(User).where(User.role == Role.OWNER))).first()
     if owner is None or not owner.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -133,9 +131,7 @@ async def conversation_summary(
             last_message.sender_user_id if last_message is not None else None
         ),
         last_received_preview=(
-            last_received.body[:PREVIEW_LENGTH]
-            if last_received is not None
-            else None
+            last_received.body[:PREVIEW_LENGTH] if last_received is not None else None
         ),
         last_received_at=(
             last_received.created_at if last_received is not None else None

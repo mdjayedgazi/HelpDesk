@@ -7,6 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.ticket import Ticket
 from app.models.user import User
 
+
 class Comment(SQLModel, table=True):
     __tablename__ = "comments"
 

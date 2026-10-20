@@ -78,7 +78,9 @@ async def create_comment(
     )
     session.add(comment)
 
-    await _notify_comment_recipients(session, ticket=ticket, author=user, comment=comment)
+    await _notify_comment_recipients(
+        session, ticket=ticket, author=user, comment=comment
+    )
 
     # Only public comments appear in the history customers can read.
     if not payload.is_internal:

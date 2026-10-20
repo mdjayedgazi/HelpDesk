@@ -129,15 +129,17 @@ def assert_confirm(confirm: str | None) -> None:
 
 def assert_not_production(environ: dict[str, str]) -> None:
     declared = (
-        environ.get("HELPDESK_ENVIRONMENT")
-        or environ.get("APP_ENV")
-        or environ.get("ENVIRONMENT")
-        or ""
-    ).strip().lower()
-    if declared in {"production", "prod"}:
-        raise SeedRefused(
-            "Refusing to seed: the environment is declared production."
+        (
+            environ.get("HELPDESK_ENVIRONMENT")
+            or environ.get("APP_ENV")
+            or environ.get("ENVIRONMENT")
+            or ""
         )
+        .strip()
+        .lower()
+    )
+    if declared in {"production", "prod"}:
+        raise SeedRefused("Refusing to seed: the environment is declared production.")
 
 
 def assert_neon_target(url: str | None) -> None:
@@ -154,9 +156,7 @@ def assert_neon_target(url: str | None) -> None:
             "app.commands.seed_qa_data for the isolated QA database."
         )
     if name.startswith("helpdesk_qa"):
-        raise SeedRefused(
-            f"Refusing to seed a QA-named database ({name!r})."
-        )
+        raise SeedRefused(f"Refusing to seed a QA-named database ({name!r}).")
     if host != EXPECTED_HOST:
         raise SeedRefused(
             f"Unrecognized database host ({redacted_target(url)}). Expected the "
@@ -355,9 +355,7 @@ def ticket_specs() -> list[dict]:
                 key=f"ticket_{i:03d}",
                 index=i,
                 title=f"[{MARKER}] {topic}",
-                description=(
-                    f"[{MARKER}] " + (long if use_long else short)
-                ),
+                description=(f"[{MARKER}] " + (long if use_long else short)),
                 status=status,
                 priority=priority,
                 customer_key=f"customer_{customer_index:03d}",
@@ -462,9 +460,7 @@ def attachment_specs(tickets: list[dict]) -> list[dict]:
                 ticket_key=spec["key"],
                 uploader_key=spec["customer_key"],
                 filename=filename,
-                content=(
-                    f"[{MARKER}] " + body + f"Marker: {MARKER}\n"
-                ).encode("utf-8"),
+                content=(f"[{MARKER}] " + body + f"Marker: {MARKER}\n").encode("utf-8"),
                 content_type="text/plain",
                 at=spec["at"] + 200 + idx,
             )
@@ -740,18 +736,14 @@ async def _seed_tickets(
     return result, counts, collisions
 
 
-async def _seed_comments(
-    session, users, tickets_map
-) -> tuple[Counts, list[str]]:
+async def _seed_comments(session, users, tickets_map) -> tuple[Counts, list[str]]:
     counts = Counts()
     collisions: list[str] = []
     specs = comment_specs(ticket_specs())
     expected_ids = [_uid("comment", spec["key"]) for spec in specs]
     existing = set(
         (
-            await session.exec(
-                select(Comment.id).where(Comment.id.in_(expected_ids))
-            )
+            await session.exec(select(Comment.id).where(Comment.id.in_(expected_ids)))
         ).all()
     )
     for spec in specs:
@@ -780,9 +772,7 @@ async def _seed_history(session, users, tickets_map) -> Counts:
     existing = set(
         (
             await session.exec(
-                select(TicketHistory.id).where(
-                    TicketHistory.id.in_(expected_ids)
-                )
+                select(TicketHistory.id).where(TicketHistory.id.in_(expected_ids))
             )
         ).all()
     )
@@ -795,9 +785,7 @@ async def _seed_history(session, users, tickets_map) -> Counts:
         new_value = spec["new_value"]
         if isinstance(new_value, dict) and spec["event_type"] == "TICKET_ASSIGNED":
             new_value = {
-                "assignee_user_id": str(
-                    users[spec["new_value"]["assignee_user_id"]].id
-                )
+                "assignee_user_id": str(users[spec["new_value"]["assignee_user_id"]].id)
             }
         session.add(
             TicketHistory(
@@ -821,9 +809,7 @@ async def _seed_notifications(session, users, tickets_map) -> Counts:
     existing = set(
         (
             await session.exec(
-                select(Notification.id).where(
-                    Notification.id.in_(expected_ids)
-                )
+                select(Notification.id).where(Notification.id.in_(expected_ids))
             )
         ).all()
     )
@@ -956,8 +942,8 @@ async def seed(upload_root: Path) -> dict:
             )
             history_counts = await _seed_history(session, users, tickets_map)
             notif_counts = await _seed_notifications(session, users, tickets_map)
-            attach_counts, created_files, attach_collisions = (
-                await _seed_attachments(session, users, tickets_map, upload_root)
+            attach_counts, created_files, attach_collisions = await _seed_attachments(
+                session, users, tickets_map, upload_root
             )
 
             owner_after = await _owner_row(session)
@@ -998,17 +984,22 @@ async def read_manifest() -> dict:
     """Read back the full seeded namespace from PostgreSQL (source of truth)."""
     users = qa_users()
     tickets = ticket_specs()
-    manifest: dict = {"marker": MARKER, "users": [], "tickets": [], "comments": [],
-                      "notifications": [], "history": [], "attachments": []}
+    manifest: dict = {
+        "marker": MARKER,
+        "users": [],
+        "tickets": [],
+        "comments": [],
+        "notifications": [],
+        "history": [],
+        "attachments": [],
+    }
 
     async with async_session() as session:
         owner = await _owner_row(session)
         manifest["owner_row_hash_source"] = owner
 
         user_rows = (
-            await session.exec(
-                select(User).where(User.username.startswith("qa_"))
-            )
+            await session.exec(select(User).where(User.username.startswith("qa_")))
         ).all()
         # Only include this namespace's deterministic ids.
         expected_user_ids = {str(_uid("user", s["key"])): s for s in users}
@@ -1027,9 +1018,7 @@ async def read_manifest() -> dict:
         manifest["users"].sort(key=lambda r: r["username"])
 
         ticket_rows = (
-            await session.exec(
-                select(Ticket).where(Ticket.title.like(f"%{MARKER}%"))
-            )
+            await session.exec(select(Ticket).where(Ticket.title.like(f"%{MARKER}%")))
         ).all()
         # Build id -> username map for readable output.
         id_to_username = {r["id"]: r["username"] for r in manifest["users"]}
@@ -1049,11 +1038,11 @@ async def read_manifest() -> dict:
             )
         manifest["tickets"].sort(key=lambda r: r["ticket_number"] or 0)
 
-        expected_comment_ids = {str(_uid("comment", s["key"])) for s in comment_specs(tickets)}
+        expected_comment_ids = {
+            str(_uid("comment", s["key"])) for s in comment_specs(tickets)
+        }
         comment_rows = (
-            await session.exec(
-                select(Comment).where(Comment.body.like(f"%{MARKER}%"))
-            )
+            await session.exec(select(Comment).where(Comment.body.like(f"%{MARKER}%")))
         ).all()
         for row in comment_rows:
             if str(row.id) in expected_comment_ids:
@@ -1074,7 +1063,9 @@ async def read_manifest() -> dict:
                     }
                 )
 
-        expected_notif_ids = {str(_uid("notification", s["key"])) for s in notification_specs(tickets)}
+        expected_notif_ids = {
+            str(_uid("notification", s["key"])) for s in notification_specs(tickets)
+        }
         notif_rows = (
             await session.exec(
                 select(Notification).where(Notification.title.like(f"%{MARKER}%"))
@@ -1093,13 +1084,13 @@ async def read_manifest() -> dict:
                     }
                 )
 
-        expected_hist_ids = {str(_uid("history", s["key"])) for s in history_specs(tickets)}
+        expected_hist_ids = {
+            str(_uid("history", s["key"])) for s in history_specs(tickets)
+        }
         hist_rows = (
             await session.exec(
                 select(TicketHistory).where(
-                    TicketHistory.id.in_(
-                        [uuid.UUID(x) for x in expected_hist_ids]
-                    )
+                    TicketHistory.id.in_([uuid.UUID(x) for x in expected_hist_ids])
                 )
             )
         ).all()
@@ -1122,7 +1113,9 @@ async def read_manifest() -> dict:
                 }
             )
 
-        expected_att_ids = {str(_uid("attachment", s["key"])) for s in attachment_specs(tickets)}
+        expected_att_ids = {
+            str(_uid("attachment", s["key"])) for s in attachment_specs(tickets)
+        }
         att_rows = (
             await session.exec(
                 select(Attachment).where(
@@ -1207,10 +1200,13 @@ async def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm", default=os.environ.get(CONFIRM_ENV))
     parser.add_argument("--verify-only", action="store_true")
-    parser.add_argument("--manifest", default=os.environ.get(
-        "HELPDESK_NEON_SEED_MANIFEST",
-        "/tmp/opencode/helpdesk-neon-qa-manifest.json",
-    ))
+    parser.add_argument(
+        "--manifest",
+        default=os.environ.get(
+            "HELPDESK_NEON_SEED_MANIFEST",
+            "/tmp/opencode/helpdesk-neon-qa-manifest.json",
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -1228,14 +1224,17 @@ async def _main(argv: list[str]) -> int:
     print(f"  namespace   : {MARKER}")
 
     if args.verify_only:
-        result = {"marker": MARKER, "expected": {
-            "users": len(qa_users()),
-            "tickets": len(ticket_specs()),
-            "comments": len(comment_specs(ticket_specs())),
-            "history": len(history_specs(ticket_specs())),
-            "notifications": len(notification_specs(ticket_specs())),
-            "attachments": len(attachment_specs(ticket_specs())),
-        }}
+        result = {
+            "marker": MARKER,
+            "expected": {
+                "users": len(qa_users()),
+                "tickets": len(ticket_specs()),
+                "comments": len(comment_specs(ticket_specs())),
+                "history": len(history_specs(ticket_specs())),
+                "notifications": len(notification_specs(ticket_specs())),
+                "attachments": len(attachment_specs(ticket_specs())),
+            },
+        }
         ok = await _verify(result)
         return 0 if ok else 1
 
@@ -1247,8 +1246,16 @@ async def _main(argv: list[str]) -> int:
     manifest = await read_manifest()
     manifest["seed_result"] = {
         k: result[k]
-        for k in ("users", "tickets", "comments", "history", "notifications",
-                  "attachments", "expected", "collisions")
+        for k in (
+            "users",
+            "tickets",
+            "comments",
+            "history",
+            "notifications",
+            "attachments",
+            "expected",
+            "collisions",
+        )
     }
     manifest_path = Path(args.manifest)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

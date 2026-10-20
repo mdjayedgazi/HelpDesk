@@ -86,9 +86,7 @@ async def test_assign_unknown_user_is_404(client, make_user, make_ticket):
 
 
 @pytest.mark.asyncio
-async def test_claiming_own_assigned_ticket_conflicts(
-    client, make_user, make_ticket
-):
+async def test_claiming_own_assigned_ticket_conflicts(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer, assignee=agent)
@@ -101,9 +99,7 @@ async def test_claiming_own_assigned_ticket_conflicts(
 
 
 @pytest.mark.asyncio
-async def test_claiming_another_agents_ticket_is_hidden(
-    client, make_user, make_ticket
-):
+async def test_claiming_another_agents_ticket_is_hidden(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     other_agent = await make_user(role=Role.AGENT)
     customer = await make_user()
@@ -177,7 +173,9 @@ async def test_resolved_at_is_set_and_cleared_on_reopen(
 ):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
-    ticket = await make_ticket(customer, assignee=agent, status=TicketStatus.IN_PROGRESS)
+    ticket = await make_ticket(
+        customer, assignee=agent, status=TicketStatus.IN_PROGRESS
+    )
 
     resolved = await client.patch(
         f"/api/v1/tickets/{ticket.id}",
@@ -280,7 +278,9 @@ async def test_admin_can_create_internal_note(client, make_user, make_ticket):
 
 
 @pytest.mark.asyncio
-async def test_list_attachments_of_foreign_ticket_is_404(client, make_user, make_ticket):
+async def test_list_attachments_of_foreign_ticket_is_404(
+    client, make_user, make_ticket
+):
     alice = await make_user()
     bob = await make_user()
     ticket = await make_ticket(bob)
@@ -409,16 +409,12 @@ async def test_reserved_test_domain_email_is_serialized(client, make_user):
     """
     user = await make_user(username="qa_reserved", email="qa.reserved@example.test")
 
-    me = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": user.username}
-    )
+    me = await client.get("/api/v1/users/me", headers={"X-Test-User": user.username})
     assert me.status_code == 200
     assert me.json()["email"] == "qa.reserved@example.test"
 
     admin = await make_user(role=Role.ADMIN)
-    listing = await client.get(
-        "/api/v1/users", headers={"X-Test-User": admin.username}
-    )
+    listing = await client.get("/api/v1/users", headers={"X-Test-User": admin.username})
     assert listing.status_code == 200
     assert any(u["email"] == "qa.reserved@example.test" for u in listing.json())
 
@@ -493,9 +489,7 @@ async def test_dashboard_matrix(client, make_user, role, expected):
 )
 async def test_user_directory_matrix(client, make_user, role, expected):
     user = await make_user(role=role)
-    response = await client.get(
-        "/api/v1/users", headers={"X-Test-User": user.username}
-    )
+    response = await client.get("/api/v1/users", headers={"X-Test-User": user.username})
     assert response.status_code == expected
 
 

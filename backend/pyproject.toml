@@ -24,6 +24,7 @@ dev = [
     "pyrefly==1.4.0",
     "pytest>=8.0",
     "pytest-asyncio>=1.0",
+    "ruff>=0.17.1",
 ]
 
 [tool.pytest.ini_options]

@@ -30,7 +30,9 @@ class AccountManagementRequest(SQLModel, table=True):
     __tablename__ = "account_management_requests"
     __table_args__ = (
         Index("ix_account_management_requests_target_user_id", "target_user_id"),
-        Index("ix_account_management_requests_created_by_user_id", "created_by_user_id"),
+        Index(
+            "ix_account_management_requests_created_by_user_id", "created_by_user_id"
+        ),
         Index("ix_account_management_requests_status", "status"),
         Index("ix_account_management_requests_ticket_id", "ticket_id"),
     )
@@ -60,18 +62,10 @@ class AccountManagementRequest(SQLModel, table=True):
     # Decision audit. A rejection must always carry a reason; approvals and
     # completions may add one.
     decision_reason: str | None = Field(default=None, max_length=2000)
-    decided_by_user_id: uuid.UUID | None = Field(
-        default=None, foreign_key="users.id"
-    )
-    decided_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)
-    )
-    completed_by_user_id: uuid.UUID | None = Field(
-        default=None, foreign_key="users.id"
-    )
-    completed_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)
-    )
+    decided_by_user_id: uuid.UUID | None = Field(default=None, foreign_key="users.id")
+    decided_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    completed_by_user_id: uuid.UUID | None = Field(default=None, foreign_key="users.id")
+    completed_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
     created_by_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
     created_at: datetime = Field(
@@ -101,9 +95,7 @@ class AccountRequestComment(SQLModel, table=True):
             "length(body) > 0",
             name="ck_account_request_comments_body_nonempty",
         ),
-        Index(
-            "ix_account_management_request_comments_request_id", "request_id"
-        ),
+        Index("ix_account_management_request_comments_request_id", "request_id"),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

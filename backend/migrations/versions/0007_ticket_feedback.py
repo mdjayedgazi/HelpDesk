@@ -40,6 +40,7 @@ its foreign key). Like ``0004``, the new ``notificationtype`` labels are left in
 place: PostgreSQL cannot remove an enum value without rebuilding the shared
 type, and no existing row is ever rewritten.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa

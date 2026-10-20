@@ -147,9 +147,7 @@ async def _deactivate_pre_existing_agents(factory, keep_ids: set[uuid.UUID]) -> 
     async with factory() as session:
         agents = (
             await session.exec(
-                select(User).where(
-                    User.role == Role.AGENT, User.is_active.is_(True)
-                )
+                select(User).where(User.role == Role.AGENT, User.is_active.is_(True))
             )
         ).all()
         for agent in agents:
@@ -172,17 +170,13 @@ async def test_concurrent_intake_balances_assignment(
     # ticket-number allocation is covered elsewhere, this test is about the
     # assignment decision under concurrency.
     async with factory() as session:
-        current_max = (
-            await session.exec(select(Ticket.ticket_number))
-        ).all()
+        current_max = (await session.exec(select(Ticket.ticket_number))).all()
     numbers = itertools.count(max(n for n in current_max if n is not None) + 1)
 
     async def fake_next_ticket_number(session):
         return next(numbers)
 
-    monkeypatch.setattr(
-        tickets_router, "next_ticket_number", fake_next_ticket_number
-    )
+    monkeypatch.setattr(tickets_router, "next_ticket_number", fake_next_ticket_number)
 
     async def create(index: int):
         return await client.post(
@@ -217,9 +211,7 @@ async def test_concurrent_intake_balances_assignment(
             )
         ).all()
     assert len(history) == 6
-    reasons = {
-        row.new_value["reason"] for row in history if row.new_value is not None
-    }
+    reasons = {row.new_value["reason"] for row in history if row.new_value is not None}
     assert reasons <= {
         "LEAST_LOADED",
         "FAIR_ROTATION",
@@ -230,9 +222,7 @@ async def test_concurrent_intake_balances_assignment(
 
 
 @pytest.mark.asyncio
-async def test_concurrent_claim_has_exactly_one_winner(
-    client, factory, make_user
-):
+async def test_concurrent_claim_has_exactly_one_winner(client, factory, make_user):
     agents = [await make_user(role=Role.AGENT) for _ in range(2)]
     await _deactivate_pre_existing_agents(factory, {a.id for a in agents})
     customer = await make_user()
@@ -290,16 +280,13 @@ async def test_concurrent_claim_has_exactly_one_winner(
     claim_rows = [
         row
         for row in history
-        if row.new_value is not None
-        and row.new_value.get("reason") == "AGENT_CLAIMED"
+        if row.new_value is not None and row.new_value.get("reason") == "AGENT_CLAIMED"
     ]
     assert len(claim_rows) == 1
 
 
 @pytest.mark.asyncio
-async def test_new_workflow_enums_roundtrip_on_postgres(
-    client, factory, make_user
-):
+async def test_new_workflow_enums_roundtrip_on_postgres(client, factory, make_user):
     """Native enum columns for the new workflows survive a write/read cycle."""
     from app.models.account_request import AccountManagementRequest
     from app.models.staff_message import StaffConversation, StaffMessage
@@ -371,8 +358,7 @@ async def test_new_workflow_enums_roundtrip_on_postgres(
         notifications = (
             await session.exec(
                 select(Notification).where(
-                    Notification.related_conversation_id
-                    == uuid.UUID(conversation_id),
+                    Notification.related_conversation_id == uuid.UUID(conversation_id),
                     Notification.type == NotificationType.STAFF_MESSAGE_RECEIVED,
                 )
             )
