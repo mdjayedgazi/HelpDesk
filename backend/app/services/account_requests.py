@@ -131,6 +131,9 @@ async def notify_reviewers(
     *,
     request: AccountManagementRequest,
     actor: User,
+    type: NotificationType = NotificationType.ESCALATION_CREATED,
+    title: str = "New account request",
+    message: str = "An account-management request needs review.",
 ) -> None:
     """Tell active ADMIN/OWNER users (except the actor) about new activity."""
     for reviewer in await _active_reviewers(session, exclude_user_id=actor.id):
@@ -138,12 +141,10 @@ async def notify_reviewers(
             session,
             recipient_user_id=reviewer.id,
             related_ticket_id=request.ticket_id,
-            type=NotificationType.ESCALATION_CREATED,
-            title="New account request",
-            message=(
-                "An account-management request needs review. "
-                f"Request id {request.id}."
-            ),
+            related_account_request_id=request.id,
+            type=type,
+            title=title,
+            message=message,
         )
 
 
@@ -162,6 +163,7 @@ def notify_creator(
         session,
         recipient_user_id=request.created_by_user_id,
         related_ticket_id=request.ticket_id,
+        related_account_request_id=request.id,
         type=NotificationType.ESCALATION_UPDATED,
         title=title,
         message=message,

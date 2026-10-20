@@ -314,6 +314,52 @@ async def list_received_messages(
     ]
 
 
+@router.get("/received/{message_id}", response_model=InternalMessageReceived)
+async def get_received_message(
+    message_id: uuid.UUID,
+    session: session_Dependency,
+    staff: staff_dependency,
+) -> InternalMessageReceived:
+    """One message addressed to the caller, for notification deep links.
+
+    The list endpoint is paged, so a notification can point at a message that is
+    older than the newest page. This endpoint lets the destination open that
+    exact message. A non-recipient gets ``404`` (never ``403``), so the API does
+    not reveal that the message exists for somebody else.
+    """
+    row = (
+        await session.exec(
+            select(InternalMessageRecipient, InternalMessage, User)
+            .join(
+                InternalMessage,
+                InternalMessage.id == InternalMessageRecipient.message_id,
+            )
+            .join(User, User.id == InternalMessage.sender_user_id)
+            .where(
+                InternalMessageRecipient.message_id == message_id,
+                InternalMessageRecipient.recipient_user_id == staff.id,
+            )
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found",
+        )
+
+    recipient, message, sender = row
+    return InternalMessageReceived(
+        id=message.id,
+        sender_user_id=message.sender_user_id,
+        sender_full_name=sender.full_name,
+        audience=message.audience,
+        subject=message.subject,
+        body=message.body,
+        created_at=message.created_at,
+        read_at=recipient.read_at,
+    )
+
+
 @router.post("/{message_id}/read", response_model=dict[str, int])
 async def mark_received_message_read(
     message_id: uuid.UUID,

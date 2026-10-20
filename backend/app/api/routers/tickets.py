@@ -23,7 +23,9 @@ from app.enums.enums import (
     TicketPriority,
     TicketStatus,
 )
+from app.models.notification import Notification
 from app.models.ticket import Ticket
+from app.models.ticket_feedback import TicketFeedback
 from app.models.user import User
 from app.schemas.tickets import (
     TicketAssign,
@@ -36,7 +38,11 @@ from app.services.assignment import (
     acquire_assignment_lock,
     pick_assignee,
 )
-from app.services.notifications import create_notification
+from app.services.notifications import (
+    active_admin_ids,
+    create_notification,
+    notify_many,
+)
 from app.services.tickets import (
     CUSTOMER_EDITABLE_STATUSES,
     load_visible_ticket,
@@ -117,6 +123,19 @@ async def create_ticket(
             # here, so this block must stay inside the try that handles it.
             await session.flush()
             await _try_auto_assign(session, ticket, customer)
+            # The customer's own receipt, staged in the same transaction as the
+            # ticket so it can never exist for a ticket that was not created.
+            create_notification(
+                session,
+                recipient_user_id=customer.id,
+                related_ticket_id=ticket.id,
+                type=NotificationType.TICKET_CREATED,
+                title="Your ticket was received",
+                message=(
+                    f"We received ticket #{ticket.ticket_number} and it is "
+                    "being reviewed."
+                ),
+            )
             await session.commit()
         except IntegrityError as exc:
             await session.rollback()
@@ -289,7 +308,7 @@ async def update_ticket(
             validate_status_transition(ticket.status, data["status"])
             _set_status(ticket, data["status"])
 
-    _record_changes(
+    await _record_changes(
         session,
         ticket=ticket,
         actor=user,
@@ -457,7 +476,9 @@ async def _set_assignee(
             new_value={"assignee_user_id": str(assignee_user_id) if assignee_user_id else None},
         )
 
-    if assignee_user_id is not None:
+    if assignee_user_id is not None and (
+        actor is None or actor.id != assignee_user_id
+    ):
         create_notification(
             session,
             recipient_user_id=assignee_user_id,
@@ -468,7 +489,7 @@ async def _set_assignee(
         )
 
 
-def _record_changes(
+async def _record_changes(
     session,
     *,
     ticket: Ticket,
@@ -491,15 +512,7 @@ def _record_changes(
             old_value={"status": old["status"].value},
             new_value={"status": ticket.status.value},
         )
-        if ticket.created_by_user_id != actor.id:
-            create_notification(
-                session,
-                recipient_user_id=ticket.created_by_user_id,
-                related_ticket_id=ticket.id,
-                type=NotificationType.STATUS_CHANGED,
-                title="Ticket status updated",
-                message=f"Ticket #{ticket.ticket_number} is now {ticket.status.value}.",
-            )
+        await _notify_status_change(session, ticket=ticket, actor=actor)
 
     if "priority" in data and ticket.priority != old["priority"]:
         record_history(
@@ -510,15 +523,7 @@ def _record_changes(
             old_value={"priority": old["priority"].value},
             new_value={"priority": ticket.priority.value},
         )
-        if ticket.created_by_user_id != actor.id:
-            create_notification(
-                session,
-                recipient_user_id=ticket.created_by_user_id,
-                related_ticket_id=ticket.id,
-                type=NotificationType.PRIORITY_CHANGED,
-                title="Ticket priority updated",
-                message=f"Ticket #{ticket.ticket_number} priority is now {ticket.priority.value}.",
-            )
+        await _notify_priority_change(session, ticket=ticket, actor=actor)
 
     if "category" in data and ticket.category != old["category"]:
         record_history(
@@ -560,6 +565,136 @@ def _record_changes(
             old_value={"contact_phone_set": old["contact_phone"] is not None},
             new_value={"contact_phone_set": ticket.contact_phone is not None},
         )
+
+
+async def _notify_status_change(session, *, ticket: Ticket, actor: User) -> None:
+    """Notify the customer (and the handling staff) about a status change.
+
+    The customer is never notified about their own action. Reaching RESOLVED
+    sends the dedicated feedback request instead of the generic status line, and
+    only ever once per ticket - reopening the ticket can never spam a second
+    request.
+    """
+    if ticket.created_by_user_id != actor.id:
+        if ticket.status == TicketStatus.RESOLVED and not await _feedback_requested(
+            session, ticket=ticket, customer_id=ticket.created_by_user_id
+        ):
+            create_notification(
+                session,
+                recipient_user_id=ticket.created_by_user_id,
+                related_ticket_id=ticket.id,
+                type=NotificationType.TICKET_RESOLVED,
+                title="Your ticket has been resolved",
+                message=(
+                    f"Ticket #{ticket.ticket_number} was resolved. "
+                    "Share your feedback to let us know how we did."
+                ),
+            )
+        else:
+            create_notification(
+                session,
+                recipient_user_id=ticket.created_by_user_id,
+                related_ticket_id=ticket.id,
+                type=NotificationType.STATUS_CHANGED,
+                title="Ticket status updated",
+                message=f"Ticket #{ticket.ticket_number} is now {ticket.status.value}.",
+            )
+
+    await _notify_handling_staff(
+        session,
+        ticket=ticket,
+        actor=actor,
+        type=NotificationType.STATUS_CHANGED,
+        title="Ticket status updated",
+        message=f"Ticket #{ticket.ticket_number} is now {ticket.status.value}.",
+    )
+
+
+async def _notify_priority_change(session, *, ticket: Ticket, actor: User) -> None:
+    """Notify the customer (and the handling staff) about a priority change."""
+    if ticket.created_by_user_id != actor.id:
+        create_notification(
+            session,
+            recipient_user_id=ticket.created_by_user_id,
+            related_ticket_id=ticket.id,
+            type=NotificationType.PRIORITY_CHANGED,
+            title="Ticket priority updated",
+            message=(
+                f"Ticket #{ticket.ticket_number} priority is now "
+                f"{ticket.priority.value}."
+            ),
+        )
+
+    await _notify_handling_staff(
+        session,
+        ticket=ticket,
+        actor=actor,
+        type=NotificationType.PRIORITY_CHANGED,
+        title="Ticket priority updated",
+        message=(
+            f"Ticket #{ticket.ticket_number} priority is now "
+            f"{ticket.priority.value}."
+        ),
+    )
+
+
+async def _notify_handling_staff(
+    session,
+    *,
+    ticket: Ticket,
+    actor: User,
+    type: NotificationType,
+    title: str,
+    message: str,
+) -> None:
+    """Notify whoever owns an assigned ticket, or the admins when it is free.
+
+    An assigned ticket's change goes to its assignee only (never a broadcast to
+    every agent). An unassigned ticket has no handler, so its change goes to the
+    administrative queue - the real operational owner of "needs attention" work.
+    The actor is always excluded.
+    """
+    if ticket.assignee_user_id is not None:
+        recipients = {ticket.assignee_user_id}
+    else:
+        recipients = await active_admin_ids(session)
+
+    notify_many(
+        session,
+        recipient_ids=recipients,
+        actor_user_id=actor.id,
+        type=type,
+        title=title,
+        message=message,
+        related_ticket_id=ticket.id,
+    )
+
+
+async def _feedback_requested(
+    session, *, ticket: Ticket, customer_id: uuid.UUID
+) -> bool:
+    """Whether this customer was already asked for feedback on this ticket.
+
+    True when either an answer already exists or a resolution notification was
+    already sent, so the request is created at most once per ticket.
+    """
+    existing_feedback = (
+        await session.exec(
+            select(TicketFeedback.id).where(TicketFeedback.ticket_id == ticket.id)
+        )
+    ).first()
+    if existing_feedback is not None:
+        return True
+    existing_request = (
+        await session.exec(
+            select(Notification.id).where(
+                Notification.recipient_user_id == customer_id,
+                Notification.related_ticket_id == ticket.id,
+                Notification.type == NotificationType.TICKET_RESOLVED,
+            )
+        )
+    ).first()
+    return existing_request is not None
 
 
 async def _try_auto_assign(session, ticket: Ticket, actor: User) -> bool:

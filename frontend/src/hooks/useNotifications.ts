@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { endpoints } from '../lib/api.ts'
 import { queryKeys } from '../lib/queryKeys.ts'
-import type { Notification, NotificationListParams } from '../lib/types.ts'
+import type {
+  Notification,
+  NotificationListParams,
+  NotificationUnreadCount,
+} from '../lib/types.ts'
 import { useApi } from '../lib/useApi.ts'
 
 export function useNotifications(params?: NotificationListParams) {
@@ -22,6 +26,24 @@ export function useUnreadNotifications(limit = 50) {
       api.request<Notification[]>(endpoints.notifications(), {
         query: { is_read: false, limit },
       }),
+  })
+}
+
+/**
+ * The exact unread total for the bell badge.
+ *
+ * Counted by the backend so the badge is correct even when only a page of the
+ * list has been loaded. Polled on the app's shared interval so a new event
+ * shows up without a manual refresh.
+ */
+export function useUnreadNotificationCount() {
+  const api = useApi()
+  return useQuery({
+    queryKey: queryKeys.notifications.unreadCount,
+    queryFn: () =>
+      api.request<NotificationUnreadCount>(endpoints.notificationUnreadCount()),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
 }
 

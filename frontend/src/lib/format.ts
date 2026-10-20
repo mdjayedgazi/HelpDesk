@@ -166,4 +166,7 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   OWNER_MESSAGE_RECEIVED: 'Private message',
   ESCALATION_CREATED: 'Account request',
   ESCALATION_UPDATED: 'Account request',
+  TICKET_CREATED: 'Ticket received',
+  TICKET_RESOLVED: 'Resolved',
+  INTERNAL_MESSAGE_RECEIVED: 'Internal message',
 }
