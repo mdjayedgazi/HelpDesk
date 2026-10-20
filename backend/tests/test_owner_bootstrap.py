@@ -55,7 +55,9 @@ class _FakeClerkUser:
 
 
 class _FakeUsers:
-    def __init__(self, user: _FakeClerkUser | None = None, *, error: bool = False) -> None:
+    def __init__(
+        self, user: _FakeClerkUser | None = None, *, error: bool = False
+    ) -> None:
         self._user = user
         self._error = error
 
@@ -101,11 +103,15 @@ def test_settings_normalizes_initial_admin_email(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_promotes_verified_matching_identity(session_factory, make_user):
-    user = await make_user(role=Role.CUSTOMER, username="boss", email="boss@example.com")
+    user = await make_user(
+        role=Role.CUSTOMER, username="boss", email="boss@example.com"
+    )
 
     async with session_factory() as session:
         promoted = await promote_owner(
-            session, clerk=_clerk("boss@example.com"), configured_email="boss@example.com"
+            session,
+            clerk=_clerk("boss@example.com"),
+            configured_email="boss@example.com",
         )
 
     assert promoted.id == user.id
@@ -122,12 +128,16 @@ async def test_promotes_verified_matching_identity(session_factory, make_user):
 async def test_bootstrap_preserves_primary_key_and_tickets(
     session_factory, make_user, make_ticket
 ):
-    user = await make_user(role=Role.CUSTOMER, username="boss", email="boss@example.com")
+    user = await make_user(
+        role=Role.CUSTOMER, username="boss", email="boss@example.com"
+    )
     ticket = await make_ticket(user)
 
     async with session_factory() as session:
         await promote_owner(
-            session, clerk=_clerk("boss@example.com"), configured_email="boss@example.com"
+            session,
+            clerk=_clerk("boss@example.com"),
+            configured_email="boss@example.com",
         )
 
     async with session_factory() as session:
@@ -152,9 +162,7 @@ async def test_bootstrap_preserves_primary_key_and_tickets(
 async def test_refuses_missing_configuration(session_factory):
     async with session_factory() as session:
         with pytest.raises(BootstrapError):
-            await promote_owner(
-                session, clerk=_clerk_error(), configured_email=None
-            )
+            await promote_owner(session, clerk=_clerk_error(), configured_email=None)
 
 
 @pytest.mark.asyncio
@@ -186,7 +194,9 @@ async def test_rerun_after_success_reports_already_established(
 
     async with session_factory() as session:
         await promote_owner(
-            session, clerk=_clerk("boss@example.com"), configured_email="boss@example.com"
+            session,
+            clerk=_clerk("boss@example.com"),
+            configured_email="boss@example.com",
         )
 
     async with session_factory() as session:
@@ -255,7 +265,9 @@ async def test_refuses_inactive_account(session_factory, make_user):
 
 @pytest.mark.asyncio
 async def test_refuses_unverified_clerk_identity(session_factory, make_user):
-    user = await make_user(role=Role.CUSTOMER, username="boss", email="boss@example.com")
+    user = await make_user(
+        role=Role.CUSTOMER, username="boss", email="boss@example.com"
+    )
 
     async with session_factory() as session:
         with pytest.raises(BootstrapError):
@@ -273,7 +285,9 @@ async def test_refuses_unverified_clerk_identity(session_factory, make_user):
 
 @pytest.mark.asyncio
 async def test_refuses_email_mismatch(session_factory, make_user):
-    user = await make_user(role=Role.CUSTOMER, username="boss", email="boss@example.com")
+    user = await make_user(
+        role=Role.CUSTOMER, username="boss", email="boss@example.com"
+    )
 
     async with session_factory() as session:
         with pytest.raises(BootstrapError):
@@ -291,7 +305,9 @@ async def test_refuses_email_mismatch(session_factory, make_user):
 
 @pytest.mark.asyncio
 async def test_refuses_when_clerk_unreachable(session_factory, make_user):
-    user = await make_user(role=Role.CUSTOMER, username="boss", email="boss@example.com")
+    user = await make_user(
+        role=Role.CUSTOMER, username="boss", email="boss@example.com"
+    )
 
     async with session_factory() as session:
         with pytest.raises(BootstrapError):
@@ -326,11 +342,15 @@ async def test_removing_bootstrap_setting_keeps_owner(
 ):
     from app.core import auth, config
 
-    user = await make_user(role=Role.CUSTOMER, username="boss", email="boss@example.com")
+    user = await make_user(
+        role=Role.CUSTOMER, username="boss", email="boss@example.com"
+    )
 
     async with session_factory() as session:
         await promote_owner(
-            session, clerk=_clerk("boss@example.com"), configured_email="boss@example.com"
+            session,
+            clerk=_clerk("boss@example.com"),
+            configured_email="boss@example.com",
         )
 
     # The runtime setting is removed entirely; no request-time path may demote.
@@ -359,17 +379,13 @@ async def test_new_signup_is_never_owner(client, session_factory, monkeypatch):
 
     monkeypatch.setattr(auth, "clerk_client", SimpleNamespace(users=_NewUsers()))
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "newcomer"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "newcomer"})
     assert response.status_code == 200
     assert response.json()["role"] == "customer"
 
     async with session_factory() as session:
         stored = (
-            await session.exec(
-                select(User).where(User.email == "newcomer@example.com")
-            )
+            await session.exec(select(User).where(User.email == "newcomer@example.com"))
         ).first()
         assert stored is not None
         assert stored.role == Role.CUSTOMER
@@ -403,9 +419,7 @@ async def test_provisioning_tolerates_absent_optional_clerk_fields(
 
     monkeypatch.setattr(auth, "clerk_client", SimpleNamespace(users=_NewUsers()))
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "bare"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "bare"})
     assert response.status_code == 200
     assert response.json()["role"] == "customer"
 

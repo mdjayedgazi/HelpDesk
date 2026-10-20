@@ -240,9 +240,7 @@ async def get_ticket_contact(
     (agents only see their own tickets and the unassigned queue).
     """
     ticket = await load_visible_ticket(session, ticket_id, staff)
-    return TicketContactRead(
-        ticket_id=ticket.id, contact_phone=ticket.contact_phone
-    )
+    return TicketContactRead(ticket_id=ticket.id, contact_phone=ticket.contact_phone)
 
 
 @router.patch("/{ticket_id}", response_model=TicketRead)
@@ -283,8 +281,7 @@ async def update_ticket(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
-                    "Customers may only edit the title, description and "
-                    "contact phone"
+                    "Customers may only edit the title, description and contact phone"
                 ),
             )
         if ticket.status not in CUSTOMER_EDITABLE_STATUSES:
@@ -473,12 +470,12 @@ async def _set_assignee(
             actor=actor,
             event_type="TICKET_ASSIGNED",
             old_value={"assignee_user_id": str(old) if old else None},
-            new_value={"assignee_user_id": str(assignee_user_id) if assignee_user_id else None},
+            new_value={
+                "assignee_user_id": str(assignee_user_id) if assignee_user_id else None
+            },
         )
 
-    if assignee_user_id is not None and (
-        actor is None or actor.id != assignee_user_id
-    ):
+    if assignee_user_id is not None and (actor is None or actor.id != assignee_user_id):
         create_notification(
             session,
             recipient_user_id=assignee_user_id,
@@ -632,8 +629,7 @@ async def _notify_priority_change(session, *, ticket: Ticket, actor: User) -> No
         type=NotificationType.PRIORITY_CHANGED,
         title="Ticket priority updated",
         message=(
-            f"Ticket #{ticket.ticket_number} priority is now "
-            f"{ticket.priority.value}."
+            f"Ticket #{ticket.ticket_number} priority is now {ticket.priority.value}."
         ),
     )
 

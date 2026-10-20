@@ -38,9 +38,7 @@ class InternalMessage(SQLModel, table=True):
         CheckConstraint(
             "length(subject) > 0", name="ck_internal_messages_subject_nonempty"
         ),
-        CheckConstraint(
-            "length(body) > 0", name="ck_internal_messages_body_nonempty"
-        ),
+        CheckConstraint("length(body) > 0", name="ck_internal_messages_body_nonempty"),
         # A message is only ever created together with at least one recipient
         # row, so an empty audience can never be persisted.
         CheckConstraint(
@@ -90,9 +88,7 @@ class InternalMessageRecipient(SQLModel, table=True):
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    message_id: uuid.UUID = Field(
-        foreign_key="internal_messages.id", nullable=False
-    )
+    message_id: uuid.UUID = Field(foreign_key="internal_messages.id", nullable=False)
     recipient_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
     # Snapshots so the intended recipient list is auditable even if the account
     # is later renamed, re-emailed or moved to another role. Only AGENT/ADMIN

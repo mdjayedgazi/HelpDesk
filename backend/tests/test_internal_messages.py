@@ -27,7 +27,15 @@ def _h(user):
     return {"X-Test-User": user.username}
 
 
-async def _compose(client, owner, *, audience, subject="Announcement", body="Hello team", recipient_user_id=None):
+async def _compose(
+    client,
+    owner,
+    *,
+    audience,
+    subject="Announcement",
+    body="Hello team",
+    recipient_user_id=None,
+):
     payload = {"audience": audience, "subject": subject, "body": body}
     if recipient_user_id is not None:
         payload["recipient_user_id"] = str(recipient_user_id)
@@ -44,7 +52,9 @@ async def test_owner_broadcasts_to_all_agents(client, make_user, session_factory
     owner = await make_user(role=Role.OWNER, username="the_owner")
     agent_a = await make_user(role=Role.AGENT, username="agent_a")
     agent_b = await make_user(role=Role.AGENT, username="agent_b")
-    inactive_agent = await make_user(role=Role.AGENT, username="agent_off", is_active=False)
+    inactive_agent = await make_user(
+        role=Role.AGENT, username="agent_off", is_active=False
+    )
     admin = await make_user(role=Role.ADMIN, username="an_admin")
     customer = await make_user(username="a_customer")
 
@@ -56,12 +66,8 @@ async def test_owner_broadcasts_to_all_agents(client, make_user, session_factory
     assert body["read_count"] == 0
 
     async with session_factory() as session:
-        message = (
-            await session.exec(select(InternalMessage))
-        ).one()
-        rows = (
-            await session.exec(select(InternalMessageRecipient))
-        ).all()
+        message = (await session.exec(select(InternalMessage))).one()
+        rows = (await session.exec(select(InternalMessageRecipient))).all()
 
     assert message.sender_user_id == owner.id
     assert len(rows) == 2
@@ -156,7 +162,9 @@ async def test_group_message_rejects_a_recipient_id(client, make_user):
 
 
 @pytest.mark.asyncio
-async def test_empty_agent_group_is_an_explicit_error(client, make_user, session_factory):
+async def test_empty_agent_group_is_an_explicit_error(
+    client, make_user, session_factory
+):
     owner = await make_user(role=Role.OWNER)
     await make_user(role=Role.ADMIN)  # an admin exists, but no agent
 
@@ -172,7 +180,9 @@ async def test_empty_agent_group_is_an_explicit_error(client, make_user, session
 
 
 @pytest.mark.asyncio
-async def test_inactive_individual_recipient_is_rejected(client, make_user, session_factory):
+async def test_inactive_individual_recipient_is_rejected(
+    client, make_user, session_factory
+):
     owner = await make_user(role=Role.OWNER)
     inactive = await make_user(role=Role.AGENT, username="off_agent", is_active=False)
 
@@ -199,9 +209,7 @@ async def test_customer_and_owner_are_not_individual_recipients(client, make_use
         )
     ).status_code == 400
     assert (
-        await _compose(
-            client, owner, audience="individual", recipient_user_id=owner.id
-        )
+        await _compose(client, owner, audience="individual", recipient_user_id=owner.id)
     ).status_code == 400
 
 
@@ -227,17 +235,11 @@ async def test_non_owner_cannot_compose_or_browse(client, make_user):
     target = await make_user(role=Role.AGENT, username="someone")
 
     for actor in (agent, admin):
+        assert (await _compose(client, actor, audience="everyone")).status_code == 403
         assert (
-            await _compose(client, actor, audience="everyone")
+            await client.get(f"{BASE}/recipients", headers=_h(actor))
         ).status_code == 403
-        assert (
-            await client.get(
-                f"{BASE}/recipients", headers=_h(actor)
-            )
-        ).status_code == 403
-        assert (
-            await client.get(f"{BASE}/sent", headers=_h(actor))
-        ).status_code == 403
+        assert (await client.get(f"{BASE}/sent", headers=_h(actor))).status_code == 403
         # An employee cannot forge a direct message to another employee.
         assert (
             await _compose(
@@ -296,13 +298,20 @@ async def test_spoofed_sender_field_is_rejected(client, make_user):
 
 
 @pytest.mark.asyncio
-async def test_employee_only_sees_their_own_messages_and_can_mark_read(client, make_user):
+async def test_employee_only_sees_their_own_messages_and_can_mark_read(
+    client, make_user
+):
     owner = await make_user(role=Role.OWNER)
     alice = await make_user(role=Role.AGENT, username="alice_agent")
     bob = await make_user(role=Role.ADMIN, username="bob_admin")
 
     created = await _compose(
-        client, owner, audience="individual", subject="For Alice", body="Secret", recipient_user_id=alice.id
+        client,
+        owner,
+        audience="individual",
+        subject="For Alice",
+        body="Secret",
+        recipient_user_id=alice.id,
     )
     message_id = created.json()["id"]
 
@@ -475,7 +484,11 @@ async def test_sent_filters_and_pagination(client, make_user):
     await _compose(client, owner, audience="agents", subject="To agents")
     await _compose(client, owner, audience="admins", subject="To admins")
     await _compose(
-        client, owner, audience="individual", subject="Direct", recipient_user_id=agent.id
+        client,
+        owner,
+        audience="individual",
+        subject="Direct",
+        recipient_user_id=agent.id,
     )
 
     all_sent = await client.get(f"{BASE}/sent?limit=100", headers=_h(owner))
@@ -542,12 +555,16 @@ async def test_owner_inbox_reports_sender_role_and_filters(client, make_user):
     assert {c["id"] for c in unread.json()} == {agent_thread}
 
     # An agent still only ever sees their own thread.
-    agent_view = await client.get(f"{CONVERSATIONS}?staff_role=admin", headers=_h(agent))
+    agent_view = await client.get(
+        f"{CONVERSATIONS}?staff_role=admin", headers=_h(agent)
+    )
     assert {c["id"] for c in agent_view.json()} == {agent_thread}
 
 
 @pytest.mark.asyncio
-async def test_owner_inbox_preview_is_the_message_received_not_the_reply(client, make_user):
+async def test_owner_inbox_preview_is_the_message_received_not_the_reply(
+    client, make_user
+):
     owner = await make_user(role=Role.OWNER, username="owner_preview")
     agent = await make_user(role=Role.AGENT, username="preview_agent")
 

@@ -53,9 +53,7 @@ async def test_ticket_number_collision_then_success(
     async def fake_next_ticket_number(session):
         return next(numbers)
 
-    monkeypatch.setattr(
-        tickets_router, "next_ticket_number", fake_next_ticket_number
-    )
+    monkeypatch.setattr(tickets_router, "next_ticket_number", fake_next_ticket_number)
 
     response = await client.post(
         "/api/v1/tickets",

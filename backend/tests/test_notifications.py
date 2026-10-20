@@ -38,9 +38,7 @@ async def test_notifications_are_per_user(
 
 
 @pytest.mark.asyncio
-async def test_mark_notification_read(
-    client, make_user, make_ticket, session_factory
-):
+async def test_mark_notification_read(client, make_user, make_ticket, session_factory):
     from app.enums.enums import NotificationType
     from app.services.notifications import create_notification
 

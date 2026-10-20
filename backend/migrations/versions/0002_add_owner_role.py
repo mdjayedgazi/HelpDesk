@@ -31,6 +31,7 @@ which is a destructive, data-aware operation that must be designed and
 reviewed separately. This migration therefore refuses to auto-downgrade: it
 never silently demotes an Owner and never rewrites shared history.
 """
+
 from typing import Sequence, Union
 
 from alembic import op

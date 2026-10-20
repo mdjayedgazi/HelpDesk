@@ -19,9 +19,7 @@ async def get_dashboard(
     _admin: admin_dependency,
 ) -> DashboardRead:
     """Aggregate numbers for the admin dashboard."""
-    total_tickets = (
-        await session.exec(select(func.count()).select_from(Ticket))
-    ).one()
+    total_tickets = (await session.exec(select(func.count()).select_from(Ticket))).one()
 
     status_rows = await session.exec(
         select(Ticket.status, func.count()).group_by(Ticket.status)
@@ -37,9 +35,7 @@ async def get_dashboard(
     for ticket_priority, count in priority_rows.all():
         tickets_by_priority[ticket_priority] = count
 
-    total_users = (
-        await session.exec(select(func.count()).select_from(User))
-    ).one()
+    total_users = (await session.exec(select(func.count()).select_from(User))).one()
 
     active_agents = (
         await session.exec(

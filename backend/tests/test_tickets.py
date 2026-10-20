@@ -121,9 +121,7 @@ async def test_invalid_ticket_id_returns_422(client, make_user):
 
 
 @pytest.mark.asyncio
-async def test_agent_sees_queue_and_own_assigned(
-    client, make_user, make_ticket
-):
+async def test_agent_sees_queue_and_own_assigned(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     other_agent = await make_user(role=Role.AGENT)
     customer = await make_user()
@@ -204,9 +202,7 @@ async def test_admin_assigns_ticket_and_notifies_agent(
 
 
 @pytest.mark.asyncio
-async def test_agent_invalid_status_transition_rejected(
-    client, make_user, make_ticket
-):
+async def test_agent_invalid_status_transition_rejected(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer, assignee=agent)

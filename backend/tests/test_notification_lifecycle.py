@@ -44,9 +44,7 @@ async def _unread_count(client, user):
 
 async def _status(client, staff, ticket_id, status, **extra):
     payload = {"status": status, **extra}
-    return await client.patch(
-        f"{TICKETS}/{ticket_id}", headers=_h(staff), json=payload
-    )
+    return await client.patch(f"{TICKETS}/{ticket_id}", headers=_h(staff), json=payload)
 
 
 async def _comment(client, author, ticket_id, body, *, internal=False):
@@ -63,9 +61,7 @@ async def _comment(client, author, ticket_id, body, *, internal=False):
 
 
 @pytest.mark.asyncio
-async def test_ticket_creation_notifies_customer_and_assignee(
-    client, make_user
-):
+async def test_ticket_creation_notifies_customer_and_assignee(client, make_user):
     customer = await make_user(role=Role.CUSTOMER)
     agent = await make_user(role=Role.AGENT, username="the_agent")
 
@@ -82,7 +78,9 @@ async def test_ticket_creation_notifies_customer_and_assignee(
     ticket = response.json()
 
     customer_notes = await _notifications(client, customer)
-    assert [n["type"] for n in customer_notes] == [NotificationType.TICKET_CREATED.value]
+    assert [n["type"] for n in customer_notes] == [
+        NotificationType.TICKET_CREATED.value
+    ]
     assert customer_notes[0]["related_ticket_id"] == ticket["id"]
     assert customer_notes[0]["related_internal_message_id"] is None
     # The customer's receipt is unread and counts toward the badge.
@@ -107,9 +105,7 @@ async def test_public_reply_notifies_the_other_side_but_never_the_actor(
     ticket = await make_ticket(customer, assignee=agent)
 
     # Agent replies -> customer is told.
-    assert (
-        await _comment(client, agent, ticket.id, "I am on it.")
-    ).status_code == 201
+    assert (await _comment(client, agent, ticket.id, "I am on it.")).status_code == 201
     customer_notes = await _notifications(client, customer)
     assert [n["type"] for n in customer_notes] == [NotificationType.NEW_COMMENT.value]
     # The agent was the actor, so nothing for them.
@@ -132,7 +128,9 @@ async def test_internal_note_never_notifies_the_customer(
     ticket = await make_ticket(customer, assignee=agent)
 
     assert (
-        await _comment(client, agent, ticket.id, "Internal: root cause found.", internal=True)
+        await _comment(
+            client, agent, ticket.id, "Internal: root cause found.", internal=True
+        )
     ).status_code == 201
 
     assert await _notifications(client, customer) == []
@@ -150,9 +148,7 @@ async def test_status_and_priority_change_notify_customer_and_assignee(
     admin = await make_user(role=Role.ADMIN, username="acting_admin")
     ticket = await make_ticket(customer, assignee=agent)
 
-    response = await _status(
-        client, admin, ticket.id, "IN_PROGRESS", priority="HIGH"
-    )
+    response = await _status(client, admin, ticket.id, "IN_PROGRESS", priority="HIGH")
     assert response.status_code == 200, response.text
 
     customer_types = sorted(n["type"] for n in await _notifications(client, customer))
@@ -202,13 +198,13 @@ async def test_resolution_requests_feedback_exactly_once(
     agent = await make_user(role=Role.AGENT, username="resolver")
     ticket = await make_ticket(customer, assignee=agent)
 
-    assert (
-        await _status(client, agent, ticket.id, "IN_PROGRESS")
-    ).status_code == 200
+    assert (await _status(client, agent, ticket.id, "IN_PROGRESS")).status_code == 200
     assert (await _status(client, agent, ticket.id, "RESOLVED")).status_code == 200
 
     customer_notes = await _notifications(client, customer)
-    resolved = [n for n in customer_notes if n["type"] == NotificationType.TICKET_RESOLVED.value]
+    resolved = [
+        n for n in customer_notes if n["type"] == NotificationType.TICKET_RESOLVED.value
+    ]
     assert len(resolved) == 1
     assert resolved[0]["title"] == "Your ticket has been resolved"
     assert resolved[0]["related_ticket_id"] == str(ticket.id)
@@ -217,7 +213,9 @@ async def test_resolution_requests_feedback_exactly_once(
     assert (await _status(client, agent, ticket.id, "IN_PROGRESS")).status_code == 200
     assert (await _status(client, agent, ticket.id, "RESOLVED")).status_code == 200
     customer_notes = await _notifications(client, customer)
-    resolved = [n for n in customer_notes if n["type"] == NotificationType.TICKET_RESOLVED.value]
+    resolved = [
+        n for n in customer_notes if n["type"] == NotificationType.TICKET_RESOLVED.value
+    ]
     assert len(resolved) == 1
 
 
@@ -243,9 +241,7 @@ async def test_fetching_notifications_never_creates_records(
 
 
 @pytest.mark.asyncio
-async def test_owner_internal_message_notifies_each_recipient_once(
-    client, make_user
-):
+async def test_owner_internal_message_notifies_each_recipient_once(client, make_user):
     owner = await make_user(role=Role.OWNER, username="compose_owner")
     agent = await make_user(role=Role.AGENT, username="compose_agent")
     admin = await make_user(role=Role.ADMIN, username="compose_admin")
@@ -273,9 +269,7 @@ async def test_owner_internal_message_notifies_each_recipient_once(
 
 
 @pytest.mark.asyncio
-async def test_reading_an_internal_message_clears_its_notification(
-    client, make_user
-):
+async def test_reading_an_internal_message_clears_its_notification(client, make_user):
     owner = await make_user(role=Role.OWNER, username="read_owner")
     agent = await make_user(role=Role.AGENT, username="read_agent")
 
@@ -358,7 +352,10 @@ async def test_unread_count_and_category_filter(client, make_user, make_ticket):
     )
 
     counts = await _unread_count(client, agent)
-    assert counts["count"] == counts["tickets"] + counts["messages"] + counts["account_requests"]
+    assert (
+        counts["count"]
+        == counts["tickets"] + counts["messages"] + counts["account_requests"]
+    )
     assert counts["messages"] == 1
     assert counts["tickets"] == 2
 
@@ -366,7 +363,8 @@ async def test_unread_count_and_category_filter(client, make_user, make_ticket):
     assert all(n["type"] == "INTERNAL_MESSAGE_RECEIVED" for n in only_messages)
     only_tickets = await _notifications(client, agent, category="tickets")
     assert only_tickets and all(
-        n["type"] in {"NEW_COMMENT", "STATUS_CHANGED", "TICKET_ASSIGNED"} for n in only_tickets
+        n["type"] in {"NEW_COMMENT", "STATUS_CHANGED", "TICKET_ASSIGNED"}
+        for n in only_tickets
     )
 
     # Unread filter.
@@ -406,9 +404,7 @@ async def test_notifications_are_private_and_cannot_be_mutated_by_others(
 
 
 async def _feedback(client, user, ticket_id):
-    return await client.get(
-        f"{TICKETS}/{ticket_id}/feedback", headers=_h(user)
-    )
+    return await client.get(f"{TICKETS}/{ticket_id}/feedback", headers=_h(user))
 
 
 @pytest.mark.asyncio
@@ -437,7 +433,11 @@ async def test_feedback_is_customer_only_and_single_answer(
 
     # The ticket's own customer can submit once.
     state = await _feedback(client, customer, ticket.id)
-    assert state.json() == {"feedback": None, "can_submit": True, "awaiting_feedback": True}
+    assert state.json() == {
+        "feedback": None,
+        "can_submit": True,
+        "awaiting_feedback": True,
+    }
 
     first = await client.post(
         f"{TICKETS}/{ticket.id}/feedback",
@@ -504,9 +504,7 @@ async def test_submitting_feedback_clears_the_request_notification(
     # The feedback request is now read, and the badge dropped by exactly one.
     assert (await _unread_count(client, customer))["count"] == unread_before - 1
     after = await _notifications(client, customer)
-    assert all(
-        n["is_read"] for n in after if n["type"] == "TICKET_RESOLVED"
-    )
+    assert all(n["is_read"] for n in after if n["type"] == "TICKET_RESOLVED")
     assert (await _unread_count(client, customer))["tickets"] == unread_before - 1
 
 
@@ -551,4 +549,3 @@ async def test_account_request_notifications_link_to_the_request(
     agent_notes = await _notifications(client, agent)
     assert [n["type"] for n in agent_notes] == ["ESCALATION_UPDATED"]
     assert agent_notes[0]["related_account_request_id"] == request_id
-
