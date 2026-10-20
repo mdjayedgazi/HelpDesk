@@ -32,7 +32,9 @@ export function useAuth() {
     isLoaded: true,
     isSignedIn: true,
     userId: 'user_qa',
-    getToken: async () => null,
+    // Any non-empty token satisfies the client's "signed in" guard; the
+    // isolated QA server authorizes by X-Test-User instead.
+    getToken: async () => 'qa-harness-token',
   }
 }
 

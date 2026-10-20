@@ -14,7 +14,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { formatRelative } from '../lib/format.ts'
 import type { Notification, NotificationType } from '../lib/types.ts'
@@ -105,10 +105,21 @@ export function NotificationRow({
 
   const destination = notificationDestination(notification)
 
+  const markRead = () => {
+    if (!notification.is_read && onMarkRead) onMarkRead(notification.id)
+  }
+
   const openDestination = () => {
     if (!destination) return
-    if (!notification.is_read && onMarkRead) onMarkRead(notification.id)
+    markRead()
     void navigate(destination.to)
+  }
+
+  const titleStyles = {
+    fontSize: 'sm' as const,
+    fontWeight: notification.is_read ? 'regular' : 'medium',
+    color: palette.text,
+    lineClamp: 2,
   }
 
   return (
@@ -139,16 +150,27 @@ export function NotificationRow({
       </Center>
       <Stack gap='0.5' flex='1' minW='0'>
         <Flex align='flex-start' gap='2'>
-          <Text
-            fontSize='sm'
-            fontWeight={notification.is_read ? 'regular' : 'medium'}
-            color={palette.text}
-            lineClamp={2}
-            flex='1'
-            minW='0'
-          >
-            {notification.title}
-          </Text>
+          {destination ? (
+            <Link
+              to={destination.to}
+              aria-label={`${notification.title} — ${destination.label}`}
+              onClick={(event) => {
+                // The link owns this click; the row-level handler would also
+                // navigate, so stop it here to keep one history entry.
+                event.stopPropagation()
+                markRead()
+              }}
+              style={{ textDecoration: 'none', minWidth: 0, flex: 1 }}
+            >
+              <Text {...titleStyles} _hover={{ textDecoration: 'underline' }}>
+                {notification.title}
+              </Text>
+            </Link>
+          ) : (
+            <Text {...titleStyles} flex='1' minW='0'>
+              {notification.title}
+            </Text>
+          )}
           {!notification.is_read ? (
             <Box
               boxSize='1.5'
@@ -184,25 +206,6 @@ export function NotificationRow({
             >
               Unread
             </Text>
-          ) : null}
-          {destination ? (
-            <Button
-              variant='plain'
-              size='xs'
-              height='auto'
-              p='0'
-              fontSize='xs'
-              color={palette.textSecondary}
-              textDecoration='underline'
-              textUnderlineOffset='2px'
-              _hover={{ color: palette.text }}
-              onClick={(event) => {
-                event.stopPropagation()
-                openDestination()
-              }}
-            >
-              {destination.label}
-            </Button>
           ) : null}
           {!notification.is_read && onMarkRead ? (
             <Button
