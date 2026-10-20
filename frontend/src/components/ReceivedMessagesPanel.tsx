@@ -1,9 +1,11 @@
 import { Button, Dialog, Flex, Portal, Stack, Text, chakra } from '@chakra-ui/react'
 import { Megaphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import {
   useMarkInternalMessageRead,
+  useReceivedMessage,
   useReceivedMessages,
 } from '../hooks/useInternalMessages.ts'
 import { errorMessage } from '../lib/errors.ts'
@@ -23,33 +25,93 @@ import { toaster } from './Toaster.tsx'
 export function ReceivedMessagesPanel() {
   const received = useReceivedMessages({ limit: 20 })
   const items = received.data ?? []
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requested = searchParams.get('message')
   const [openId, setOpenId] = useState<string | null>(null)
 
-  if (received.isPending || received.isError || items.length === 0) return null
+  // The list is capped, so a notification can point at a message older than the
+  // newest page. Fetch that exact message instead of silently ignoring the
+  // deep link; the backend still only returns the caller's own recipient row.
+  const inPage = requested
+    ? items.find((message) => message.id === requested) ?? null
+    : null
+  const detail = useReceivedMessage(requested && !inPage ? requested : null)
 
-  const active = items.find((message) => message.id === openId) ?? null
+  const showList = !received.isPending && !received.isError && items.length > 0
+  const active = openId
+    ? items.find((message) => message.id === openId) ?? null
+    : requested
+      ? inPage ?? detail.data ?? null
+      : null
+
+  const clearRequest = () => {
+    if (!requested) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('message')
+    setSearchParams(next, { replace: true })
+  }
+
+  const close = () => {
+    setOpenId(null)
+    clearRequest()
+  }
+
+  if (!showList && !requested) return null
 
   return (
     <Stack gap='3'>
-      <Flex align='center' gap='2'>
-        <Megaphone size={15} color={palette.textMuted} aria-hidden />
-        <Text fontSize='sm' fontWeight='medium' color={palette.text}>
-          From the Owner
-        </Text>
-      </Flex>
-      <Surface overflow='hidden'>
-        <Stack gap='0'>
-          {items.map((message) => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              onSelect={() => setOpenId(message.id)}
-            />
-          ))}
-        </Stack>
-      </Surface>
+      {showList ? (
+        <>
+          <Flex align='center' gap='2'>
+            <Megaphone size={15} color={palette.textMuted} aria-hidden />
+            <Text fontSize='sm' fontWeight='medium' color={palette.text}>
+              From the Owner
+            </Text>
+          </Flex>
+          <Surface overflow='hidden'>
+            <Stack gap='0'>
+              {items.map((message) => (
+                <MessageRow
+                  key={message.id}
+                  message={message}
+                  onSelect={() => setOpenId(message.id)}
+                />
+              ))}
+            </Stack>
+          </Surface>
+        </>
+      ) : null}
 
-      <MessageDialog message={active} onClose={() => setOpenId(null)} />
+      {requested && !inPage && detail.isError ? (
+        <Surface p='4'>
+          <Stack gap='2' align='flex-start'>
+            <Text fontSize='sm' color={palette.text}>
+              Could not open that message
+            </Text>
+            <Text fontSize='xs' color={palette.textFaint}>
+              {errorMessage(detail.error)}
+            </Text>
+            <Button
+              size='xs'
+              variant='outline'
+              borderColor={palette.border}
+              onClick={clearRequest}
+            >
+              Back to messages
+            </Button>
+          </Stack>
+        </Surface>
+      ) : null}
+
+      {requested && !inPage && detail.isPending ? (
+        <Flex px='4' py='6' justify='center'>
+          <Text fontSize='xs' color={palette.textMuted}>
+            Opening message…
+          </Text>
+        </Flex>
+      ) : null}
+
+      <MessageDialog message={active} onClose={close} />
     </Stack>
   )
 }

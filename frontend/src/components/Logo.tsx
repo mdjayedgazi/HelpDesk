@@ -1,5 +1,4 @@
 import { Flex, Text } from '@chakra-ui/react'
-import { LifeBuoy } from 'lucide-react'
 
 import { palette } from '../theme/palette.ts'
 
@@ -9,16 +8,27 @@ export function Logo({ compact = false }: { compact?: boolean }) {
       <Flex
         boxSize='7'
         borderRadius='l2'
-        bg={palette.ink}
+        bg={palette.logo}
         color={palette.textOnInk}
         align='center'
         justify='center'
         flexShrink={0}
       >
-        <LifeBuoy size={16} strokeWidth={2} aria-hidden />
+        <img
+          src='/deepseek_svg_20261019_8f1ee9.svg'
+          alt='HelpDesk logo'
+          width={28}
+          height={28}
+        />
       </Flex>
+
       {!compact ? (
-        <Text fontSize='md' fontWeight='semibold' letterSpacing='-0.02em' color={palette.text}>
+        <Text
+          fontSize='md'
+          fontWeight='semibold'
+          letterSpacing='-0.02em'
+          color={palette.text}
+        >
           HelpDesk
         </Text>
       ) : null}

@@ -68,6 +68,7 @@ from app.core.database import async_session
 from app.enums.enums import (
     EscalationCategory,
     EscalationStatus,
+    InternalAudience,
     NotificationType,
     Role,
     TicketCategory,
@@ -80,10 +81,13 @@ from app.models import (
     AccountRequestEvent,
     Attachment,
     Comment,
+    InternalMessage,
+    InternalMessageRecipient,
     Notification,
     StaffConversation,
     StaffMessage,
     Ticket,
+    TicketFeedback,
     TicketHistory,
     User,
 )
@@ -589,7 +593,12 @@ def history_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]:
     return specs
 
 
-def notification_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]:
+def notification_specs(
+    users: list[UserSpec],
+    tickets: list[dict],
+    conversations: list[dict] | None = None,
+    requests: list[dict] | None = None,
+) -> list[dict]:
     specs: list[dict] = []
     for t in tickets:
         i = t["index"]
@@ -637,6 +646,20 @@ def notification_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]
                     "at": at + 55,
                 }
             )
+        # Customer reply notification to the assigned agent on other tickets.
+        if i % 2 == 1 and t["agent_key"] is not None:
+            specs.append(
+                {
+                    "key": f"notif_{i:03d}_customer_reply",
+                    "recipient_key": t["agent_key"],
+                    "ticket_key": t["key"],
+                    "type": NotificationType.NEW_COMMENT,
+                    "title": f"New reply on ticket #{number}",
+                    "message": f"The customer replied to ticket #{number}.",
+                    "is_read": i % 3 == 0,
+                    "at": at + 25,
+                }
+            )
         # Needs-assignment notification to an admin for unassigned tickets.
         if t["agent_key"] is None:
             specs.append(
@@ -651,6 +674,206 @@ def notification_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]
                     "at": at,
                 }
             )
+        # Customer receipt for every ticket.
+        specs.append(
+            {
+                "key": f"notif_{i:03d}_created",
+                "recipient_key": t["customer_key"],
+                "ticket_key": t["key"],
+                "type": NotificationType.TICKET_CREATED,
+                "title": "Your ticket was received",
+                "message": (
+                    f"We received ticket #{number} and it is being reviewed."
+                ),
+                "is_read": True,
+                "at": at - 5,
+            }
+        )
+        # Feedback request for resolved tickets that have no answer yet.
+        if t["status"] == TicketStatus.RESOLVED and not _ticket_has_feedback(i):
+            specs.append(
+                {
+                    "key": f"notif_{i:03d}_feedback",
+                    "recipient_key": t["customer_key"],
+                    "ticket_key": t["key"],
+                    "type": NotificationType.TICKET_RESOLVED,
+                    "title": "Your ticket has been resolved",
+                    "message": (
+                        f"Ticket #{number} was resolved. Share your feedback "
+                        "to let us know how we did."
+                    ),
+                    "is_read": i % 2 == 0,
+                    "at": at + 90,
+                }
+            )
+
+    # Employee <-> Owner private threads: one notification per message, for the
+    # recipient of that message (never the sender). Read state mirrors the
+    # message's own read_at so both inboxes agree.
+    if conversations:
+        # The preserved Owner is not part of ``demo_users()``; the sentinel is
+        # resolved to the real OWNER row by the seeder.
+        owner_key = "__owner__"
+        for conversation in conversations:
+            for n in range(3):
+                staff_sender = n % 2 == 0
+                specs.append(
+                    {
+                        "key": f"notif_{conversation['key']}_msg_{n}",
+                        "recipient_key": (
+                            owner_key if staff_sender else conversation["staff_key"]
+                        ),
+                        "conversation_key": conversation["key"],
+                        "type": (
+                            NotificationType.STAFF_MESSAGE_RECEIVED
+                            if staff_sender
+                            else NotificationType.OWNER_MESSAGE_RECEIVED
+                        ),
+                        "title": (
+                            "New private message from a staff member"
+                            if staff_sender
+                            else "The Owner replied to you"
+                        ),
+                        "message": (
+                            "A staff member sent you a private message."
+                            if staff_sender
+                            else "The Owner sent you a private message."
+                        ),
+                        "is_read": _staff_message_read(conversation, n),
+                        "at": conversation["created_at"] + n * 45,
+                    }
+                )
+
+    # Account-management requests: reviewers hear about a new request, and the
+    # requester hears when it is decided. Never the actor.
+    if requests:
+        admins = _specs_by_role(users, Role.ADMIN)
+        for request in requests:
+            index = int(request["key"].rsplit("_", 1)[1])
+            reviewer = next(
+                admin
+                for admin in admins
+                if admin.key != request["created_by_key"]
+            )
+            specs.append(
+                {
+                    "key": f"notif_{request['key']}_created",
+                    "recipient_key": reviewer.key,
+                    "request_key": request["key"],
+                    "type": NotificationType.ESCALATION_CREATED,
+                    "title": "New account request",
+                    "message": "An account-management request needs review.",
+                    "is_read": index % 3 == 0,
+                    "at": request["at"] + 2,
+                }
+            )
+            if request["status"] != EscalationStatus.PENDING:
+                specs.append(
+                    {
+                        "key": f"notif_{request['key']}_updated",
+                        "recipient_key": request["created_by_key"],
+                        "request_key": request["key"],
+                        "type": NotificationType.ESCALATION_UPDATED,
+                        "title": "Your account request was updated",
+                        "message": (
+                            "Your account-management request is now "
+                            f"{request['status'].value}."
+                        ),
+                        "is_read": index % 2 == 0,
+                        "at": request["at"] + 130,
+                    }
+                )
+    return specs
+
+
+def _ticket_has_feedback(index: int) -> bool:
+    """Deterministic split of resolved tickets into answered / awaiting."""
+    return index % 3 == 0
+
+
+_FEEDBACK_COMMENTS = [
+    "The agent explained every step and kept me updated the whole time.",
+    "Resolved quickly, though the first response took a little while.",
+    "Clear and friendly support; the workaround solved my problem.",
+    "Issue is fixed. A summary of the root cause would have helped.",
+]
+
+_INTERNAL_SUBJECTS = [
+    "Quarterly support update",
+    "New triage guideline for urgent tickets",
+    "Reminder: handover notes before the rotation",
+    "Recognition for last week's outage response",
+    "Please review the updated escalation policy",
+    "Coverage plan for the upcoming holiday",
+]
+
+_INTERNAL_BODIES = [
+    "Thanks for the steady work this quarter. Reply here if anything is "
+    "unclear about the new targets.",
+    "Urgent tickets now need an owner within the first hour. Ping me if the "
+    "queue looks thin during your shift.",
+    "Please leave short handover notes before you log off so the next shift "
+    "can pick up without asking around.",
+    "Great job keeping customers informed during the outage. This is exactly "
+    "the standard we want to hold.",
+    "The escalation policy was clarified this week; the summary is in the "
+    "shared handbook.",
+    "Here is the coverage plan for the holiday period. Swap directly with a "
+    "colleague if the dates do not work for you.",
+]
+
+
+def internal_message_specs(users: list[UserSpec]) -> list[dict]:
+    """Deterministic Owner-composed internal messages (broadcasts + notes).
+
+    Each spec lists its recipient keys explicitly so the per-recipient read
+    split is reproducible and the notification rows can be tied to real
+    recipient rows.
+    """
+    agents = _specs_by_role(users, Role.AGENT)
+    admins = _specs_by_role(users, Role.ADMIN)
+    everyone = [*agents, *admins]
+    groups: list[tuple[InternalAudience, list[str]]] = [
+        (InternalAudience.EVERYONE, [u.key for u in everyone]),
+        (InternalAudience.AGENTS, [u.key for u in agents]),
+        (InternalAudience.ADMINS, [u.key for u in admins]),
+        (InternalAudience.INDIVIDUAL, [agents[0].key]),
+        (InternalAudience.INDIVIDUAL, [admins[0].key]),
+        (InternalAudience.AGENTS, [u.key for u in agents[:4]]),
+    ]
+    specs: list[dict] = []
+    for i, (audience, keys) in enumerate(groups):
+        specs.append(
+            {
+                "key": f"internal_{i:02d}",
+                "audience": audience,
+                "subject": _INTERNAL_SUBJECTS[i % len(_INTERNAL_SUBJECTS)],
+                "body": _INTERNAL_BODIES[i % len(_INTERNAL_BODIES)],
+                "recipient_keys": keys,
+                # Determines a stable per-recipient read/unread split.
+                "read_stride": (i % 3) + 1,
+                "at": 200 + i * 30,
+            }
+        )
+    return specs
+
+
+def feedback_specs(tickets: list[dict]) -> list[dict]:
+    """Feedback for the deterministic subset of resolved tickets that answered."""
+    specs: list[dict] = []
+    for t in tickets:
+        if t["status"] != TicketStatus.RESOLVED or not _ticket_has_feedback(t["index"]):
+            continue
+        specs.append(
+            {
+                "key": f"feedback_{t['index']:03d}",
+                "ticket_key": t["key"],
+                "customer_key": t["customer_key"],
+                "rating": 2 + (t["index"] % 4),
+                "comment": _FEEDBACK_COMMENTS[t["index"] % len(_FEEDBACK_COMMENTS)],
+                "at": t["created_at"] + 120,
+            }
+        )
     return specs
 
 
@@ -724,10 +947,24 @@ def staff_message_specs(conversations: list[dict]) -> list[dict]:
                     "staff_key": c["staff_key"],
                     "body": _STAFF_MESSAGES[(n + conversation_index(c)) % len(_STAFF_MESSAGES)],
                     "at": base + n * 45,
-                    "read": n < 2,
+                    "read": _staff_message_read(c, n),
                 }
             )
     return specs
+
+
+def _staff_message_read(conversation: dict, n: int) -> bool:
+    """Deterministic read mix in both directions, for demo read/unread states.
+
+    The matching notification reuses this value, so the message's own read
+    state and the notification's read state never disagree in demo data.
+    """
+    index = conversation_index(conversation)
+    if n == 0:
+        return index % 3 != 0
+    if n == 1:
+        return index % 4 != 0
+    return False
 
 
 def conversation_index(conversation: dict) -> int:
@@ -1037,7 +1274,13 @@ async def _seed_history(session, users, tickets_map) -> Counts:
 
 async def _seed_notifications(session, users, tickets_map) -> Counts:
     counts = Counts()
-    specs = notification_specs(demo_users(), ticket_specs(demo_users()))
+    user_specs = demo_users()
+    specs = notification_specs(
+        user_specs,
+        ticket_specs(user_specs),
+        conversations=staff_conversation_specs(user_specs),
+        requests=account_request_specs(user_specs),
+    )
     expected_ids = [_uid("notification", s["key"]) for s in specs]
     existing = set(
         (
@@ -1051,16 +1294,154 @@ async def _seed_notifications(session, users, tickets_map) -> Counts:
         if expected_id in existing:
             counts.reused += 1
             continue
-        number = tickets_map[spec["ticket_key"]].ticket_number
+        if spec["recipient_key"] == "__owner__":
+            owner = (
+                await session.exec(
+                    select(User).where(User.role == Role.OWNER)
+                )
+            ).first()
+            if owner is None:
+                raise SeedRefused(
+                    "Cannot seed owner notifications without an OWNER row."
+                )
+            recipient_user_id = owner.id
+        else:
+            recipient_user_id = users[spec["recipient_key"]].id
+        ticket = (
+            tickets_map.get(spec["ticket_key"])
+            if spec.get("ticket_key")
+            else None
+        )
+        number = ticket.ticket_number if ticket is not None else None
+
+        def _fill(text: str, *, number=number) -> str:
+            return (
+                text.replace("{number}", str(number))
+                if number is not None
+                else text
+            )
+
         session.add(
             Notification(
                 id=expected_id,
-                recipient_user_id=users[spec["recipient_key"]].id,
-                related_ticket_id=tickets_map[spec["ticket_key"]].id,
+                recipient_user_id=recipient_user_id,
+                related_ticket_id=ticket.id if ticket is not None else None,
+                related_conversation_id=(
+                    _uid("conversation", spec["conversation_key"])
+                    if spec.get("conversation_key")
+                    else None
+                ),
+                related_account_request_id=(
+                    _uid("request", spec["request_key"])
+                    if spec.get("request_key")
+                    else None
+                ),
                 type=spec["type"],
-                title=spec["title"].replace("{number}", str(number)),
-                message=spec["message"].replace("{number}", str(number))[:500],
+                title=_fill(spec["title"]),
+                message=_fill(spec["message"])[:500],
                 is_read=spec["is_read"],
+                created_at=_at(spec["at"]),
+            )
+        )
+        counts.inserted += 1
+    return counts
+
+
+async def _seed_internal_messages(session, users, owner) -> Counts:
+    """Owner-composed internal messages, their recipients, and notifications.
+
+    Each recipient row carries an identity snapshot and a deterministic read
+    state; the matching notification's read state is derived from it, so the
+    two never disagree in the demo dataset.
+    """
+    counts = Counts()
+    specs = internal_message_specs(demo_users())
+    message_ids = [_uid("internal_message", s["key"]) for s in specs]
+    existing = set(
+        (
+            await session.exec(
+                select(InternalMessage.id).where(InternalMessage.id.in_(message_ids))
+            )
+        ).all()
+    )
+    for spec in specs:
+        message_id = _uid("internal_message", spec["key"])
+        if message_id in existing:
+            counts.reused += 1
+            continue
+        created = _at(spec["at"])
+        session.add(
+            InternalMessage(
+                id=message_id,
+                sender_user_id=owner.id,
+                audience=spec["audience"],
+                subject=spec["subject"],
+                body=spec["body"],
+                recipient_count=len(spec["recipient_keys"]),
+                created_at=created,
+            )
+        )
+        for index, recipient_key in enumerate(spec["recipient_keys"]):
+            recipient = users[recipient_key]
+            read_at = (
+                created + timedelta(minutes=5)
+                if index % spec["read_stride"] == 0
+                else None
+            )
+            session.add(
+                InternalMessageRecipient(
+                    id=_uid("internal_recipient", f"{spec['key']}:{recipient_key}"),
+                    message_id=message_id,
+                    recipient_user_id=recipient.id,
+                    recipient_role_snapshot=recipient.role,
+                    recipient_full_name_snapshot=recipient.full_name,
+                    recipient_email_snapshot=recipient.email,
+                    created_at=created,
+                    read_at=read_at,
+                )
+            )
+            session.add(
+                Notification(
+                    id=_uid("notification", f"internal:{spec['key']}:{recipient_key}"),
+                    recipient_user_id=recipient.id,
+                    related_internal_message_id=message_id,
+                    type=NotificationType.INTERNAL_MESSAGE_RECEIVED,
+                    title="New message from the Owner",
+                    message=(
+                        "The Owner sent you an internal message. Open it to "
+                        "read the details."
+                    ),
+                    is_read=read_at is not None,
+                    created_at=created,
+                )
+            )
+        counts.inserted += 1
+    return counts
+
+
+async def _seed_feedback(session, users, tickets_map) -> Counts:
+    counts = Counts()
+    specs = feedback_specs(ticket_specs(demo_users()))
+    expected_ids = [_uid("feedback", s["key"]) for s in specs]
+    existing = set(
+        (
+            await session.exec(
+                select(TicketFeedback.id).where(TicketFeedback.id.in_(expected_ids))
+            )
+        ).all()
+    )
+    for spec in specs:
+        expected_id = _uid("feedback", spec["key"])
+        if expected_id in existing:
+            counts.reused += 1
+            continue
+        session.add(
+            TicketFeedback(
+                id=expected_id,
+                ticket_id=tickets_map[spec["ticket_key"]].id,
+                customer_user_id=users[spec["customer_key"]].id,
+                rating=spec["rating"],
+                comment=spec["comment"],
                 created_at=_at(spec["at"]),
             )
         )
@@ -1351,11 +1732,20 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
         "tickets": len(tickets),
         "comments": len(comment_specs(demo_users(), tickets)),
         "history": len(history_specs(demo_users(), tickets)),
-        "notifications": len(notification_specs(demo_users(), tickets)),
+        "notifications": len(
+            notification_specs(
+                demo_users(),
+                tickets,
+                conversations=staff_conversation_specs(demo_users()),
+                requests=account_request_specs(demo_users()),
+            )
+        ),
         "attachments": len(attachment_specs(tickets)),
         "staff_conversations": N_STAFF_CONVERSATIONS,
         "staff_messages": 3 * N_STAFF_CONVERSATIONS,
         "account_requests": N_ACCOUNT_REQUESTS,
+        "feedback": len(feedback_specs(tickets)),
+        "internal_messages": len(internal_message_specs(demo_users())),
     }
 
     created_files: list[Path] = []
@@ -1401,7 +1791,10 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
 
             result.counts["comments"] = (await _seed_comments(session, users, tickets_map)).as_dict()
             result.counts["history"] = (await _seed_history(session, users, tickets_map)).as_dict()
-            result.counts["notifications"] = (await _seed_notifications(session, users, tickets_map)).as_dict()
+            result.counts["feedback"] = (await _seed_feedback(session, users, tickets_map)).as_dict()
+            result.counts["internal_messages"] = (
+                await _seed_internal_messages(session, users, owner)
+            ).as_dict()
             attach_counts, created_files = await _seed_attachments(session, users, tickets_map, upload_root)
             result.counts["attachments"] = attach_counts.as_dict()
 
@@ -1415,6 +1808,11 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
             req_c, req_e = await _seed_account_request_children(session, users, req_map)
             result.counts["account_request_comments"] = req_c.as_dict()
             result.counts["account_request_events"] = req_e.as_dict()
+            # Notifications come last: some reference conversations and account
+            # requests, so those rows must exist first for the foreign keys.
+            result.counts["notifications"] = (
+                await _seed_notifications(session, users, tickets_map)
+            ).as_dict()
 
             owner_after = await _owner_row(session)
             result.owner_after = owner_after
@@ -1503,6 +1901,20 @@ async def read_counts(session_factory=None) -> dict:
             ),
             "account_request_events": int(
                 (await session.exec(select(func.count(AccountRequestEvent.id)))).one() or 0
+            ),
+            "feedback": int(
+                (await session.exec(select(func.count(TicketFeedback.id)))).one() or 0
+            ),
+            "internal_messages": int(
+                (await session.exec(select(func.count(InternalMessage.id)))).one() or 0
+            ),
+            "internal_message_recipients": int(
+                (
+                    await session.exec(
+                        select(func.count(InternalMessageRecipient.id))
+                    )
+                ).one()
+                or 0
             ),
         }
 

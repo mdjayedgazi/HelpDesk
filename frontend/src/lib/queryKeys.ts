@@ -24,11 +24,13 @@ export const queryKeys = {
     comments: (id: string) => ['tickets', 'comments', id] as const,
     history: (id: string) => ['tickets', 'history', id] as const,
     attachments: (id: string) => ['tickets', 'attachments', id] as const,
+    feedback: (id: string) => ['tickets', 'feedback', id] as const,
   },
 
   notifications: {
     all: ['notifications'] as const,
     list: (params?: NotificationListParams) => ['notifications', 'list', params ?? {}] as const,
+    unreadCount: ['notifications', 'unread-count'] as const,
   },
 
   staffMessages: {
@@ -47,6 +49,8 @@ export const queryKeys = {
     sentDetail: (id: string, params?: { limit?: number; offset?: number }) =>
       ['internal-messages', 'sent-detail', id, params ?? {}] as const,
     received: ['internal-messages', 'received'] as const,
+    receivedDetail: (id: string) =>
+      ['internal-messages', 'received-detail', id] as const,
   },
 
   accountRequests: {

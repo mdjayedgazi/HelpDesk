@@ -101,6 +101,20 @@ export function useReceivedMessages(
   })
 }
 
+/** One message addressed to the caller, used by notification deep links. */
+export function useReceivedMessage(
+  id: string | null | undefined,
+  enabled = true,
+) {
+  const api = useApi()
+  return useQuery({
+    queryKey: queryKeys.internalMessages.receivedDetail(id ?? ''),
+    queryFn: () =>
+      api.request<InternalMessageReceived>(endpoints.receivedMessage(id as string)),
+    enabled: Boolean(id) && enabled,
+  })
+}
+
 /** Mark the signed-in recipient's own copy as read. */
 export function useMarkInternalMessageRead() {
   const api = useApi()

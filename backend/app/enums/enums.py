@@ -123,3 +123,13 @@ class NotificationType(str, Enum):
     # Account-management (admin escalation) request activity.
     ESCALATION_CREATED = "ESCALATION_CREATED"
     ESCALATION_UPDATED = "ESCALATION_UPDATED"
+    # The customer's ticket was received. A receipt only, never a workflow
+    # signal, so the customer always knows their request landed.
+    TICKET_CREATED = "TICKET_CREATED"
+    # A ticket the customer owns became RESOLVED. Carries the "share feedback"
+    # call to action; only created on the transition into RESOLVED (and only
+    # while no feedback has been submitted), so resolving again never spams.
+    TICKET_RESOLVED = "TICKET_RESOLVED"
+    # A direct/broadcast message the Owner composed in the Owner Inbox and
+    # addressed to an employee (never a customer, never the Owner).
+    INTERNAL_MESSAGE_RECEIVED = "INTERNAL_MESSAGE_RECEIVED"
