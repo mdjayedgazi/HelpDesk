@@ -5,6 +5,7 @@ from pydantic import ConfigDict
 from sqlmodel import SQLModel
 from app.enums.enums import NotificationType
 
+
 class NotificationRead(SQLModel):
     model_config = ConfigDict(from_attributes=True)
 

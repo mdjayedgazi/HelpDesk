@@ -111,7 +111,9 @@ DEMO_UPLOAD_DIR = "/tmp/helpdesk-demo-uploads"
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
-_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, f"https://helpdesk.demo.local/neon/{MARKER}")
+_NAMESPACE = uuid.uuid5(
+    uuid.NAMESPACE_URL, f"https://helpdesk.demo.local/neon/{MARKER}"
+)
 
 _BASE = datetime(2026, 8, 15, 7, 0, tzinfo=timezone.utc)
 
@@ -174,15 +176,17 @@ def assert_confirm(confirm: str | None) -> None:
 
 def assert_not_production(environ: dict[str, str]) -> None:
     declared = (
-        environ.get("HELPDESK_ENVIRONMENT")
-        or environ.get("APP_ENV")
-        or environ.get("ENVIRONMENT")
-        or ""
-    ).strip().lower()
-    if declared in {"production", "prod"}:
-        raise SeedRefused(
-            "Refusing to seed: the environment is declared production."
+        (
+            environ.get("HELPDESK_ENVIRONMENT")
+            or environ.get("APP_ENV")
+            or environ.get("ENVIRONMENT")
+            or ""
         )
+        .strip()
+        .lower()
+    )
+    if declared in {"production", "prod"}:
+        raise SeedRefused("Refusing to seed: the environment is declared production.")
 
 
 def assert_neon_target(url: str | None) -> None:
@@ -227,102 +231,240 @@ def assert_safe_upload_dir(upload_dir: str) -> Path:
 # --------------------------------------------------------------------------- #
 
 _FIRST_NAMES = [
-    "Amara", "Noah", "Priya", "Liam", "Yuki", "Mateo", "Zara", "Ethan", "Aisha",
-    "Diego", "Freya", "Omar", "Ingrid", "Kai", "Lucia", "Ravi", "Sofia", "Tomas",
-    "Nadia", "Elias", "Mei", "Jonas", "Clara", "Hassan", "Elif", "Marco", "Lena",
-    "Idris", "Rosa", "Anton", "Nadia2", "Hugo", "Anika", "Samir", "Greta", "Yusuf",
-    "Paula", "Dmitri", "Céline", "Arjun", "Nora", "Kofi", "Vera", "Bilal", "Astrid",
-    "Ren", "Camila", "Oskar", "Leila", "Bruno", "Signe", "Amir", "Tessa", "Pavel",
-    "Rania", "Felix", "Ines", "Sven", "Amina", "Theo",
+    "Amara",
+    "Noah",
+    "Priya",
+    "Liam",
+    "Yuki",
+    "Mateo",
+    "Zara",
+    "Ethan",
+    "Aisha",
+    "Diego",
+    "Freya",
+    "Omar",
+    "Ingrid",
+    "Kai",
+    "Lucia",
+    "Ravi",
+    "Sofia",
+    "Tomas",
+    "Nadia",
+    "Elias",
+    "Mei",
+    "Jonas",
+    "Clara",
+    "Hassan",
+    "Elif",
+    "Marco",
+    "Lena",
+    "Idris",
+    "Rosa",
+    "Anton",
+    "Nadia2",
+    "Hugo",
+    "Anika",
+    "Samir",
+    "Greta",
+    "Yusuf",
+    "Paula",
+    "Dmitri",
+    "Céline",
+    "Arjun",
+    "Nora",
+    "Kofi",
+    "Vera",
+    "Bilal",
+    "Astrid",
+    "Ren",
+    "Camila",
+    "Oskar",
+    "Leila",
+    "Bruno",
+    "Signe",
+    "Amir",
+    "Tessa",
+    "Pavel",
+    "Rania",
+    "Felix",
+    "Ines",
+    "Sven",
+    "Amina",
+    "Theo",
 ]
 
 _LAST_NAMES = [
-    "Okafor", "Bergström", "Nakamura", "Silva", "Kowalski", "Haddad", "Rossi",
-    "Andersen", "Novak", "Fischer", "Moreau", "Ivanov", "Costa", "Lindholm",
-    "Farah", "Weber", "Duarte", "Karlsson", "Mensah", "Petrov", "Almeida",
-    "Bianchi", "Sørensen", "Yilmaz", "Jensen", "Nguyen", "O'Connor", "Vargas",
-    "Schmidt", "Larsen", "Ahmadi", "Bauer", "Ricci", "Dahl", "Bakker", "Fernández",
-    "Krüger", "Sato", "Popa", "Lund", "Horvat", "Marchetti", "Holm", "Kaminski",
-    "Reyes", "Steiner", "Voss", "Iqbal", "Cruz", "Meyer",
+    "Okafor",
+    "Bergström",
+    "Nakamura",
+    "Silva",
+    "Kowalski",
+    "Haddad",
+    "Rossi",
+    "Andersen",
+    "Novak",
+    "Fischer",
+    "Moreau",
+    "Ivanov",
+    "Costa",
+    "Lindholm",
+    "Farah",
+    "Weber",
+    "Duarte",
+    "Karlsson",
+    "Mensah",
+    "Petrov",
+    "Almeida",
+    "Bianchi",
+    "Sørensen",
+    "Yilmaz",
+    "Jensen",
+    "Nguyen",
+    "O'Connor",
+    "Vargas",
+    "Schmidt",
+    "Larsen",
+    "Ahmadi",
+    "Bauer",
+    "Ricci",
+    "Dahl",
+    "Bakker",
+    "Fernández",
+    "Krüger",
+    "Sato",
+    "Popa",
+    "Lund",
+    "Horvat",
+    "Marchetti",
+    "Holm",
+    "Kaminski",
+    "Reyes",
+    "Steiner",
+    "Voss",
+    "Iqbal",
+    "Cruz",
+    "Meyer",
 ]
 
 _TICKET_TEMPLATES: dict[TicketCategory, list[tuple[str, str]]] = {
     TicketCategory.BILLING: [
-        ("Incorrect charge on latest invoice",
-         "Our latest invoice shows a duplicate line item that we did not "
-         "authorize. Please review the billing period and issue a correction."),
-        ("Refund not received after cancellation",
-         "We cancelled the subscription two weeks ago and were told a refund "
-         "would arrive within five business days. It has not appeared yet."),
-        ("Need a copy of last quarter's invoices",
-         "Finance is closing the books and needs downloadable copies of all "
-         "invoices issued last quarter for our records."),
+        (
+            "Incorrect charge on latest invoice",
+            "Our latest invoice shows a duplicate line item that we did not "
+            "authorize. Please review the billing period and issue a correction.",
+        ),
+        (
+            "Refund not received after cancellation",
+            "We cancelled the subscription two weeks ago and were told a refund "
+            "would arrive within five business days. It has not appeared yet.",
+        ),
+        (
+            "Need a copy of last quarter's invoices",
+            "Finance is closing the books and needs downloadable copies of all "
+            "invoices issued last quarter for our records.",
+        ),
     ],
     TicketCategory.ACCOUNT_ACCESS: [
-        ("Cannot reset my password",
-         "The password reset email never arrives. I have checked spam and "
-         "confirmed the address is correct. I am locked out of my account."),
-        ("Two-factor prompts rejected",
-         "The authenticator codes are always reported as invalid even though "
-         "the device clock is synced. I cannot complete sign-in."),
-        ("Locked out after changing phone",
-         "I replaced my phone and no longer receive verification codes. I need "
-         "help restoring access to my account."),
+        (
+            "Cannot reset my password",
+            "The password reset email never arrives. I have checked spam and "
+            "confirmed the address is correct. I am locked out of my account.",
+        ),
+        (
+            "Two-factor prompts rejected",
+            "The authenticator codes are always reported as invalid even though "
+            "the device clock is synced. I cannot complete sign-in.",
+        ),
+        (
+            "Locked out after changing phone",
+            "I replaced my phone and no longer receive verification codes. I need "
+            "help restoring access to my account.",
+        ),
     ],
     TicketCategory.TECHNICAL: [
-        ("Dashboard fails to load intermittently",
-         "Roughly one in three page loads shows a blank dashboard. A refresh "
-         "usually fixes it. This started after the last release."),
-        ("Export produces an empty file",
-         "Exporting the ticket report downloads a zero-byte CSV. The on-screen "
-         "data looks correct, so the export step seems broken."),
-        ("Search returns stale results",
-         "Searching for a closed ticket by its number returns an old cached "
-         "copy instead of the current record."),
+        (
+            "Dashboard fails to load intermittently",
+            "Roughly one in three page loads shows a blank dashboard. A refresh "
+            "usually fixes it. This started after the last release.",
+        ),
+        (
+            "Export produces an empty file",
+            "Exporting the ticket report downloads a zero-byte CSV. The on-screen "
+            "data looks correct, so the export step seems broken.",
+        ),
+        (
+            "Search returns stale results",
+            "Searching for a closed ticket by its number returns an old cached "
+            "copy instead of the current record.",
+        ),
     ],
     TicketCategory.OUTAGE: [
-        ("API returning 502 for all requests",
-         "Every call to the API is failing with a gateway error since about an "
-         "hour ago. This is blocking our production integration."),
-        ("Regional latency spike",
-         "Requests from our region are taking several seconds. Other regions "
-         "seem unaffected. Is there an incident in progress?"),
-        ("Webhooks stopped being delivered",
-         "We have not received any webhook callbacks since midnight. Endpoint "
-         "health checks pass on our side."),
+        (
+            "API returning 502 for all requests",
+            "Every call to the API is failing with a gateway error since about an "
+            "hour ago. This is blocking our production integration.",
+        ),
+        (
+            "Regional latency spike",
+            "Requests from our region are taking several seconds. Other regions "
+            "seem unaffected. Is there an incident in progress?",
+        ),
+        (
+            "Webhooks stopped being delivered",
+            "We have not received any webhook callbacks since midnight. Endpoint "
+            "health checks pass on our side.",
+        ),
     ],
     TicketCategory.BUG: [
-        ("Filter resets when paginating",
-         "Applying a status filter and then moving to page two clears the "
-         "filter and shows unfiltered results."),
-        ("Attachment upload silently fails",
-         "Uploading a PDF over a few megabytes appears to succeed but the file "
-         "never appears on the ticket."),
-        ("Timestamps displayed in the wrong timezone",
-         "Ticket timestamps are shown several hours off from our configured "
-         "timezone for every record."),
+        (
+            "Filter resets when paginating",
+            "Applying a status filter and then moving to page two clears the "
+            "filter and shows unfiltered results.",
+        ),
+        (
+            "Attachment upload silently fails",
+            "Uploading a PDF over a few megabytes appears to succeed but the file "
+            "never appears on the ticket.",
+        ),
+        (
+            "Timestamps displayed in the wrong timezone",
+            "Ticket timestamps are shown several hours off from our configured "
+            "timezone for every record.",
+        ),
     ],
     TicketCategory.ACCOUNT_MANAGEMENT: [
-        ("Request to add a teammate",
-         "Please provision an account for a new colleague joining the support "
-         "team next week so they can begin onboarding."),
-        ("Change the billing contact on our account",
-         "Our billing contact has changed. Please update the primary contact "
-         "so invoices reach the right person."),
-        ("Consolidate two duplicate accounts",
-         "We appear to have two accounts after a migration. Please help merge "
-         "the history into a single account."),
+        (
+            "Request to add a teammate",
+            "Please provision an account for a new colleague joining the support "
+            "team next week so they can begin onboarding.",
+        ),
+        (
+            "Change the billing contact on our account",
+            "Our billing contact has changed. Please update the primary contact "
+            "so invoices reach the right person.",
+        ),
+        (
+            "Consolidate two duplicate accounts",
+            "We appear to have two accounts after a migration. Please help merge "
+            "the history into a single account.",
+        ),
     ],
     TicketCategory.OTHER: [
-        ("General question about data retention",
-         "We need to understand how long resolved tickets are retained for our "
-         "internal compliance review."),
-        ("Feature request: bulk status updates",
-         "Our team would benefit from updating the status of many tickets at "
-         "once during weekly triage."),
-        ("Documentation clarification",
-         "The public documentation is ambiguous about how assignment works. "
-         "Could you clarify the intended behaviour?"),
+        (
+            "General question about data retention",
+            "We need to understand how long resolved tickets are retained for our "
+            "internal compliance review.",
+        ),
+        (
+            "Feature request: bulk status updates",
+            "Our team would benefit from updating the status of many tickets at "
+            "once during weekly triage.",
+        ),
+        (
+            "Documentation clarification",
+            "The public documentation is ambiguous about how assignment works. "
+            "Could you clarify the intended behaviour?",
+        ),
     ],
 }
 
@@ -408,9 +550,7 @@ def demo_users() -> list[UserSpec]:
             f"{_FIRST_NAMES[name_index % len(_FIRST_NAMES)]} "
             f"{_LAST_NAMES[(name_index * 7) % len(_LAST_NAMES)]}"
         )
-        is_active = not (
-            role == Role.CUSTOMER and index in _INACTIVE_CUSTOMER_INDEXES
-        )
+        is_active = not (role == Role.CUSTOMER and index in _INACTIVE_CUSTOMER_INDEXES)
         return UserSpec(
             key=f"{slug}_{index:02d}",
             role=role,
@@ -458,7 +598,9 @@ def ticket_specs(users: list[UserSpec]) -> list[dict]:
         status = statuses[i % len(statuses)]
         priority = priorities[(i * 3) % len(priorities)]
         category = categories[(i * 5) % len(categories)]
-        title, description = _TICKET_TEMPLATES[category][(i // len(categories)) % len(_TICKET_TEMPLATES[category])]
+        title, description = _TICKET_TEMPLATES[category][
+            (i // len(categories)) % len(_TICKET_TEMPLATES[category])
+        ]
         customer = customers[(i * 11) % len(customers)]
         # Balanced deterministic spread across agents. Every 7th ticket is
         # left unassigned to model the "needs assignment" queue.
@@ -547,7 +689,10 @@ def history_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]:
                 "actor_key": t["customer_key"],
                 "event_type": "TICKET_CREATED",
                 "old_value": None,
-                "new_value": {"status": t["status"].value, "priority": t["priority"].value},
+                "new_value": {
+                    "status": t["status"].value,
+                    "priority": t["priority"].value,
+                },
                 "at": at,
             }
         )
@@ -682,9 +827,7 @@ def notification_specs(
                 "ticket_key": t["key"],
                 "type": NotificationType.TICKET_CREATED,
                 "title": "Your ticket was received",
-                "message": (
-                    f"We received ticket #{number} and it is being reviewed."
-                ),
+                "message": (f"We received ticket #{number} and it is being reviewed."),
                 "is_read": True,
                 "at": at - 5,
             }
@@ -751,9 +894,7 @@ def notification_specs(
         for request in requests:
             index = int(request["key"].rsplit("_", 1)[1])
             reviewer = next(
-                admin
-                for admin in admins
-                if admin.key != request["created_by_key"]
+                admin for admin in admins if admin.key != request["created_by_key"]
             )
             specs.append(
                 {
@@ -945,7 +1086,9 @@ def staff_message_specs(conversations: list[dict]) -> list[dict]:
                     "conversation_key": c["key"],
                     "sender": "staff" if sender_is_staff else "owner",
                     "staff_key": c["staff_key"],
-                    "body": _STAFF_MESSAGES[(n + conversation_index(c)) % len(_STAFF_MESSAGES)],
+                    "body": _STAFF_MESSAGES[
+                        (n + conversation_index(c)) % len(_STAFF_MESSAGES)
+                    ],
                     "at": base + n * 45,
                     "read": _staff_message_read(c, n),
                 }
@@ -999,7 +1142,9 @@ def account_request_specs(users: list[UserSpec]) -> list[dict]:
                 "created_by_key": creators[i % len(creators)].key,
                 "target_key": target.key,
                 "category": categories[i % len(categories)],
-                "justification": _ESCALATION_JUSTIFICATION[i % len(_ESCALATION_JUSTIFICATION)],
+                "justification": _ESCALATION_JUSTIFICATION[
+                    i % len(_ESCALATION_JUSTIFICATION)
+                ],
                 "internal_details": (
                     "Verified via support ticket history; no identity change "
                     "requested here."
@@ -1094,9 +1239,7 @@ async def _owner_row(session) -> dict | None:
         "created_at": owner.created_at.isoformat(),
         "updated_at": owner.updated_at.isoformat(),
     }
-    raw["hash"] = hashlib.sha256(
-        json.dumps(raw, sort_keys=True).encode()
-    ).hexdigest()
+    raw["hash"] = hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()
     return raw
 
 
@@ -1109,7 +1252,9 @@ async def _seed_users(session) -> tuple[dict[str, User], Counts, list[str]]:
     emails = [s.email for s in specs]
     existing_rows = (
         await session.exec(
-            select(User).where(or_(User.username.in_(usernames), User.email.in_(emails)))
+            select(User).where(
+                or_(User.username.in_(usernames), User.email.in_(emails))
+            )
         )
     ).all()
     by_username = {row.username: row for row in existing_rows}
@@ -1296,9 +1441,7 @@ async def _seed_notifications(session, users, tickets_map) -> Counts:
             continue
         if spec["recipient_key"] == "__owner__":
             owner = (
-                await session.exec(
-                    select(User).where(User.role == Role.OWNER)
-                )
+                await session.exec(select(User).where(User.role == Role.OWNER))
             ).first()
             if owner is None:
                 raise SeedRefused(
@@ -1307,19 +1450,11 @@ async def _seed_notifications(session, users, tickets_map) -> Counts:
             recipient_user_id = owner.id
         else:
             recipient_user_id = users[spec["recipient_key"]].id
-        ticket = (
-            tickets_map.get(spec["ticket_key"])
-            if spec.get("ticket_key")
-            else None
-        )
+        ticket = tickets_map.get(spec["ticket_key"]) if spec.get("ticket_key") else None
         number = ticket.ticket_number if ticket is not None else None
 
         def _fill(text: str, *, number=number) -> str:
-            return (
-                text.replace("{number}", str(number))
-                if number is not None
-                else text
-            )
+            return text.replace("{number}", str(number)) if number is not None else text
 
         session.add(
             Notification(
@@ -1757,7 +1892,9 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
                 "Restore the Owner first."
             )
         result.owner_before = owner_before
-        owner = (await session.exec(select(User).where(User.role == Role.OWNER))).first()
+        owner = (
+            await session.exec(select(User).where(User.role == Role.OWNER))
+        ).first()
 
         # Serialize ticket-number allocation against concurrent app writers.
         bind = session.get_bind()
@@ -1772,11 +1909,7 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
             result.counts["users"] = users_counts.as_dict()
             result.conflicts.extend(user_collisions)
 
-            missing = [
-                s.key
-                for s in demo_users()
-                if s.key not in users
-            ]
+            missing = [s.key for s in demo_users() if s.key not in users]
             if missing or user_collisions:
                 raise SeedRefused(
                     "Refusing to seed: required demo users could not be created "
@@ -1789,21 +1922,33 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
             result.counts["tickets"] = ticket_counts.as_dict()
             result.conflicts.extend(ticket_collisions)
 
-            result.counts["comments"] = (await _seed_comments(session, users, tickets_map)).as_dict()
-            result.counts["history"] = (await _seed_history(session, users, tickets_map)).as_dict()
-            result.counts["feedback"] = (await _seed_feedback(session, users, tickets_map)).as_dict()
+            result.counts["comments"] = (
+                await _seed_comments(session, users, tickets_map)
+            ).as_dict()
+            result.counts["history"] = (
+                await _seed_history(session, users, tickets_map)
+            ).as_dict()
+            result.counts["feedback"] = (
+                await _seed_feedback(session, users, tickets_map)
+            ).as_dict()
             result.counts["internal_messages"] = (
                 await _seed_internal_messages(session, users, owner)
             ).as_dict()
-            attach_counts, created_files = await _seed_attachments(session, users, tickets_map, upload_root)
+            attach_counts, created_files = await _seed_attachments(
+                session, users, tickets_map, upload_root
+            )
             result.counts["attachments"] = attach_counts.as_dict()
 
-            conv_map, conv_counts = await _seed_staff_conversations(session, users, owner)
+            conv_map, conv_counts = await _seed_staff_conversations(
+                session, users, owner
+            )
             result.counts["staff_conversations"] = conv_counts.as_dict()
             result.counts["staff_messages"] = (
                 await _seed_staff_messages(session, users, owner, conv_map)
             ).as_dict()
-            req_map, req_counts = await _seed_account_requests(session, users, tickets_map)
+            req_map, req_counts = await _seed_account_requests(
+                session, users, tickets_map
+            )
             result.counts["account_requests"] = req_counts.as_dict()
             req_c, req_e = await _seed_account_request_children(session, users, req_map)
             result.counts["account_request_comments"] = req_c.as_dict()
@@ -1864,7 +2009,9 @@ async def read_counts(session_factory=None) -> dict:
         ).all()
         assigned = (
             await session.exec(
-                select(func.count(Ticket.id)).where(Ticket.assignee_user_id.is_not(None))
+                select(func.count(Ticket.id)).where(
+                    Ticket.assignee_user_id.is_not(None)
+                )
             )
         ).one()
         demo_users_count = (
@@ -1883,24 +2030,38 @@ async def read_counts(session_factory=None) -> dict:
             "tickets_by_priority": {_label(p): int(c) for p, c in by_priority},
             "tickets_assigned": int(assigned or 0),
             "tickets_unassigned": int(tickets_total or 0) - int(assigned or 0),
-            "comments": int((await session.exec(select(func.count(Comment.id)))).one() or 0),
-            "history": int((await session.exec(select(func.count(TicketHistory.id)))).one() or 0),
-            "notifications": int((await session.exec(select(func.count(Notification.id)))).one() or 0),
-            "attachments": int((await session.exec(select(func.count(Attachment.id)))).one() or 0),
+            "comments": int(
+                (await session.exec(select(func.count(Comment.id)))).one() or 0
+            ),
+            "history": int(
+                (await session.exec(select(func.count(TicketHistory.id)))).one() or 0
+            ),
+            "notifications": int(
+                (await session.exec(select(func.count(Notification.id)))).one() or 0
+            ),
+            "attachments": int(
+                (await session.exec(select(func.count(Attachment.id)))).one() or 0
+            ),
             "staff_conversations": int(
-                (await session.exec(select(func.count(StaffConversation.id)))).one() or 0
+                (await session.exec(select(func.count(StaffConversation.id)))).one()
+                or 0
             ),
             "staff_messages": int(
                 (await session.exec(select(func.count(StaffMessage.id)))).one() or 0
             ),
             "account_requests": int(
-                (await session.exec(select(func.count(AccountManagementRequest.id)))).one() or 0
+                (
+                    await session.exec(select(func.count(AccountManagementRequest.id)))
+                ).one()
+                or 0
             ),
             "account_request_comments": int(
-                (await session.exec(select(func.count(AccountRequestComment.id)))).one() or 0
+                (await session.exec(select(func.count(AccountRequestComment.id)))).one()
+                or 0
             ),
             "account_request_events": int(
-                (await session.exec(select(func.count(AccountRequestEvent.id)))).one() or 0
+                (await session.exec(select(func.count(AccountRequestEvent.id)))).one()
+                or 0
             ),
             "feedback": int(
                 (await session.exec(select(func.count(TicketFeedback.id)))).one() or 0
@@ -1910,9 +2071,7 @@ async def read_counts(session_factory=None) -> dict:
             ),
             "internal_message_recipients": int(
                 (
-                    await session.exec(
-                        select(func.count(InternalMessageRecipient.id))
-                    )
+                    await session.exec(select(func.count(InternalMessageRecipient.id)))
                 ).one()
                 or 0
             ),
@@ -1949,7 +2108,9 @@ def _print_counts(counts: dict) -> None:
     print(f"tickets total     : {counts['tickets_total']}")
     print(f"tickets by status : {json.dumps(counts['tickets_by_status'])}")
     print(f"tickets by priority: {json.dumps(counts['tickets_by_priority'])}")
-    print(f"tickets assigned  : {counts['tickets_assigned']} (unassigned {counts['tickets_unassigned']})")
+    print(
+        f"tickets assigned  : {counts['tickets_assigned']} (unassigned {counts['tickets_unassigned']})"
+    )
     print(f"comments          : {counts['comments']}")
     print(f"history           : {counts['history']}")
     print(f"notifications     : {counts['notifications']}")

@@ -70,7 +70,9 @@ async def test_internal_notes_hidden_from_customer(client, make_user, make_ticke
 
 
 @pytest.mark.asyncio
-async def test_customer_comment_list_omits_internal_field(client, make_user, make_ticket):
+async def test_customer_comment_list_omits_internal_field(
+    client, make_user, make_ticket
+):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer, assignee=agent)

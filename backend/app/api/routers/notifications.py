@@ -93,20 +93,14 @@ async def list_my_notifications(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Notification]:
     """List only the authenticated user's notifications."""
-    statement = select(Notification).where(
-        Notification.recipient_user_id == user.id
-    )
+    statement = select(Notification).where(Notification.recipient_user_id == user.id)
     if is_read is not None:
         statement = statement.where(Notification.is_read == is_read)
     if category is not None:
-        statement = statement.where(
-            Notification.type.in_(CATEGORY_TYPES[category])
-        )
+        statement = statement.where(Notification.type.in_(CATEGORY_TYPES[category]))
 
     statement = (
-        statement.order_by(
-            Notification.created_at.desc(), Notification.id.desc()
-        )
+        statement.order_by(Notification.created_at.desc(), Notification.id.desc())
         .limit(limit)
         .offset(offset)
     )

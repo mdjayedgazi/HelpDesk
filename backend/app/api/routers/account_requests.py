@@ -25,7 +25,7 @@ trail.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -103,10 +103,7 @@ async def create_account_request(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Agents must reference a ticket",
             )
-        if (
-            payload.target_user_id is not None
-            and payload.target_user_id != target.id
-        ):
+        if payload.target_user_id is not None and payload.target_user_id != target.id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Agents cannot choose the target account",
@@ -275,8 +272,7 @@ async def add_account_request_comment(
             type=NotificationType.ESCALATION_UPDATED,
             title="Account request updated",
             message=(
-                "The requester added new information to an "
-                "account-management request."
+                "The requester added new information to an account-management request."
             ),
         )
     else:
@@ -325,7 +321,7 @@ async def update_account_request_status(
         )
 
     old_status = request.status
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if new_status in (EscalationStatus.APPROVED, EscalationStatus.REJECTED):
         request.decided_by_user_id = reviewer.id

@@ -343,7 +343,9 @@ async def test_database_constraints_are_enforced(factory, make_user, make_ticket
             await session.commit()
 
 
-async def test_owner_user_management_on_real_postgres(client, factory, make_user, owner):
+async def test_owner_user_management_on_real_postgres(
+    client, factory, make_user, owner
+):
     """Real PostgreSQL: Owner-only role management and the single-Owner index.
 
     Clerk is not involved: the ``X-Test-User`` dependency override supplies the
@@ -459,10 +461,7 @@ async def test_new_signup_provisions_customer_on_real_postgres(
     assert body["email"] == email
 
     async with factory() as session:
-        stored = (
-            await session.exec(select(User).where(User.email == email))
-        ).first()
+        stored = (await session.exec(select(User).where(User.email == email))).first()
         assert stored is not None
         assert stored.role == Role.CUSTOMER
         assert stored.is_active is True
-

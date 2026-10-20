@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from app.models.ticketHistory import TicketHistory
 
 
-
 class Ticket(SQLModel, table=True):
     __tablename__ = "tickets"
     __table_args__ = (

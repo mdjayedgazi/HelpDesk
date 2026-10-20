@@ -36,6 +36,7 @@ Downgrade
 Drops the two new tables, their indexes and the new ``internalaudience`` enum
 type. It never touches the existing ``role`` type or any pre-existing row.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -111,9 +112,7 @@ def upgrade() -> None:
         "internal_messages",
         ["sender_user_id"],
     )
-    op.create_index(
-        "ix_internal_messages_audience", "internal_messages", ["audience"]
-    )
+    op.create_index("ix_internal_messages_audience", "internal_messages", ["audience"])
     op.create_index(
         "ix_internal_messages_created_at", "internal_messages", ["created_at"]
     )
@@ -173,15 +172,9 @@ def downgrade() -> None:
     )
     op.drop_table("internal_message_recipients")
 
-    op.drop_index(
-        "ix_internal_messages_created_at", table_name="internal_messages"
-    )
-    op.drop_index(
-        "ix_internal_messages_audience", table_name="internal_messages"
-    )
-    op.drop_index(
-        "ix_internal_messages_sender_user_id", table_name="internal_messages"
-    )
+    op.drop_index("ix_internal_messages_created_at", table_name="internal_messages")
+    op.drop_index("ix_internal_messages_audience", table_name="internal_messages")
+    op.drop_index("ix_internal_messages_sender_user_id", table_name="internal_messages")
     op.drop_table("internal_messages")
 
     bind = op.get_bind()

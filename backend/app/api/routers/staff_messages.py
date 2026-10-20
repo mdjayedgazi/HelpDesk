@@ -67,9 +67,7 @@ async def start_conversation(
 
     conversation = (
         await session.exec(
-            select(StaffConversation).where(
-                StaffConversation.staff_user_id == staff.id
-            )
+            select(StaffConversation).where(StaffConversation.staff_user_id == staff.id)
         )
     ).first()
 
@@ -125,13 +123,9 @@ async def list_conversations(
 
         if staff_role is not None:
             staff_ids = (
-                await session.exec(
-                    select(User.id).where(User.role == staff_role)
-                )
+                await session.exec(select(User.id).where(User.role == staff_role))
             ).all()
-            statement = statement.where(
-                StaffConversation.staff_user_id.in_(staff_ids)
-            )
+            statement = statement.where(StaffConversation.staff_user_id.in_(staff_ids))
         if staff_user_id is not None:
             statement = statement.where(
                 StaffConversation.staff_user_id == staff_user_id

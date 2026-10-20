@@ -147,13 +147,13 @@ export function NotificationsMenu() {
               borderBottomWidth='1px'
               borderColor={palette.border}
             >
-              <Flex align='center' justify='space-between' gap='3'>
+              <Flex align='center' justify='space-between' gap='3' flexWrap='wrap' rowGap='2'>
                 <Flex align='baseline' gap='2'>
                   <Text fontSize='sm' fontWeight='medium' color={palette.text}>
                     Notifications
                   </Text>
                   {hasUnread ? (
-                    <Text fontSize='xs' color={palette.textMuted}>
+                    <Text fontSize='xs' color={palette.textMuted} whiteSpace='nowrap'>
                       {total} unread
                     </Text>
                   ) : null}
@@ -164,6 +164,7 @@ export function NotificationsMenu() {
                     size='xs'
                     height='auto'
                     p='0'
+                    ms='auto'
                     gap='1.5'
                     fontSize='xs'
                     color={palette.textSecondary}

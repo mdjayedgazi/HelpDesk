@@ -71,7 +71,9 @@ async def factory():
     async with async_sessionmaker(
         bind=engine, class_=AsyncSession, expire_on_commit=False
     )() as session:
-        owner = (await session.exec(select(User).where(User.role == Role.OWNER))).first()
+        owner = (
+            await session.exec(select(User).where(User.role == Role.OWNER))
+        ).first()
         if owner is None:
             session.add(
                 User(
@@ -86,9 +88,7 @@ async def factory():
                 )
             )
             await session.commit()
-    yield async_sessionmaker(
-        bind=engine, class_=AsyncSession, expire_on_commit=False
-    )
+    yield async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     await engine.dispose()
 
 
@@ -157,9 +157,7 @@ def test_specs_meet_the_required_targets():
     assert len(sd.notification_specs(users, tickets)) >= 100
     assert len(sd.attachment_specs(tickets)) >= 10
     assert len(sd.staff_conversation_specs(users)) >= 10
-    assert (
-        len(sd.staff_message_specs(sd.staff_conversation_specs(users))) >= 30
-    )
+    assert len(sd.staff_message_specs(sd.staff_conversation_specs(users))) >= 30
     assert len(sd.account_request_specs(users)) >= 10
 
 
@@ -175,7 +173,9 @@ def test_spec_emails_and_usernames_are_unique_and_reserved():
 def test_spec_only_staff_author_internal_comments():
     users = sd.demo_users()
     staff = {u.key for u in users if u.role in (Role.AGENT, Role.ADMIN)}
-    internal = [c for c in sd.comment_specs(users, sd.ticket_specs(users)) if c["internal"]]
+    internal = [
+        c for c in sd.comment_specs(users, sd.ticket_specs(users)) if c["internal"]
+    ]
     assert internal
     assert all(c["author_key"] in staff for c in internal)
 
@@ -213,9 +213,7 @@ async def test_seed_exact_user_composition(seeded, factory):
 
 async def test_seed_preserves_single_owner(seeded, factory):
     async with factory() as session:
-        owners = (
-            await session.exec(select(User).where(User.role == Role.OWNER))
-        ).all()
+        owners = (await session.exec(select(User).where(User.role == Role.OWNER))).all()
     assert len(owners) == 1
     assert owners[0].is_active is True
 
@@ -223,12 +221,8 @@ async def test_seed_preserves_single_owner(seeded, factory):
 async def test_seed_tickets_cover_all_states(seeded, factory):
     async with factory() as session:
         statuses = set((await session.exec(select(Ticket.status).distinct())).all())
-        priorities = set(
-            (await session.exec(select(Ticket.priority).distinct())).all()
-        )
-        categories = set(
-            (await session.exec(select(Ticket.category).distinct())).all()
-        )
+        priorities = set((await session.exec(select(Ticket.priority).distinct())).all())
+        categories = set((await session.exec(select(Ticket.category).distinct())).all())
     assert statuses == set(TicketStatus)
     assert priorities == set(TicketPriority)
     assert categories == set(TicketCategory)
@@ -283,9 +277,7 @@ async def test_seed_comments_include_public_and_internal(seeded, factory):
         public = int(
             (
                 await session.exec(
-                    select(func.count(Comment.id)).where(
-                        Comment.is_internal.is_(False)
-                    )
+                    select(func.count(Comment.id)).where(Comment.is_internal.is_(False))
                 )
             ).one()
         )
@@ -319,7 +311,9 @@ async def test_seed_history_covers_key_events(seeded, factory):
 async def test_seed_notifications_read_and_unread(seeded, factory):
     async with factory() as session:
         read = (
-            await session.exec(select(Notification).where(Notification.is_read.is_(True)))
+            await session.exec(
+                select(Notification).where(Notification.is_read.is_(True))
+            )
         ).all()
         unread = (
             await session.exec(
@@ -417,7 +411,9 @@ async def test_seed_staff_conversations_and_messages(seeded, factory):
     async with factory() as session:
         conversations = (await session.exec(select(StaffConversation))).all()
         messages = (await session.exec(select(StaffMessage))).all()
-        owner = (await session.exec(select(User).where(User.role == Role.OWNER))).first()
+        owner = (
+            await session.exec(select(User).where(User.role == Role.OWNER))
+        ).first()
         staff_ids = {c.staff_user_id for c in conversations}
         message_senders = {m.sender_user_id for m in messages}
     assert len(conversations) >= 10
@@ -433,9 +429,7 @@ async def test_seed_account_requests_cover_states(seeded, factory):
     async with factory() as session:
         requests = (await session.exec(select(AccountManagementRequest))).all()
         events = (await session.exec(select(AccountRequestEvent))).all()
-        target_ids = {
-            row for row in (await session.exec(select(User.id))).all()
-        }
+        target_ids = {row for row in (await session.exec(select(User.id))).all()}
     assert len(requests) >= 10
     states = {r.status for r in requests}
     assert len(states) >= 3
@@ -460,9 +454,7 @@ async def test_seed_account_requests_cover_states(seeded, factory):
 async def test_seed_users_have_deterministic_unique_ids(seeded, factory):
     async with factory() as session:
         rows = (
-            await session.exec(
-                select(User).where(User.email.like("%@example.test"))
-            )
+            await session.exec(select(User).where(User.email.like("%@example.test")))
         ).all()
     ids = [u.id for u in rows]
     assert len(ids) == len(set(ids))

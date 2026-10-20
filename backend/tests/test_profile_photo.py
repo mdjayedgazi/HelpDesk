@@ -43,7 +43,9 @@ class _FakeClerkUser:
 
 
 class _FakeUsers:
-    def __init__(self, user: _FakeClerkUser | None = None, error: Exception | None = None):
+    def __init__(
+        self, user: _FakeClerkUser | None = None, error: Exception | None = None
+    ):
         self._user = user
         self._error = error
         self.calls = 0
@@ -70,7 +72,9 @@ def _install_clerk(monkeypatch, users: _FakeUsers):
     return users
 
 
-def _patch_clerk(monkeypatch, *, image_url: str | None, email: str = "someone@example.com"):
+def _patch_clerk(
+    monkeypatch, *, image_url: str | None, email: str = "someone@example.com"
+):
     return _install_clerk(monkeypatch, _FakeUsers(_FakeClerkUser(email, image_url)))
 
 
@@ -91,7 +95,9 @@ async def test_me_exposes_image_url_field(client, make_user):
     assert body["image_url"] is None
 
 
-async def test_provisioning_caches_clerk_image_url(client, session_factory, monkeypatch):
+async def test_provisioning_caches_clerk_image_url(
+    client, session_factory, monkeypatch
+):
     _patch_clerk(
         monkeypatch,
         image_url="https://img.clerk.test/provisioned.png",
@@ -105,7 +111,9 @@ async def test_provisioning_caches_clerk_image_url(client, session_factory, monk
 
     async with session_factory() as session:
         found = (
-            await session.exec(select(User).where(User.email == "provisioned@example.com"))
+            await session.exec(
+                select(User).where(User.email == "provisioned@example.com")
+            )
         ).first()
         assert found is not None
         assert found.image_url == "https://img.clerk.test/provisioned.png"
@@ -113,9 +121,7 @@ async def test_provisioning_caches_clerk_image_url(client, session_factory, monk
 
 async def test_avatar_sync_success(client, make_user, session_factory, monkeypatch):
     user = await make_user(username="syncuser", email="syncuser@example.com")
-    users = _patch_clerk(
-        monkeypatch, image_url="https://img.clerk.test/uploaded.png"
-    )
+    users = _patch_clerk(monkeypatch, image_url="https://img.clerk.test/uploaded.png")
 
     response = await client.post(
         "/api/v1/users/me/avatar", headers={"X-Test-User": "syncuser"}
@@ -129,7 +135,9 @@ async def test_avatar_sync_success(client, make_user, session_factory, monkeypat
         assert refreshed.image_url == "https://img.clerk.test/uploaded.png"
 
 
-async def test_avatar_sync_ignores_request_body(client, make_user, session_factory, monkeypatch):
+async def test_avatar_sync_ignores_request_body(
+    client, make_user, session_factory, monkeypatch
+):
     """A client cannot store an arbitrary URL: the value always comes from Clerk."""
     user = await make_user(username="eviluser", email="eviluser@example.com")
     _patch_clerk(monkeypatch, image_url="https://img.clerk.test/real.png")

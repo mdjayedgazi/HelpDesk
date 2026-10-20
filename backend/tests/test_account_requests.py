@@ -37,9 +37,7 @@ async def _create(client, user, **overrides):
         "justification": "The customer is locked out after a password reset.",
     }
     payload.update(overrides)
-    return await client.post(
-        BASE, headers={"X-Test-User": user.username}, json=payload
-    )
+    return await client.post(BASE, headers={"X-Test-User": user.username}, json=payload)
 
 
 async def _status(client, user, request_id, status, reason=None):
@@ -68,9 +66,7 @@ async def test_customer_is_denied_everywhere(client, make_user, make_ticket):
     await make_user(role=Role.ADMIN)
     ticket = await make_ticket(customer)
 
-    created = await _create(
-        client, agent, ticket_id=str(ticket.id)
-    )
+    created = await _create(client, agent, ticket_id=str(ticket.id))
     assert created.status_code == 201
     request_id = created.json()["id"]
 
@@ -85,9 +81,7 @@ async def test_customer_is_denied_everywhere(client, make_user, make_ticket):
     assert (
         await _comment(client, customer, request_id, "let me in")
     ).status_code == 403
-    assert (
-        await _status(client, customer, request_id, "APPROVED")
-    ).status_code == 403
+    assert (await _status(client, customer, request_id, "APPROVED")).status_code == 403
 
 
 @pytest.mark.asyncio
@@ -131,9 +125,7 @@ async def test_agent_request_target_comes_from_the_ticket(
 
 
 @pytest.mark.asyncio
-async def test_agent_cannot_choose_an_arbitrary_target(
-    client, make_user, make_ticket
-):
+async def test_agent_cannot_choose_an_arbitrary_target(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     victim = await make_user()
     customer = await make_user()
@@ -152,9 +144,7 @@ async def test_agent_cannot_choose_an_arbitrary_target(
 
 
 @pytest.mark.asyncio
-async def test_agent_request_requires_a_visible_ticket(
-    client, make_user, make_ticket
-):
+async def test_agent_request_requires_a_visible_ticket(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     other_agent = await make_user(role=Role.AGENT)
     customer = await make_user()
@@ -164,9 +154,7 @@ async def test_agent_request_requires_a_visible_ticket(
     assert no_ticket.status_code == 422
 
     # An agent cannot escalate about a ticket outside their visibility.
-    forbidden = await _create(
-        client, agent, ticket_id=str(foreign_ticket.id)
-    )
+    forbidden = await _create(client, agent, ticket_id=str(foreign_ticket.id))
     assert forbidden.status_code == 404
 
 
@@ -215,9 +203,7 @@ async def test_identity_fields_are_rejected(client, make_user, make_ticket):
         {"role": "OWNER"},
         {"target_user_id": str(customer.id), "new_clerk_id": "x"},
     ):
-        response = await _create(
-            client, admin, ticket_id=str(ticket.id), **extra
-        )
+        response = await _create(client, admin, ticket_id=str(ticket.id), **extra)
         assert response.status_code == 422, extra
 
 
@@ -251,9 +237,7 @@ async def test_visibility_is_creator_or_admin(client, make_user, make_ticket):
     other_created = await _create(client, other, ticket_id=str(ticket.id))
     assert other_created.status_code == 201
 
-    creator_list = await client.get(
-        BASE, headers={"X-Test-User": creator.username}
-    )
+    creator_list = await client.get(BASE, headers={"X-Test-User": creator.username})
     assert [r["id"] for r in creator_list.json()] == [request_id]
 
     admin_list = await client.get(BASE, headers={"X-Test-User": admin.username})
@@ -274,20 +258,18 @@ async def test_visibility_is_creator_or_admin(client, make_user, make_ticket):
 
 
 @pytest.mark.asyncio
-async def test_decision_lifecycle_and_audit(client, make_user, make_ticket, session_factory):
+async def test_decision_lifecycle_and_audit(
+    client, make_user, make_ticket, session_factory
+):
     admin = await make_user(role=Role.ADMIN)
     owner = await make_user(role=Role.OWNER)
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer)
-    request_id = (
-        await _create(client, agent, ticket_id=str(ticket.id))
-    ).json()["id"]
+    request_id = (await _create(client, agent, ticket_id=str(ticket.id))).json()["id"]
 
     # Invalid jumps are rejected.
-    assert (
-        await _status(client, admin, request_id, "COMPLETED")
-    ).status_code == 409
+    assert (await _status(client, admin, request_id, "COMPLETED")).status_code == 409
 
     # Start the review, then approve.
     in_review = await _status(client, admin, request_id, "IN_REVIEW")
@@ -305,9 +287,7 @@ async def test_decision_lifecycle_and_audit(client, make_user, make_ticket, sess
     assert approved_body["decision_reason"] == "Verified with the customer."
 
     # A decided request can no longer jump back.
-    assert (
-        await _status(client, admin, request_id, "IN_REVIEW")
-    ).status_code == 409
+    assert (await _status(client, admin, request_id, "IN_REVIEW")).status_code == 409
 
     completed = await _status(
         client, admin, request_id, "COMPLETED", reason="Changed via Clerk."
@@ -350,9 +330,7 @@ async def test_rejection_requires_a_reason(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer)
-    request_id = (
-        await _create(client, agent, ticket_id=str(ticket.id))
-    ).json()["id"]
+    request_id = (await _create(client, agent, ticket_id=str(ticket.id))).json()["id"]
 
     missing = await _status(client, admin, request_id, "REJECTED")
     assert missing.status_code == 422
@@ -368,12 +346,8 @@ async def test_rejection_requires_a_reason(client, make_user, make_ticket):
     assert rejected.json()["decision_reason"] == "Policy does not allow this."
 
     # REJECTED is terminal.
-    assert (
-        await _status(client, admin, request_id, "APPROVED")
-    ).status_code == 409
-    assert (
-        await _comment(client, admin, request_id, "reopen?")
-    ).status_code == 409
+    assert (await _status(client, admin, request_id, "APPROVED")).status_code == 409
+    assert (await _comment(client, admin, request_id, "reopen?")).status_code == 409
 
 
 @pytest.mark.asyncio
@@ -381,9 +355,7 @@ async def test_agent_cannot_decide_or_review(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer)
-    request_id = (
-        await _create(client, agent, ticket_id=str(ticket.id))
-    ).json()["id"]
+    request_id = (await _create(client, agent, ticket_id=str(ticket.id))).json()["id"]
 
     response = await _status(client, agent, request_id, "APPROVED")
     assert response.status_code == 403
@@ -422,9 +394,7 @@ async def test_comments_notify_the_other_side(
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer)
-    request_id = (
-        await _create(client, agent, ticket_id=str(ticket.id))
-    ).json()["id"]
+    request_id = (await _create(client, agent, ticket_id=str(ticket.id))).json()["id"]
 
     # Reviewer comment -> creator notified.
     reviewer_comment = await _comment(
@@ -471,7 +441,9 @@ async def test_unknown_request_returns_404(client, make_user):
 
 
 @pytest.mark.asyncio
-async def test_stored_state_matches_the_api(client, make_user, make_ticket, session_factory):
+async def test_stored_state_matches_the_api(
+    client, make_user, make_ticket, session_factory
+):
     admin = await make_user(role=Role.ADMIN)
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
