@@ -61,7 +61,14 @@ async def _count(factory, model) -> int:
 
 async def test_seed_is_idempotent(seeded, factory):
     first, second, _ = seeded
-    for key in ("users", "tickets", "comments", "history", "notifications", "attachments"):
+    for key in (
+        "users",
+        "tickets",
+        "comments",
+        "history",
+        "notifications",
+        "attachments",
+    ):
         assert first[key] == second[key], f"{key} changed between runs"
     # Nothing new was created on the second run.
     assert second["_created_comments"] == 0
@@ -78,7 +85,8 @@ async def test_seed_covers_every_status_and_priority(seeded, factory):
             row for row in (await session.exec(select(Ticket.status).distinct())).all()
         }
         priorities = {
-            row for row in (await session.exec(select(Ticket.priority).distinct())).all()
+            row
+            for row in (await session.exec(select(Ticket.priority).distinct())).all()
         }
     assert statuses == set(TicketStatus)
     assert priorities == set(TicketPriority)
@@ -86,9 +94,7 @@ async def test_seed_covers_every_status_and_priority(seeded, factory):
 
 async def test_seed_has_exactly_one_owner(seeded, factory):
     async with factory() as session:
-        owners = (
-            await session.exec(select(User).where(User.role == Role.OWNER))
-        ).all()
+        owners = (await session.exec(select(User).where(User.role == Role.OWNER))).all()
     assert len(owners) == 1
     assert owners[0].is_active is True
 
@@ -117,10 +123,14 @@ async def test_seed_has_public_and_internal_comments(seeded, factory):
 async def test_seed_has_read_and_unread_notifications(seeded, factory):
     async with factory() as session:
         read = (
-            await session.exec(select(Notification).where(Notification.is_read.is_(True)))
+            await session.exec(
+                select(Notification).where(Notification.is_read.is_(True))
+            )
         ).all()
         unread = (
-            await session.exec(select(Notification).where(Notification.is_read.is_(False)))
+            await session.exec(
+                select(Notification).where(Notification.is_read.is_(False))
+            )
         ).all()
     assert read and unread
 
@@ -136,8 +146,18 @@ async def test_seed_attachment_metadata_is_valid(seeded, factory, tmp_path):
 
 async def test_seed_history_covers_key_events(seeded, factory):
     async with factory() as session:
-        events = {row for row in (await session.exec(select(TicketHistory.event_type).distinct())).all()}
-    assert {"TICKET_CREATED", "TICKET_ASSIGNED", "STATUS_CHANGED", "PRIORITY_CHANGED"} <= events
+        events = {
+            row
+            for row in (
+                await session.exec(select(TicketHistory.event_type).distinct())
+            ).all()
+        }
+    assert {
+        "TICKET_CREATED",
+        "TICKET_ASSIGNED",
+        "STATUS_CHANGED",
+        "PRIORITY_CHANGED",
+    } <= events
 
 
 def test_seed_guard_refuses_remote_and_unknown_targets():

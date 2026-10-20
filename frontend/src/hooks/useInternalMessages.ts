@@ -125,7 +125,10 @@ export function useMarkInternalMessageRead() {
         method: 'POST',
       }),
     onSuccess: () => {
+      // The backend also clears this message's notification in the same
+      // transaction, so refresh the bell/panel as well as the message list.
       void queryClient.invalidateQueries({ queryKey: queryKeys.internalMessages.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all })
     },
   })
 }

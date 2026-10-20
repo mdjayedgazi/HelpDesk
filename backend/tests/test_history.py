@@ -4,9 +4,7 @@ from app.enums.enums import Role
 
 
 @pytest.mark.asyncio
-async def test_agent_reads_history_for_assigned_ticket(
-    client, make_user, make_ticket
-):
+async def test_agent_reads_history_for_assigned_ticket(client, make_user, make_ticket):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer, assignee=agent)
@@ -42,9 +40,7 @@ async def test_admin_reads_history_for_any_ticket(client, make_user, make_ticket
 
 
 @pytest.mark.asyncio
-async def test_customer_cannot_read_own_ticket_history(
-    client, make_user, make_ticket
-):
+async def test_customer_cannot_read_own_ticket_history(client, make_user, make_ticket):
     """Customers must never reach the internal audit trail, even for their own
     ticket. The current status and public comments remain available elsewhere."""
     customer = await make_user()
@@ -75,9 +71,7 @@ async def test_customer_cannot_read_foreign_ticket_history(
 
 
 @pytest.mark.asyncio
-async def test_agent_cannot_read_foreign_ticket_history(
-    client, make_user, make_ticket
-):
+async def test_agent_cannot_read_foreign_ticket_history(client, make_user, make_ticket):
     """Agents still only see history for tickets they may view (404 hiding)."""
     agent = await make_user(role=Role.AGENT)
     other_agent = await make_user(role=Role.AGENT)

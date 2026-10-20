@@ -50,9 +50,7 @@ def isolated_uploads(tmp_path, monkeypatch):
     """Keep uploaded test files inside the pytest temporary directory."""
     from app.core import config
 
-    monkeypatch.setattr(
-        config.settings, "UPLOAD_DIR", str(tmp_path / "uploads")
-    )
+    monkeypatch.setattr(config.settings, "UPLOAD_DIR", str(tmp_path / "uploads"))
     yield
 
 

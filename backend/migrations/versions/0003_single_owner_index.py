@@ -21,6 +21,7 @@ restricted to ``is_active``: at most one row may hold the OWNER role at all.
 
 Downgrade simply drops the index; it never changes any user's role.
 """
+
 from typing import Sequence, Union
 
 from alembic import op

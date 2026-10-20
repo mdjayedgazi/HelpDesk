@@ -57,8 +57,7 @@ async def resolve_recipients(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    "The selected recipient is not an active agent or "
-                    "administrator"
+                    "The selected recipient is not an active agent or administrator"
                 ),
             )
         return [recipient]
@@ -137,8 +136,7 @@ def create_message(
             type=NotificationType.INTERNAL_MESSAGE_RECEIVED,
             title="New message from the Owner",
             message=(
-                "The Owner sent you an internal message. Open it to read the "
-                "details."
+                "The Owner sent you an internal message. Open it to read the details."
             ),
         )
 

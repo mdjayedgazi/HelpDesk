@@ -77,9 +77,7 @@ async def _notifications(session_factory, *, user_id, type):
 
 
 @pytest.mark.asyncio
-async def test_only_eligible_agent_gets_ticket(
-    client, make_user, session_factory
-):
+async def test_only_eligible_agent_gets_ticket(client, make_user, session_factory):
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
 
@@ -121,17 +119,13 @@ async def test_least_loaded_agent_wins(client, make_user, make_ticket, session_f
 
 
 @pytest.mark.asyncio
-async def test_priority_weighting_beats_ticket_count(
-    client, make_user, make_ticket
-):
+async def test_priority_weighting_beats_ticket_count(client, make_user, make_ticket):
     urgent_agent = await make_user(role=Role.AGENT)
     normal_agent = await make_user(role=Role.AGENT)
     customer = await make_user()
 
     # One urgent ticket weighs 8; three normal tickets weigh 6.
-    await make_ticket(
-        customer, assignee=urgent_agent, priority=TicketPriority.URGENT
-    )
+    await make_ticket(customer, assignee=urgent_agent, priority=TicketPriority.URGENT)
     for _ in range(3):
         await make_ticket(
             customer, assignee=normal_agent, priority=TicketPriority.NORMAL
@@ -143,9 +137,7 @@ async def test_priority_weighting_beats_ticket_count(
 
 
 @pytest.mark.asyncio
-async def test_completed_statuses_do_not_count_as_load(
-    client, make_user, make_ticket
-):
+async def test_completed_statuses_do_not_count_as_load(client, make_user, make_ticket):
     historically_busy = await make_user(role=Role.AGENT)
     fresh = await make_user(role=Role.AGENT)
     customer = await make_user()
@@ -163,9 +155,7 @@ async def test_completed_statuses_do_not_count_as_load(
 
 
 @pytest.mark.asyncio
-async def test_waiting_on_customer_counts_as_load(
-    client, make_user, make_ticket
-):
+async def test_waiting_on_customer_counts_as_load(client, make_user, make_ticket):
     waiting_agent = await make_user(role=Role.AGENT)
     free_agent = await make_user(role=Role.AGENT)
     customer = await make_user()
@@ -389,9 +379,7 @@ async def test_agent_deactivated_after_ranking_falls_through_to_next(
         await session.flush()
         return agents
 
-    monkeypatch.setattr(
-        assignment_service, "eligible_agents", eligible_then_deactivate
-    )
+    monkeypatch.setattr(assignment_service, "eligible_agents", eligible_then_deactivate)
 
     response = await _post_ticket(client, customer)
     assert response.status_code == 201
@@ -463,7 +451,9 @@ async def test_insufficient_history_is_ignored_for_speed(
     for _ in range(MIN_RESOLVED_FOR_SPEED - 1):
         await _resolved_ticket(make_ticket, session_factory, customer, sparse, hours=1)
     for _ in range(MIN_RESOLVED_FOR_SPEED):
-        await _resolved_ticket(make_ticket, session_factory, customer, measured, hours=10)
+        await _resolved_ticket(
+            make_ticket, session_factory, customer, measured, hours=10
+        )
 
     async with session_factory() as session:
         workloads = await workload_for_agents(session, [sparse.id, measured.id])

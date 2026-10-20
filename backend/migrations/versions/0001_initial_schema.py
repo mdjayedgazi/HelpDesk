@@ -18,6 +18,7 @@ Revises:
 Create Date: 2025-01-01 00:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -40,9 +41,7 @@ ticket_status_enum = sa.Enum(
     "CLOSED",
     name="ticketstatus",
 )
-ticket_priority_enum = sa.Enum(
-    "LOW", "NORMAL", "HIGH", "URGENT", name="ticketpriority"
-)
+ticket_priority_enum = sa.Enum("LOW", "NORMAL", "HIGH", "URGENT", name="ticketpriority")
 notification_type_enum = sa.Enum(
     "TICKET_ASSIGNED",
     "NEW_COMMENT",
@@ -129,12 +128,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["assignee_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_tickets_assignee_user_id", "tickets", ["assignee_user_id"]
-    )
-    op.create_index(
-        "ix_tickets_created_by_user_id", "tickets", ["created_by_user_id"]
-    )
+    op.create_index("ix_tickets_assignee_user_id", "tickets", ["assignee_user_id"])
+    op.create_index("ix_tickets_created_by_user_id", "tickets", ["created_by_user_id"])
     op.create_index(
         "ix_tickets_ticket_number", "tickets", ["ticket_number"], unique=True
     )
@@ -154,9 +149,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.CheckConstraint(
-            "size_bytes >= 0", name="ck_attachments_size_nonnegative"
-        ),
+        sa.CheckConstraint("size_bytes >= 0", name="ck_attachments_size_nonnegative"),
         sa.ForeignKeyConstraint(["ticket_id"], ["tickets.id"]),
         sa.ForeignKeyConstraint(["uploaded_by_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -237,9 +230,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_ticket_history_ticket_id", "ticket_history", ["ticket_id"]
-    )
+    op.create_index("ix_ticket_history_ticket_id", "ticket_history", ["ticket_id"])
 
 
 def downgrade() -> None:
@@ -249,9 +240,7 @@ def downgrade() -> None:
     op.drop_index("ix_ticket_history_ticket_id", table_name="ticket_history")
     op.drop_table("ticket_history")
 
-    op.drop_index(
-        "ix_notifications_recipient_user_id", table_name="notifications"
-    )
+    op.drop_index("ix_notifications_recipient_user_id", table_name="notifications")
     op.drop_table("notifications")
 
     op.drop_index("ix_comments_ticket_id", table_name="comments")

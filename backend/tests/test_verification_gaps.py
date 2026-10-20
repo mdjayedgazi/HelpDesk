@@ -67,17 +67,13 @@ async def test_new_clerk_user_is_provisioned_as_customer(
 ):
     _patch_clerk(monkeypatch, "brandnew@example.com")
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "brandnew"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "brandnew"})
     assert response.status_code == 200
     assert response.json()["role"] == "customer"
 
     async with session_factory() as session:
         found = (
-            await session.exec(
-                select(User).where(User.email == "brandnew@example.com")
-            )
+            await session.exec(select(User).where(User.email == "brandnew@example.com"))
         ).first()
         assert found is not None
         assert found.role == Role.CUSTOMER
@@ -91,9 +87,7 @@ async def test_existing_email_is_linked_to_clerk_identity(
     existing = await make_user(username="legacy", email="legacy@example.com")
     _patch_clerk(monkeypatch, "legacy@example.com")
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "legacy"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "legacy"})
     assert response.status_code == 200
     assert response.json()["id"] == str(existing.id)
 
@@ -106,9 +100,7 @@ async def test_existing_email_is_linked_to_clerk_identity(
 async def test_unverified_email_is_rejected(client, monkeypatch):
     _patch_clerk(monkeypatch, "unverified@example.com", status="unverified")
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "someone"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "someone"})
     assert response.status_code == 403
 
 
@@ -186,9 +178,7 @@ async def test_attachment_size_limit(client, make_user, make_ticket, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_cannot_download_foreign_attachment(
-    client, make_user, make_ticket
-):
+async def test_cannot_download_foreign_attachment(client, make_user, make_ticket):
     alice = await make_user()
     bob = await make_user()
     ticket = await make_ticket(bob)
@@ -242,9 +232,7 @@ async def test_attachment_path_traversal_is_blocked(
 
 
 @pytest.mark.asyncio
-async def test_comment_authorship_cannot_be_forged(
-    client, make_user, make_ticket
-):
+async def test_comment_authorship_cannot_be_forged(client, make_user, make_ticket):
     customer = await make_user()
     ticket = await make_ticket(customer)
     other = await make_user()
@@ -283,9 +271,7 @@ async def test_customer_cannot_modify_foreign_ticket(client, make_user, make_tic
 
 
 @pytest.mark.asyncio
-async def test_ticket_list_pagination_and_status_filter(
-    client, make_user, make_ticket
-):
+async def test_ticket_list_pagination_and_status_filter(client, make_user, make_ticket):
     customer = await make_user()
     await make_ticket(customer, status=TicketStatus.OPEN)
     await make_ticket(customer, status=TicketStatus.CLOSED)
@@ -392,7 +378,9 @@ async def test_empty_username_uses_email_local_part(
         _RawUsers(
             user=_RawClerkUser(
                 primary_email_address_id="email_1",
-                email_addresses=[_FakeEmail("email_1", "emptyuser@example.com", "verified")],
+                email_addresses=[
+                    _FakeEmail("email_1", "emptyuser@example.com", "verified")
+                ],
                 username="",
             )
         ),
@@ -476,9 +464,7 @@ async def test_missing_primary_email_is_a_controlled_403(client, monkeypatch):
         ),
     )
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "orphan"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "orphan"})
     assert response.status_code == 403
 
 
@@ -495,18 +481,14 @@ async def test_empty_primary_email_is_a_controlled_403(client, monkeypatch):
         ),
     )
 
-    response = await client.get(
-        "/api/v1/users/me", headers={"X-Test-User": "blank"}
-    )
+    response = await client.get("/api/v1/users/me", headers={"X-Test-User": "blank"})
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_clerk_lookup_failure_returns_502_not_500(client, monkeypatch):
     """An unavailable Clerk Backend API surfaces as 502, never 500."""
-    _patch_clerk_raw(
-        monkeypatch, _RawUsers(error=RuntimeError("clerk unavailable"))
-    )
+    _patch_clerk_raw(monkeypatch, _RawUsers(error=RuntimeError("clerk unavailable")))
 
     response = await client.get(
         "/api/v1/users/me", headers={"X-Test-User": "clerkdown"}

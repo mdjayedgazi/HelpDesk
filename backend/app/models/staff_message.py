@@ -57,9 +57,7 @@ class StaffConversation(SQLModel, table=True):
 class StaffMessage(SQLModel, table=True):
     __tablename__ = "staff_messages"
     __table_args__ = (
-        CheckConstraint(
-            "length(body) > 0", name="ck_staff_messages_body_nonempty"
-        ),
+        CheckConstraint("length(body) > 0", name="ck_staff_messages_body_nonempty"),
         Index("ix_staff_messages_conversation_id", "conversation_id"),
         Index("ix_staff_messages_sender_user_id", "sender_user_id"),
     )

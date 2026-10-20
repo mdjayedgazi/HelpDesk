@@ -100,9 +100,7 @@ async def get_current_user(
         )
 
     # 1. Find the existing local user.
-    result = await session.exec(
-        select(User).where(User.clerk_id == clerk_user_id)
-    )
+    result = await session.exec(select(User).where(User.clerk_id == clerk_user_id))
     user = result.first()
 
     if user is not None:
@@ -152,9 +150,7 @@ async def get_current_user(
         )
 
     # 4. Link an existing HelpDesk account by verified email.
-    result = await session.exec(
-        select(User).where(User.email == email)
-    )
+    result = await session.exec(select(User).where(User.email == email))
     existing_user = result.first()
 
     if existing_user is not None:
@@ -202,22 +198,28 @@ async def get_current_user(
             or "customer"
         )
 
-        username_base = re.sub(
-            r"[^a-zA-Z0-9_.-]",
-            "_",
-            username_source,
-        ).strip("._-") or "customer"
+        username_base = (
+            re.sub(
+                r"[^a-zA-Z0-9_.-]",
+                "_",
+                username_source,
+            ).strip("._-")
+            or "customer"
+        )
 
         username = f"{username_base[:70]}_{clerk_user_id[-8:]}"
 
-        full_name = " ".join(
-            part
-            for part in (
-                getattr(clerk_user, "first_name", None),
-                getattr(clerk_user, "last_name", None),
-            )
-            if part
-        ).strip() or username
+        full_name = (
+            " ".join(
+                part
+                for part in (
+                    getattr(clerk_user, "first_name", None),
+                    getattr(clerk_user, "last_name", None),
+                )
+                if part
+            ).strip()
+            or username
+        )
 
         user = User(
             clerk_id=clerk_user_id,
@@ -259,12 +261,10 @@ async def get_current_user(
 
     return user
 
+
 def require_roles(*allowed_roles: Role):
     async def role_checker(
-            current_user: Annotated[
-                User,
-                Depends(get_current_user)
-            ],
+        current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -272,6 +272,7 @@ def require_roles(*allowed_roles: Role):
                 detail="You do not have permission to access this resource",
             )
         return current_user
+
     return role_checker
 
 

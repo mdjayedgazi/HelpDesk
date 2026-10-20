@@ -37,6 +37,7 @@ def priority_for_impact(impact: ImpactLevel | None) -> TicketPriority:
         return TicketPriority.NORMAL
     return PRIORITY_BY_IMPACT[impact]
 
+
 # Which status changes are allowed. CLOSED is terminal: a closed ticket has to
 # be reopened through staff intervention, not by a random status jump.
 ALLOWED_TRANSITIONS: dict[TicketStatus, set[TicketStatus]] = {

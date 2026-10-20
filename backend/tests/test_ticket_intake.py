@@ -59,9 +59,7 @@ async def test_intake_response_carries_confirmation_fields(
     client, make_user, session_factory
 ):
     customer = await make_user()
-    response = await _create(
-        client, customer, category="BILLING", impact="HIGH"
-    )
+    response = await _create(client, customer, category="BILLING", impact="HIGH")
     assert response.status_code == 201
 
     body = response.json()
@@ -229,9 +227,7 @@ async def test_phone_never_appears_in_customer_responses(
 
 
 @pytest.mark.asyncio
-async def test_staff_contact_endpoint_matrix(
-    client, make_user, make_ticket
-):
+async def test_staff_contact_endpoint_matrix(client, make_user, make_ticket):
     assignee = await make_user(role=Role.AGENT)
     other_agent = await make_user(role=Role.AGENT)
     admin = await make_user(role=Role.ADMIN)
@@ -313,12 +309,7 @@ async def test_phone_can_be_cleared_and_history_keeps_no_value(
     assert events[1].old_value == {"contact_phone_set": True}
     assert events[1].new_value == {"contact_phone_set": False}
     # No history row anywhere may contain the digits of the phone number.
-    serialized = json.dumps(
-        [
-            {"old": h.old_value, "new": h.new_value}
-            for h in history
-        ]
-    )
+    serialized = json.dumps([{"old": h.old_value, "new": h.new_value} for h in history])
     assert "555" not in serialized
 
 

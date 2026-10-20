@@ -59,7 +59,9 @@ class AccountRequestCreate(SQLModel):
     model_config = ConfigDict(extra="forbid")
 
     category: EscalationCategory
-    justification: TrimmedText = Field(min_length=1, max_length=MAX_JUSTIFICATION_LENGTH)
+    justification: TrimmedText = Field(
+        min_length=1, max_length=MAX_JUSTIFICATION_LENGTH
+    )
     internal_details: TrimmedText | None = Field(
         default=None, max_length=MAX_JUSTIFICATION_LENGTH
     )

@@ -48,6 +48,7 @@ cannot be removed by PostgreSQL without rebuilding the shared type, so - like
 value is ever modified.
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -191,12 +192,8 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("read_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint(
-            "length(body) > 0", name="ck_staff_messages_body_nonempty"
-        ),
-        sa.ForeignKeyConstraint(
-            ["conversation_id"], ["staff_conversations.id"]
-        ),
+        sa.CheckConstraint("length(body) > 0", name="ck_staff_messages_body_nonempty"),
+        sa.ForeignKeyConstraint(["conversation_id"], ["staff_conversations.id"]),
         sa.ForeignKeyConstraint(["sender_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -225,12 +222,8 @@ def upgrade() -> None:
         "account_management_requests",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("target_user_id", sa.Uuid(), nullable=False),
-        sa.Column(
-            "target_full_name_snapshot", sa.String(length=120), nullable=False
-        ),
-        sa.Column(
-            "target_email_snapshot", sa.String(length=255), nullable=False
-        ),
+        sa.Column("target_full_name_snapshot", sa.String(length=120), nullable=False),
+        sa.Column("target_email_snapshot", sa.String(length=255), nullable=False),
         sa.Column("ticket_id", sa.Uuid(), nullable=True),
         sa.Column("category", escalation_category_enum, nullable=False),
         sa.Column("justification", sa.Text(), nullable=False),
@@ -241,9 +234,7 @@ def upgrade() -> None:
             server_default=sa.text("'PENDING'"),
             nullable=False,
         ),
-        sa.Column(
-            "decision_reason", sa.String(length=2000), nullable=True
-        ),
+        sa.Column("decision_reason", sa.String(length=2000), nullable=True),
         sa.Column("decided_by_user_id", sa.Uuid(), nullable=True),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_by_user_id", sa.Uuid(), nullable=True),
@@ -305,9 +296,7 @@ def upgrade() -> None:
             "length(body) > 0",
             name="ck_account_request_comments_body_nonempty",
         ),
-        sa.ForeignKeyConstraint(
-            ["request_id"], ["account_management_requests.id"]
-        ),
+        sa.ForeignKeyConstraint(["request_id"], ["account_management_requests.id"]),
         sa.ForeignKeyConstraint(["author_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -331,9 +320,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["request_id"], ["account_management_requests.id"]
-        ),
+        sa.ForeignKeyConstraint(["request_id"], ["account_management_requests.id"]),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -384,20 +371,14 @@ def downgrade() -> None:
     )
     op.drop_column("notifications", "related_conversation_id")
 
-    op.drop_index(
-        "ix_staff_messages_sender_user_id", table_name="staff_messages"
-    )
-    op.drop_index(
-        "ix_staff_messages_conversation_id", table_name="staff_messages"
-    )
+    op.drop_index("ix_staff_messages_sender_user_id", table_name="staff_messages")
+    op.drop_index("ix_staff_messages_conversation_id", table_name="staff_messages")
     op.drop_table("staff_messages")
 
     op.drop_index(
         "ix_staff_conversations_owner_user_id", table_name="staff_conversations"
     )
-    op.drop_index(
-        "uq_staff_conversations_staff_user", table_name="staff_conversations"
-    )
+    op.drop_index("uq_staff_conversations_staff_user", table_name="staff_conversations")
     op.drop_table("staff_conversations")
 
     op.drop_column("tickets", "assigned_at")

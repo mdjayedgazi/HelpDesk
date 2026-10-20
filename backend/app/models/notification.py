@@ -13,7 +13,9 @@ class Notification(SQLModel, table=True):
     __tablename__ = "notifications"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    recipient_user_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
+    recipient_user_id: uuid.UUID = Field(
+        foreign_key="users.id", index=True, nullable=False
+    )
     related_ticket_id: uuid.UUID | None = Field(default=None, foreign_key="tickets.id")
     # Optional deep link for notifications about a private staff conversation.
     # Customers never receive these notifications, and the conversation itself

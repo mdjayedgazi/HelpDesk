@@ -49,16 +49,12 @@ from app.services.internal_messages import (
 router = APIRouter(prefix="/api/v1/internal-messages", tags=["internal-messages"])
 
 
-async def _read_counts(
-    session, message_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, int]:
+async def _read_counts(session, message_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     """Return {message_id: recipients_that_have_read} for the given messages."""
     if not message_ids:
         return {}
     rows = await session.exec(
-        select(
-            InternalMessageRecipient.message_id, func.count()
-        )
+        select(InternalMessageRecipient.message_id, func.count())
         .where(
             InternalMessageRecipient.message_id.in_(message_ids),
             InternalMessageRecipient.read_at.is_not(None),
@@ -68,9 +64,7 @@ async def _read_counts(
     return {message_id: count for message_id, count in rows.all()}
 
 
-def _summary(
-    message: InternalMessage, read_count: int
-) -> InternalMessageSummary:
+def _summary(message: InternalMessage, read_count: int) -> InternalMessageSummary:
     return InternalMessageSummary(
         id=message.id,
         sender_user_id=message.sender_user_id,
@@ -105,9 +99,7 @@ async def search_recipients(
         )
     roles = (role,) if role is not None else ELIGIBLE_ROLES
 
-    statement = select(User).where(
-        User.role.in_(roles), User.is_active.is_(True)
-    )
+    statement = select(User).where(User.role.in_(roles), User.is_active.is_(True))
     if q:
         like = f"%{q.lower()}%"
         statement = statement.where(
@@ -179,14 +171,10 @@ async def list_sent_messages(
     if audience is not None:
         statement = statement.where(InternalMessage.audience == audience)
     if q:
-        statement = statement.where(
-            InternalMessage.subject.ilike(f"%{q.lower()}%")
-        )
+        statement = statement.where(InternalMessage.subject.ilike(f"%{q.lower()}%"))
 
     statement = (
-        statement.order_by(
-            InternalMessage.created_at.desc(), InternalMessage.id.desc()
-        )
+        statement.order_by(InternalMessage.created_at.desc(), InternalMessage.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -255,9 +243,7 @@ async def get_sent_message(
         read_count=read_count,
         created_at=message.created_at,
         recipient_total=recipient_total,
-        recipients=[
-            InternalMessageRecipientRead.model_validate(r) for r in recipients
-        ],
+        recipients=[InternalMessageRecipientRead.model_validate(r) for r in recipients],
     )
 
 
@@ -284,16 +270,12 @@ async def list_received_messages(
         .where(InternalMessageRecipient.recipient_user_id == staff.id)
     )
     if is_read is True:
-        statement = statement.where(
-            InternalMessageRecipient.read_at.is_not(None)
-        )
+        statement = statement.where(InternalMessageRecipient.read_at.is_not(None))
     elif is_read is False:
         statement = statement.where(InternalMessageRecipient.read_at.is_(None))
 
     statement = (
-        statement.order_by(
-            InternalMessage.created_at.desc(), InternalMessage.id.desc()
-        )
+        statement.order_by(InternalMessage.created_at.desc(), InternalMessage.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -367,8 +349,6 @@ async def mark_received_message_read(
     staff: staff_dependency,
 ) -> dict[str, int]:
     """Mark the caller's own recipient row as read."""
-    updated = await mark_message_read(
-        session, message_id=message_id, reader=staff
-    )
+    updated = await mark_message_read(session, message_id=message_id, reader=staff)
     await session.commit()
     return {"updated": updated}
