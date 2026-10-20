@@ -4,10 +4,13 @@ import {
   Inbox,
   Mail,
   MailOpen,
+  Megaphone,
   MessageSquare,
   RefreshCw,
   ShieldCheck,
   ShieldQuestion,
+  Ticket,
+  TicketCheck,
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
@@ -27,6 +30,63 @@ const typeIcons: Record<NotificationType, LucideIcon> = {
   OWNER_MESSAGE_RECEIVED: MailOpen,
   ESCALATION_CREATED: ShieldQuestion,
   ESCALATION_UPDATED: ShieldCheck,
+  TICKET_CREATED: Ticket,
+  TICKET_RESOLVED: TicketCheck,
+  INTERNAL_MESSAGE_RECEIVED: Megaphone,
+}
+
+const typeCategories: Record<NotificationType, string> = {
+  TICKET_ASSIGNED: 'Ticket',
+  NEW_COMMENT: 'Ticket',
+  STATUS_CHANGED: 'Ticket',
+  PRIORITY_CHANGED: 'Ticket',
+  TICKET_NEEDS_ASSIGNMENT: 'Ticket',
+  TICKET_CREATED: 'Ticket',
+  TICKET_RESOLVED: 'Ticket',
+  STAFF_MESSAGE_RECEIVED: 'Message',
+  OWNER_MESSAGE_RECEIVED: 'Message',
+  INTERNAL_MESSAGE_RECEIVED: 'Message',
+  ESCALATION_CREATED: 'Account request',
+  ESCALATION_UPDATED: 'Account request',
+}
+
+/**
+ * Where a notification should open.
+ *
+ * The three deep-link channels never mix: an internal-message notification goes
+ * to the exact received message, a staff-conversation notification to the exact
+ * thread, and everything ticket-scoped to the ticket. A resolution notification
+ * additionally targets the feedback section.
+ */
+export function notificationDestination(
+  notification: Notification,
+): { to: string; label: string } | null {
+  if (notification.related_internal_message_id) {
+    return {
+      to: `/messages?message=${notification.related_internal_message_id}`,
+      label: 'Open message',
+    }
+  }
+  if (notification.related_conversation_id) {
+    return {
+      to: `/messages?conversation=${notification.related_conversation_id}`,
+      label: 'Open conversation',
+    }
+  }
+  if (notification.related_account_request_id) {
+    return {
+      to: `/account-requests/${notification.related_account_request_id}`,
+      label: 'Open request',
+    }
+  }
+  if (notification.related_ticket_id) {
+    const hash = notification.type === 'TICKET_RESOLVED' ? '#feedback' : ''
+    return {
+      to: `/tickets/${notification.related_ticket_id}${hash}`,
+      label: notification.type === 'TICKET_RESOLVED' ? 'Share feedback' : 'View ticket',
+    }
+  }
+  return null
 }
 
 export function NotificationRow({
@@ -43,16 +103,7 @@ export function NotificationRow({
   const navigate = useNavigate()
   const Icon = typeIcons[notification.type]
 
-  // Staff-message notifications deep-link into the private conversation;
-  // ticket notifications open the ticket. The two channels never mix.
-  const destination = notification.related_conversation_id
-    ? {
-        to: `/messages?conversation=${notification.related_conversation_id}`,
-        label: 'Open conversation',
-      }
-    : notification.related_ticket_id
-      ? { to: `/tickets/${notification.related_ticket_id}`, label: 'View ticket' }
-      : null
+  const destination = notificationDestination(notification)
 
   const openDestination = () => {
     if (!destination) return
@@ -70,6 +121,8 @@ export function NotificationRow({
       borderColor={palette.borderSubtle}
       bg={notification.is_read ? 'transparent' : palette.surfaceMuted}
       transition='background 0.16s ease'
+      cursor={destination ? 'pointer' : undefined}
+      onClick={destination ? openDestination : undefined}
       _hover={{ bg: palette.hover }}
     >
       <Center
@@ -85,26 +138,53 @@ export function NotificationRow({
         <Icon size={14} strokeWidth={1.9} aria-hidden />
       </Center>
       <Stack gap='0.5' flex='1' minW='0'>
-        <Flex align='center' gap='2'>
+        <Flex align='flex-start' gap='2'>
           <Text
             fontSize='sm'
             fontWeight={notification.is_read ? 'regular' : 'medium'}
             color={palette.text}
-            truncate
+            lineClamp={2}
+            flex='1'
+            minW='0'
           >
             {notification.title}
           </Text>
           {!notification.is_read ? (
-            <Box boxSize='1.5' borderRadius='full' bg={palette.ink} flexShrink={0} />
+            <Box
+              boxSize='1.5'
+              borderRadius='full'
+              bg={palette.ink}
+              flexShrink={0}
+              mt='1.5'
+            />
           ) : null}
         </Flex>
-        <Text fontSize='xs' color={palette.textSecondary}>
+        <Text
+          fontSize='xs'
+          color={palette.textSecondary}
+          lineClamp={2}
+          wordBreak='break-word'
+        >
           {notification.message}
         </Text>
-        <Flex align='center' gap='3' pt='0.5'>
-          <Text fontSize='xs' color={palette.textFaint}>
+        <Flex align='center' gap='2.5' pt='0.5' wrap='wrap'>
+          <Text fontSize='2xs' color={palette.textFaint}>
             {formatRelative(notification.created_at)}
           </Text>
+          <Text fontSize='2xs' color={palette.textMuted}>
+            {typeCategories[notification.type]}
+          </Text>
+          {!notification.is_read ? (
+            <Text
+              fontSize='2xs'
+              fontWeight='semibold'
+              letterSpacing='0.04em'
+              textTransform='uppercase'
+              color={palette.textSecondary}
+            >
+              Unread
+            </Text>
+          ) : null}
           {destination ? (
             <Button
               variant='plain'
@@ -116,7 +196,10 @@ export function NotificationRow({
               textDecoration='underline'
               textUnderlineOffset='2px'
               _hover={{ color: palette.text }}
-              onClick={openDestination}
+              onClick={(event) => {
+                event.stopPropagation()
+                openDestination()
+              }}
             >
               {destination.label}
             </Button>
@@ -131,7 +214,10 @@ export function NotificationRow({
               color={palette.textMuted}
               _hover={{ color: palette.text }}
               loading={marking}
-              onClick={() => onMarkRead(notification.id)}
+              onClick={(event) => {
+                event.stopPropagation()
+                onMarkRead(notification.id)
+              }}
             >
               Mark read
             </Button>

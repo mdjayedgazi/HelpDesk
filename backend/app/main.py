@@ -11,6 +11,7 @@ from app.api.routers import (
     internal_messages,
     notifications,
     staff_messages,
+    ticket_feedback,
     ticket_history,
     tickets,
     users,
@@ -47,6 +48,7 @@ app.include_router(tickets.router)
 app.include_router(comments.router)
 app.include_router(attachments.router)
 app.include_router(ticket_history.router)
+app.include_router(ticket_feedback.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(staff_messages.router)

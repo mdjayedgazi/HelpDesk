@@ -333,6 +333,45 @@ async def test_employee_only_sees_their_own_messages_and_can_mark_read(client, m
 
 
 @pytest.mark.asyncio
+async def test_received_detail_opens_the_exact_message_for_the_recipient_only(
+    client, make_user
+):
+    owner = await make_user(role=Role.OWNER)
+    alice = await make_user(role=Role.AGENT, username="detail_alice")
+    bob = await make_user(role=Role.ADMIN, username="detail_bob")
+    customer = await make_user(username="detail_customer")
+
+    created = await _compose(
+        client,
+        owner,
+        audience="individual",
+        subject="Open me",
+        body="The exact body",
+        recipient_user_id=alice.id,
+    )
+    message_id = created.json()["id"]
+
+    detail = await client.get(f"{BASE}/received/{message_id}", headers=_h(alice))
+    assert detail.status_code == 200
+    assert detail.json()["id"] == message_id
+    assert detail.json()["subject"] == "Open me"
+    assert detail.json()["body"] == "The exact body"
+    assert detail.json()["read_at"] is None
+
+    # Not a recipient: 404, never 403, so existence is not revealed.
+    assert (
+        await client.get(f"{BASE}/received/{message_id}", headers=_h(bob))
+    ).status_code == 404
+    # Customers cannot reach the internal-message surface at all.
+    assert (
+        await client.get(f"{BASE}/received/{message_id}", headers=_h(customer))
+    ).status_code == 403
+    assert (
+        await client.get(f"{BASE}/received/{uuid.uuid4()}", headers=_h(alice))
+    ).status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_sent_view_reports_real_read_counts(client, make_user):
     owner = await make_user(role=Role.OWNER)
     alice = await make_user(role=Role.AGENT, username="count_alice")

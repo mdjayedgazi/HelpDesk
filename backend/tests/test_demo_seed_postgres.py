@@ -30,6 +30,7 @@ from app.commands import seed_demo_data as sd
 from app.core.database import _normalize_database_url
 from app.enums.enums import (
     EscalationStatus,
+    NotificationType,
     Role,
     TicketCategory,
     TicketPriority,
@@ -40,10 +41,12 @@ from app.models import (
     AccountRequestEvent,
     Attachment,
     Comment,
+    InternalMessageRecipient,
     Notification,
     StaffConversation,
     StaffMessage,
     Ticket,
+    TicketFeedback,
     TicketHistory,
     User,
 )
@@ -325,6 +328,80 @@ async def test_seed_notifications_read_and_unread(seeded, factory):
         ).all()
     assert read and unread
     assert len(read) + len(unread) >= 100
+
+
+async def test_seed_notifications_cover_roles_types_and_deep_links(seeded, factory):
+    first, _, _ = seeded
+    counts = first.counts["notifications"]
+    assert counts["inserted"] + counts["reused"] == first.expected["notifications"]
+
+    async with factory() as session:
+        rows = (await session.exec(select(Notification))).all()
+        users = {u.id: u for u in (await session.exec(select(User))).all()}
+        tickets = {t.id: t for t in (await session.exec(select(Ticket))).all()}
+        conversations = {
+            c.id: c for c in (await session.exec(select(StaffConversation))).all()
+        }
+        requests = {
+            r.id: r
+            for r in (await session.exec(select(AccountManagementRequest))).all()
+        }
+        recipient_rows = {
+            (r.message_id, r.recipient_user_id): r
+            for r in (await session.exec(select(InternalMessageRecipient))).all()
+        }
+        answered_tickets = set(
+            (await session.exec(select(TicketFeedback.ticket_id))).all()
+        )
+
+    # Every role gets representative notifications.
+    assert {users[n.recipient_user_id].role for n in rows} == {
+        Role.CUSTOMER,
+        Role.AGENT,
+        Role.ADMIN,
+        Role.OWNER,
+    }
+    # Every deep-link channel and the full lifecycle are represented.
+    assert {
+        NotificationType.TICKET_CREATED,
+        NotificationType.TICKET_ASSIGNED,
+        NotificationType.NEW_COMMENT,
+        NotificationType.STATUS_CHANGED,
+        NotificationType.TICKET_NEEDS_ASSIGNMENT,
+        NotificationType.TICKET_RESOLVED,
+        NotificationType.INTERNAL_MESSAGE_RECEIVED,
+        NotificationType.OWNER_MESSAGE_RECEIVED,
+        NotificationType.STAFF_MESSAGE_RECEIVED,
+        NotificationType.ESCALATION_CREATED,
+        NotificationType.ESCALATION_UPDATED,
+    } <= {n.type for n in rows}
+    assert any(n.is_read for n in rows) and any(not n.is_read for n in rows)
+
+    for notification in rows:
+        assert notification.recipient_user_id in users
+        if notification.related_ticket_id is not None:
+            assert notification.related_ticket_id in tickets
+        if notification.related_conversation_id is not None:
+            conversation = conversations[notification.related_conversation_id]
+            assert notification.recipient_user_id in {
+                conversation.owner_user_id,
+                conversation.staff_user_id,
+            }
+        if notification.related_account_request_id is not None:
+            assert notification.related_account_request_id in requests
+        if notification.related_internal_message_id is not None:
+            row = recipient_rows[
+                (
+                    notification.related_internal_message_id,
+                    notification.recipient_user_id,
+                )
+            ]
+            assert notification.is_read == (row.read_at is not None)
+
+        if notification.type == NotificationType.TICKET_RESOLVED:
+            ticket = tickets[notification.related_ticket_id]
+            assert ticket.status == TicketStatus.RESOLVED
+            assert ticket.id not in answered_tickets
 
 
 async def test_seed_attachments_have_files(seeded, factory, tmp_path):

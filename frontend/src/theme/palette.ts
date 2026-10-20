@@ -37,6 +37,7 @@ export const palette = {
 
   /** Ink used for primary actions and emphasis. */
   ink: 'var(--hd-ink)',
+    logo: 'rgba(11,11,13,0.74)',
   /** Ink hover. */
   inkHover: 'var(--hd-ink-hover)',
 

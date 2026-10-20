@@ -31,6 +31,7 @@ import { useAuth } from '@clerk/react'
 
 import { CommentThread } from '../components/CommentThread.tsx'
 import { Composer } from '../components/Composer.tsx'
+import { FeedbackPanel } from '../components/FeedbackPanel.tsx'
 import {
   FormField,
   FormStack,
@@ -328,6 +329,8 @@ export function TicketDetailPage() {
           </Surface>
 
           <AttachmentsPanel ticketId={ticketId} attachments={attachments} />
+
+          <FeedbackPanel ticketId={ticketId} />
         </Stack>
 
         <Stack gap='4'>

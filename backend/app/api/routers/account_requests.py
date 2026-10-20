@@ -33,7 +33,12 @@ from sqlmodel import select
 
 from app.core.auth import admin_dependency, staff_dependency
 from app.core.database import session_Dependency
-from app.enums.enums import EscalationCategory, EscalationStatus, Role
+from app.enums.enums import (
+    EscalationCategory,
+    EscalationStatus,
+    NotificationType,
+    Role,
+)
 from app.models.account_request import (
     AccountManagementRequest,
     AccountRequestComment,
@@ -263,7 +268,17 @@ async def add_account_request_comment(
 
     if request.created_by_user_id == staff.id:
         # The requester added context: alert the reviewers.
-        await notify_reviewers(session, request=request, actor=staff)
+        await notify_reviewers(
+            session,
+            request=request,
+            actor=staff,
+            type=NotificationType.ESCALATION_UPDATED,
+            title="Account request updated",
+            message=(
+                "The requester added new information to an "
+                "account-management request."
+            ),
+        )
     else:
         notify_creator(
             session,

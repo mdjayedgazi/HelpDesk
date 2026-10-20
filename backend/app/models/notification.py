@@ -21,6 +21,17 @@ class Notification(SQLModel, table=True):
     related_conversation_id: uuid.UUID | None = Field(
         default=None, foreign_key="staff_conversations.id"
     )
+    # Optional deep link for an Owner-composed internal message (Owner Inbox).
+    # The message payload is never copied here; the recipient's own access rules
+    # still decide whether they can open it.
+    related_internal_message_id: uuid.UUID | None = Field(
+        default=None, foreign_key="internal_messages.id"
+    )
+    # Optional deep link for an account-management request (admin escalation),
+    # so the reviewer opens the request itself rather than only its ticket.
+    related_account_request_id: uuid.UUID | None = Field(
+        default=None, foreign_key="account_management_requests.id"
+    )
     type: NotificationType = Field(max_length=40, nullable=False)
     title: str = Field(max_length=180, nullable=False)
     message: str = Field(max_length=500, nullable=False)

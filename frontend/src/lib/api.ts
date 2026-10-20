@@ -19,6 +19,7 @@ import type {
   MarkReadResult,
   Notification,
   NotificationListParams,
+  NotificationUnreadCount,
   ProfileUpdateInput,
   ReceivedMessageListParams,
   RecipientSearchParams,
@@ -31,6 +32,9 @@ import type {
   Ticket,
   TicketContact,
   TicketCreateInput,
+  TicketFeedback,
+  TicketFeedbackInput,
+  TicketFeedbackState,
   TicketHistoryEntry,
   TicketListParams,
   TicketStatus,
@@ -264,8 +268,11 @@ export const endpoints = {
   downloadAttachment: (attachmentId: string) => `${P}/attachments/${attachmentId}/download`,
 
   notifications: () => `${P}/notifications`,
+  notificationUnreadCount: () => `${P}/notifications/unread-count`,
   notification: (id: string) => `${P}/notifications/${id}`,
   readAllNotifications: () => `${P}/notifications/read-all`,
+
+  ticketFeedback: (ticketId: string) => `${P}/tickets/${ticketId}/feedback`,
 
   staffConversations: () => `${P}/staff-messages/conversations`,
   staffConversation: (id: string) => `${P}/staff-messages/conversations/${id}`,
@@ -277,6 +284,7 @@ export const endpoints = {
   sentMessages: () => `${P}/internal-messages/sent`,
   sentMessage: (id: string) => `${P}/internal-messages/sent/${id}`,
   receivedMessages: () => `${P}/internal-messages/received`,
+  receivedMessage: (id: string) => `${P}/internal-messages/received/${id}`,
   markMessageRead: (id: string) => `${P}/internal-messages/${id}/read`,
 
   accountRequests: () => `${P}/account-requests`,
@@ -315,8 +323,12 @@ export interface HelpDeskApi {
   uploadAttachment: (ticketId: string, file: File) => Promise<Attachment>
 
   listNotifications: (params?: NotificationListParams) => Promise<Notification[]>
+  unreadNotificationCount: () => Promise<NotificationUnreadCount>
   updateNotification: (id: string, isRead: boolean) => Promise<Notification>
   markAllNotificationsRead: () => Promise<{ updated: number }>
+
+  getTicketFeedback: (ticketId: string) => Promise<TicketFeedbackState>
+  submitTicketFeedback: (ticketId: string, input: TicketFeedbackInput) => Promise<TicketFeedback>
 
   listStaffConversations: (params?: StaffConversationListParams) => Promise<StaffConversation[]>
   startStaffConversation: (subject?: string) => Promise<StaffConversation>

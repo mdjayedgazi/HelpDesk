@@ -9,7 +9,7 @@ from app.core.database import session_Dependency
 from app.enums.enums import NotificationType, Role
 from app.models.comment import Comment
 from app.schemas.comments import CommentCreate, CommentRead, PublicCommentRead
-from app.services.notifications import create_notification
+from app.services.notifications import active_admin_ids, notify_many
 from app.services.tickets import load_visible_ticket, record_history
 
 router = APIRouter(
@@ -78,7 +78,7 @@ async def create_comment(
     )
     session.add(comment)
 
-    _notify_comment_recipients(session, ticket=ticket, author=user, comment=comment)
+    await _notify_comment_recipients(session, ticket=ticket, author=user, comment=comment)
 
     # Only public comments appear in the history customers can read.
     if not payload.is_internal:
@@ -98,8 +98,15 @@ async def create_comment(
     return CommentRead.model_validate(comment)
 
 
-def _notify_comment_recipients(session, *, ticket, author, comment) -> None:
-    """Notify the people involved in the ticket, never the author."""
+async def _notify_comment_recipients(session, *, ticket, author, comment) -> None:
+    """Notify the people involved in the ticket, never the author.
+
+    A public comment goes to the customer and the assignee. When nobody is
+    assigned yet, the administrative queue is told instead of the ticket
+    silently waiting: a public update on an unassigned ticket is exactly the
+    kind of work that needs to be picked up. An internal note is staff-only and
+    never reaches a customer.
+    """
     recipients: set[uuid.UUID] = set()
 
     if comment.is_internal:
@@ -109,15 +116,16 @@ def _notify_comment_recipients(session, *, ticket, author, comment) -> None:
         recipients.add(ticket.created_by_user_id)
         if ticket.assignee_user_id is not None:
             recipients.add(ticket.assignee_user_id)
+        else:
+            recipients |= await active_admin_ids(session)
 
     recipients.discard(author.id)
 
-    for recipient_id in recipients:
-        create_notification(
-            session,
-            recipient_user_id=recipient_id,
-            related_ticket_id=ticket.id,
-            type=NotificationType.NEW_COMMENT,
-            title="New comment on a ticket",
-            message=f"A new comment was added to ticket #{ticket.ticket_number}.",
-        )
+    notify_many(
+        session,
+        recipient_ids=recipients,
+        type=NotificationType.NEW_COMMENT,
+        title="New comment on a ticket",
+        message=f"A new comment was added to ticket #{ticket.ticket_number}.",
+        related_ticket_id=ticket.id,
+    )

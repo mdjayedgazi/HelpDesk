@@ -8,25 +8,25 @@ import { Pagination } from '../components/Pagination.tsx'
 import { EmptyState, ErrorState, TableSkeleton } from '../components/StateViews.tsx'
 import { Surface } from '../components/Surface.tsx'
 import { toaster } from '../components/Toaster.tsx'
-import {
-  useMarkAllNotificationsRead,
-  useNotifications,
-  useUpdateNotification,
-} from '../hooks/useNotifications.ts'
+import { useMarkAllNotificationsRead, useNotifications, useUpdateNotification } from '../hooks/useNotifications.ts'
 import { errorMessage } from '../lib/errors.ts'
+import type { NotificationCategory } from '../lib/types.ts'
 import { palette } from '../theme/palette.ts'
 
 const PAGE_SIZE = 30
 
 type Filter = 'all' | 'unread'
+type Category = 'all' | NotificationCategory
 
 export function NotificationsPage() {
   const [filter, setFilter] = useState<Filter>('all')
+  const [category, setCategory] = useState<Category>('all')
   const [page, setPage] = useState(1)
 
   const isRead = filter === 'all' ? undefined : false
   const notifications = useNotifications({
     is_read: isRead,
+    category: category === 'all' ? undefined : category,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   })
@@ -58,6 +58,11 @@ export function NotificationsPage() {
     setPage(1)
   }
 
+  const changeCategory = (value: string) => {
+    setCategory(value as Category)
+    setPage(1)
+  }
+
   return (
     <>
       <PageHeader
@@ -79,7 +84,7 @@ export function NotificationsPage() {
         }
       />
 
-      <Flex mb='4'>
+      <Flex mb='4' gap='4' wrap='wrap' align='center'>
         <Tabs.Root value={filter} onValueChange={(details) => changeFilter(details.value)}>
           <Tabs.List>
             <Tabs.Trigger value='all' fontSize='sm'>
@@ -87,6 +92,24 @@ export function NotificationsPage() {
             </Tabs.Trigger>
             <Tabs.Trigger value='unread' fontSize='sm'>
               Unread
+            </Tabs.Trigger>
+            <Tabs.Indicator />
+          </Tabs.List>
+        </Tabs.Root>
+
+        <Tabs.Root value={category} onValueChange={(details) => changeCategory(details.value)}>
+          <Tabs.List>
+            <Tabs.Trigger value='all' fontSize='sm'>
+              Everything
+            </Tabs.Trigger>
+            <Tabs.Trigger value='tickets' fontSize='sm'>
+              Tickets
+            </Tabs.Trigger>
+            <Tabs.Trigger value='messages' fontSize='sm'>
+              Messages
+            </Tabs.Trigger>
+            <Tabs.Trigger value='account_requests' fontSize='sm'>
+              Account requests
             </Tabs.Trigger>
             <Tabs.Indicator />
           </Tabs.List>

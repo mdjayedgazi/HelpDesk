@@ -6,6 +6,7 @@ import type { User } from '../lib/types.ts'
 import { palette } from '../theme/palette.ts'
 import { Container } from './Container.tsx'
 import { navSectionsForRole } from './nav.ts'
+import { NewNotificationWatcher } from './NewNotificationWatcher.tsx'
 import { SidebarNav } from './Sidebar.tsx'
 import { TopBar } from './TopBar.tsx'
 
@@ -28,6 +29,7 @@ export function AppShell({ me }: { me: User }) {
 
   return (
     <Flex minH='100dvh' bg={palette.page}>
+      <NewNotificationWatcher key={me.id} />
       <Box
         as='aside'
         display={{ base: 'none', lg: 'block' }}
