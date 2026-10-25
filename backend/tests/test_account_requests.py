@@ -99,7 +99,7 @@ async def test_agent_request_target_comes_from_the_ticket(
     client, make_user, make_ticket
 ):
     agent = await make_user(role=Role.AGENT)
-    admin = await make_user(role=Role.ADMIN)
+    await make_user(role=Role.ADMIN)
     customer = await make_user()
     ticket = await make_ticket(customer)
 
@@ -431,7 +431,6 @@ async def test_comments_notify_the_other_side(
 
 @pytest.mark.asyncio
 async def test_unknown_request_returns_404(client, make_user):
-    import uuid
 
     admin = await make_user(role=Role.ADMIN)
     response = await client.get(
@@ -444,7 +443,7 @@ async def test_unknown_request_returns_404(client, make_user):
 async def test_stored_state_matches_the_api(
     client, make_user, make_ticket, session_factory
 ):
-    admin = await make_user(role=Role.ADMIN)
+    await make_user(role=Role.ADMIN)
     agent = await make_user(role=Role.AGENT)
     customer = await make_user()
     ticket = await make_ticket(customer)

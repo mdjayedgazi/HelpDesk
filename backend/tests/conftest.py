@@ -13,7 +13,7 @@ without contacting Clerk.
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Provide dummy settings before app modules import them, so the tests do not
 # depend on a real .env file or real credentials.
@@ -31,10 +31,22 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.auth import require_auth
 from app.core.database import get_db
-from app.enums.enums import Role, TicketPriority, TicketStatus
+from app.enums.enums import AttachmentScanStatus, Role, TicketPriority, TicketStatus
 from app.main import app
 from app.models.ticket import Ticket
 from app.models.user import User
+from app.services.malware_scan import ScanResult, get_malware_scanner
+
+
+class CleanTestScanner:
+    """Deterministic test-only scanner.
+
+    Production never falls back to this: it is installed only through FastAPI
+    dependency overrides in this test harness.
+    """
+
+    async def scan(self, path):
+        return ScanResult(status=AttachmentScanStatus.CLEAN)
 
 
 class FakeRequestState:
@@ -65,6 +77,15 @@ def disable_initial_admin_bootstrap(monkeypatch):
     from app.core import config
 
     monkeypatch.setattr(config.settings, "INITIAL_ADMIN_EMAIL", None)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limiting(monkeypatch):
+    """Keep API tests deterministic; rate-limit tests opt in explicitly."""
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "RATE_LIMIT_ENABLED", False)
     yield
 
 
@@ -137,7 +158,7 @@ async def make_ticket(session_factory):
                 # Mirror the production invariant: assigned_at is written
                 # together with the assignee (and cleared on unassignment), so
                 # assignment tests do not fall through to the UUID tie-break.
-                assigned_at=datetime.now(timezone.utc) if assignee else None,
+                assigned_at=datetime.now(UTC) if assignee else None,
             )
             session.add(ticket)
             await session.commit()
@@ -164,6 +185,7 @@ def _install_overrides(session_factory) -> None:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[require_auth] = _fake_require_auth
+    app.dependency_overrides[get_malware_scanner] = lambda: CleanTestScanner()
 
 
 @pytest_asyncio.fixture

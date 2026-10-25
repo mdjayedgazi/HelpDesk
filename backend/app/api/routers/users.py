@@ -26,32 +26,57 @@ from app.schemas.users import (
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
+# Clerk is the authoritative identity provider. A local email may only be
+# changed by Clerk's verified identity flow (the next sign-in synchronises it);
+# accepting an arbitrary PATCH value would let one account pre-claim another
+# person's verified address and block that person from signing in.
+EMAIL_MANAGED_BY_CLERK = (
+    "Email is managed by Clerk and cannot be changed here. "
+    "Change your primary email in Clerk, then sign in again."
+)
+
+
+def _reject_email_change(data: dict, current_email: str) -> None:
+    """Remove an optional email field, rejecting any attempt to alter it.
+
+    An unchanged value is accepted as a harmless no-op so older clients that
+    submit the whole profile form keep working. Only the value matters: we never
+    treat an email string supplied by a request as proof of ownership.
+    """
+    email = data.pop("email", None)
+    if (
+        email is not None
+        and str(email).strip().lower() != current_email.strip().lower()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=EMAIL_MANAGED_BY_CLERK,
+        )
+
 
 async def _ensure_unique_identity(
     session,
     *,
     username: str | None,
-    email: str | None,
     exclude_user_id: uuid.UUID,
 ) -> None:
-    """Reject a username/email that already belongs to another account."""
-    if username is None and email is None:
+    """Reject a username that already belongs to another account.
+
+    Email uniqueness is enforced by the database, but email is no longer a
+    writable identity field (Clerk owns it), so it is deliberately not part of
+    this update-time check.
+    """
+    if username is None:
         return
 
-    conditions = []
-    if username is not None:
-        conditions.append(User.username == username)
-    if email is not None:
-        conditions.append(User.email == email.lower())
-
     result = await session.exec(
-        select(User).where(or_(*conditions), User.id != exclude_user_id)
+        select(User).where(User.username == username, User.id != exclude_user_id)
     )
     conflict = result.first()
     if conflict is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username or email is already taken",
+            detail="Username is already taken",
         )
 
 
@@ -71,22 +96,23 @@ async def update_my_profile(
 
     ``UserUpdate`` forbids unknown fields, so a request cannot smuggle in
     ``role`` or ``is_active``: changing your own role is impossible here.
+
+    Email is deliberately not a writable profile field. Clerk owns identity;
+    accepting an unverified local email change would allow one account to claim
+    another person's address and block that person's later Clerk sign-in.
     """
     data = payload.model_dump(exclude_unset=True)
+    _reject_email_change(data, user.email)
+
     if not data:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="No fields to update",
         )
 
-    email = data.get("email")
-    if email is not None:
-        data["email"] = str(email).lower()
-
     await _ensure_unique_identity(
         session,
         username=data.get("username"),
-        email=data.get("email"),
         exclude_user_id=user.id,
     )
 
@@ -100,7 +126,7 @@ async def update_my_profile(
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username or email is already taken",
+            detail="Username is already taken",
         ) from None
 
     await session.refresh(user)
@@ -128,7 +154,7 @@ async def sync_my_avatar(
         )
     try:
         clerk_user = await clerk_client.users.get_async(user_id=user.clerk_id)
-    except Exception:
+    except Exception:  # noqa: BLE001 - normalise every SDK failure to a 502
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not retrieve the Clerk user profile",
@@ -214,6 +240,8 @@ async def update_user_by_owner(
         )
 
     data = payload.model_dump(exclude_unset=True)
+    _reject_email_change(data, target.email)
+
     if not data:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -225,14 +253,9 @@ async def update_user_by_owner(
 
     await _guard_managed_user_change(session, owner, target, data)
 
-    email = data.get("email")
-    if email is not None:
-        data["email"] = str(email).lower()
-
     await _ensure_unique_identity(
         session,
         username=data.get("username"),
-        email=data.get("email"),
         exclude_user_id=target.id,
     )
 
@@ -246,7 +269,7 @@ async def update_user_by_owner(
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username or email is already taken",
+            detail="Username is already taken",
         ) from None
 
     await session.refresh(target)

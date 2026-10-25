@@ -3,6 +3,7 @@ from datetime import datetime
 
 from pydantic import ConfigDict
 from sqlmodel import SQLModel
+
 from app.enums.enums import NotificationType
 
 

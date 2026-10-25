@@ -18,7 +18,7 @@ Design notes
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, CheckConstraint, Column, DateTime, Index, Text, func, text
 from sqlmodel import Field, SQLModel
@@ -69,13 +69,13 @@ class AccountManagementRequest(SQLModel, table=True):
 
     created_by_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()},
@@ -106,7 +106,7 @@ class AccountRequestComment(SQLModel, table=True):
     # Explicit ``Text`` matches the migration DDL exactly (see comment.py).
     body: str = Field(nullable=False, sa_type=Text)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},
@@ -134,7 +134,7 @@ class AccountRequestEvent(SQLModel, table=True):
     old_value: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     new_value: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},

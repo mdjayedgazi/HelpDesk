@@ -6,7 +6,7 @@ rule here is enforced server-side - the frontend only mirrors these decisions.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlmodel import select
@@ -169,7 +169,7 @@ async def mark_message_read(
         )
 
     if row.read_at is None:
-        row.read_at = datetime.now(timezone.utc)
+        row.read_at = datetime.now(UTC)
         session.add(row)
         # Keep the notification centre and the message's own read state
         # consistent: opening the message clears its notification's unread

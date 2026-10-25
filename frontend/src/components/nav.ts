@@ -105,7 +105,7 @@ export function navSectionsForRole(role: Role): NavSection[] {
   return [
     {
       label: 'Overview',
-      items: [{ label: 'Dashboard', to: '/', icon: Gauge, end: true }],
+      items: [{ label: 'Dashboard', to: '/dashboard', icon: Gauge, end: true }],
     },
     {
       label: 'Support',

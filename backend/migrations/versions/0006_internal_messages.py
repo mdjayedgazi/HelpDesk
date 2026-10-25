@@ -37,16 +37,16 @@ Drops the two new tables, their indexes and the new ``internalaudience`` enum
 type. It never touches the existing ``role`` type or any pre-existing row.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0006_internal_messages"
-down_revision: Union[str, None] = "0005_user_profile_image"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0005_user_profile_image"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 # ``create_type=False`` keeps the enum DDL out of the table definitions; the

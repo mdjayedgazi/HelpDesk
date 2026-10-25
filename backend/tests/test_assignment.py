@@ -14,7 +14,7 @@ administrative notification, and a failure inside the assignment savepoint can
 never lose the ticket.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -209,7 +209,7 @@ async def test_never_assigned_agent_sorts_first(
         status=TicketStatus.RESOLVED,
     )
     await _set_assigned_at(
-        session_factory, resolved.id, datetime.now(timezone.utc) - timedelta(days=1)
+        session_factory, resolved.id, datetime.now(UTC) - timedelta(days=1)
     )
 
     response = await _post_ticket(client, customer)
@@ -231,7 +231,7 @@ async def test_oldest_last_assignment_wins_tie(
     recent_ticket = await make_ticket(
         customer, assignee=recent, status=TicketStatus.RESOLVED
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await _set_assigned_at(session_factory, veteran_ticket.id, now - timedelta(days=30))
     await _set_assigned_at(session_factory, recent_ticket.id, now - timedelta(hours=1))
 
@@ -394,7 +394,7 @@ async def test_agent_deactivated_after_ranking_falls_through_to_next(
 # A fixed assignment moment shared by every historical ticket below, so the
 # fairness rotation (max ``assigned_at`` per agent) ties and the decision can
 # reach the speed step. Resolutions land well inside RECENT_WINDOW_DAYS.
-_HISTORY_ANCHOR = datetime.now(timezone.utc) - timedelta(days=10)
+_HISTORY_ANCHOR = datetime.now(UTC) - timedelta(days=10)
 
 
 async def _resolved_ticket(

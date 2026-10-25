@@ -16,7 +16,6 @@ from app.core.database import get_db
 from app.enums.enums import Role
 from app.models.user import User
 
-
 clerk_client = Clerk(
     bearer_auth=settings.CLERK_SECRET_KEY,
 )
@@ -120,7 +119,7 @@ async def get_current_user(
         clerk_user = await clerk_client.users.get_async(
             user_id=clerk_user_id,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - SDK/network failures need one safe 502
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not retrieve the Clerk user profile",

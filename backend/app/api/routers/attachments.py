@@ -1,19 +1,29 @@
+import logging
 import os
 import re
 import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlmodel import select
 
 from app.core.auth import user_dependency
 from app.core.config import settings
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
+from app.enums.enums import AttachmentScanStatus
 from app.models.attachment import Attachment
 from app.schemas.attachments import AttachmentRead
+from app.services.malware_scan import (
+    MalwareScanner,
+    ScannerError,
+    get_malware_scanner,
+)
 from app.services.tickets import load_visible_ticket
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["attachments"])
 
@@ -33,9 +43,60 @@ ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
+# A client-provided MIME type is not evidence about the file's content. These
+# signatures are a cheap first gate: they reject a renamed executable or a
+# mismatched image/PDF, while still allowing the legacy text formats. Malware
+# scanning/quarantine is a separate deployment concern (documented in
+# data.md); signature checks are not a substitute for an antivirus engine.
+_TEXT_CONTENT_TYPES = {"text/plain", "text/csv"}
+_ZIP_CONTENT_TYPES = {
+    "application/zip",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+_MAGIC_SIGNATURES = {
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "application/pdf": (b"%PDF-",),
+    "application/msword": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
+}
+_ZIP_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_HEADER_BYTES = 1024
+
+
+def _matches_declared_type(content_type: str, header: bytes) -> bool:
+    """Whether the first bytes are consistent with the declared content type.
+
+    Text formats have no magic number; they must at least be NUL-free. Binary
+    formats must carry their expected signature (ZIP-based Office documents use
+    the ZIP signature). This deliberately does not attempt full document
+    parsing or malware detection.
+    """
+    if content_type in _TEXT_CONTENT_TYPES:
+        return b"\x00" not in header
+
+    if content_type == "image/webp":
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP"
+
+    if content_type in _ZIP_CONTENT_TYPES:
+        return any(header.startswith(signature) for signature in _ZIP_SIGNATURES)
+
+    signatures = _MAGIC_SIGNATURES.get(content_type, ())
+    return bool(signatures) and any(
+        header.startswith(signature) for signature in signatures
+    )
+
 
 def _upload_root() -> Path:
     root = Path(settings.UPLOAD_DIR).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _quarantine_root() -> Path:
+    """Staging area that is never reachable through the download endpoint."""
+    root = _upload_root() / ".quarantine"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -78,8 +139,10 @@ async def upload_attachment(
     session: session_Dependency,
     user: user_dependency,
     file: Annotated[UploadFile, File()],
+    scanner: Annotated[MalwareScanner, Depends(get_malware_scanner)],
+    _rate_limit: Annotated[None, Depends(rate_limit("attachment_upload"))],
 ) -> Attachment:
-    """Upload a file and store its metadata against the ticket."""
+    """Upload, quarantine, scan, and only then publish an attachment."""
     await load_visible_ticket(session, ticket_id, user)
 
     content_type = file.content_type or "application/octet-stream"
@@ -92,10 +155,27 @@ async def upload_attachment(
     original_filename = _safe_display_name(file.filename)
     storage_key = f"{uuid.uuid4().hex}-{original_filename}"
     destination = _upload_root() / storage_key
+    quarantined = _quarantine_root() / storage_key
 
     size = 0
+    moved = False
     try:
-        with destination.open("wb") as out:
+        header = await file.read(_HEADER_BYTES)
+        if not _matches_declared_type(content_type, header):
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="File content does not match the declared content type",
+            )
+
+        size = len(header)
+        if size > settings.MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="File is too large",
+            )
+
+        with quarantined.open("wb") as out:
+            out.write(header)
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
                 if size > settings.MAX_UPLOAD_BYTES:
@@ -104,8 +184,42 @@ async def upload_attachment(
                         detail="File is too large",
                     )
                 out.write(chunk)
+
+        try:
+            scan = await scanner.scan(quarantined)
+        except ScannerError as exc:
+            logger.warning("Attachment scanner unavailable: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Attachment scanning is temporarily unavailable",
+                headers={"Retry-After": "5"},
+            ) from None
+
+        if scan.status is AttachmentScanStatus.INFECTED:
+            logger.warning("Rejected an infected attachment (%s)", scan.detail)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="File failed malware scanning",
+            )
+        if scan.status is not AttachmentScanStatus.CLEAN:
+            # A scanner must explicitly say CLEAN. PENDING/unknown is a failure.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Attachment scanning did not return a clean result",
+                headers={"Retry-After": "5"},
+            )
+
+        os.replace(quarantined, destination)
+        moved = True
     except HTTPException:
-        destination.unlink(missing_ok=True)
+        quarantined.unlink(missing_ok=True)
+        if moved:
+            destination.unlink(missing_ok=True)
+        raise
+    except Exception:
+        quarantined.unlink(missing_ok=True)
+        if moved:
+            destination.unlink(missing_ok=True)
         raise
     finally:
         await file.close()
@@ -117,6 +231,7 @@ async def upload_attachment(
         storage_key=storage_key,
         content_type=content_type,
         size_bytes=size,
+        scan_status=AttachmentScanStatus.CLEAN,
     )
     session.add(attachment)
     try:
@@ -155,10 +270,23 @@ async def download_attachment(
             detail="Attachment file not found",
         )
 
+    if attachment.scan_status is AttachmentScanStatus.INFECTED:
+        # Do not confirm an infected file's existence or serve its bytes.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment file not found",
+        )
+    if attachment.scan_status is not AttachmentScanStatus.CLEAN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Attachment is still awaiting a clean malware scan",
+        )
+
     # FileResponse with a filename sends Content-Disposition: attachment, so
     # the browser downloads the file instead of rendering it inline.
     return FileResponse(
         path=path,
         media_type=attachment.content_type,
         filename=attachment.original_filename,
+        headers={"X-Content-Type-Options": "nosniff"},
     )

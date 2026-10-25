@@ -197,14 +197,12 @@ async def test_seed_is_idempotent(seeded, factory):
 async def test_seed_exact_user_composition(seeded, factory):
     assert await _count(factory, User) == 100
     async with factory() as session:
-        by_role = {
-            role: count
-            for role, count in (
-                await session.exec(
-                    select(User.role, func.count(User.id)).group_by(User.role)
-                )
-            ).all()
-        }
+        role_rows = (
+            await session.exec(
+                select(User.role, func.count(User.id)).group_by(User.role)
+            )
+        ).all()
+        by_role = dict(role_rows)
     assert by_role[Role.OWNER] == 1
     assert by_role[Role.ADMIN] == 5
     assert by_role[Role.AGENT] == 15
@@ -429,7 +427,7 @@ async def test_seed_account_requests_cover_states(seeded, factory):
     async with factory() as session:
         requests = (await session.exec(select(AccountManagementRequest))).all()
         events = (await session.exec(select(AccountRequestEvent))).all()
-        target_ids = {row for row in (await session.exec(select(User.id))).all()}
+        target_ids = set((await session.exec(select(User.id))).all())
     assert len(requests) >= 10
     states = {r.status for r in requests}
     assert len(states) >= 3

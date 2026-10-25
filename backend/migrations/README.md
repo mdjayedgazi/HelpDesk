@@ -20,6 +20,19 @@ virtual environment active (for example `uv run alembic ...` or
    alembic upgrade head
    ```
 
+## Recent data-affecting migrations
+
+- `0008_ticket_number_not_null` backfills legacy NULL ticket numbers above the
+  current maximum, takes a PostgreSQL `ACCESS EXCLUSIVE` lock during the
+  backfill, then sets `NOT NULL`. Take a backup and run it in staging first.
+- `0009_attachment_scan_status` adds a non-null `scan_status` enum with a
+  `PENDING` default. Existing attachments are **not** marked clean and are not
+  downloadable until `python -m app.commands.scan_attachments` is run with a
+  configured ClamAV daemon.
+
+Both migrations have been validated only against disposable PostgreSQL
+databases; they have not been applied to a persistent or production database.
+
 ## Inspect the current revision
 
 ```bash

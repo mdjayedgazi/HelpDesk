@@ -1,3 +1,4 @@
+import ipaddress
 import json
 from typing import Annotated
 
@@ -83,6 +84,60 @@ class Settings(BaseSettings):
     # Where uploaded attachment files are stored, and the maximum size.
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024  # 5 MiB
+
+    # Malware scanning. Uploads are rejected (fail closed) unless a ClamAV
+    # daemon is explicitly configured. Magic-byte checks are not malware
+    # scanning and are never treated as a clean result.
+    MALWARE_SCAN_ENABLED: bool = False
+    CLAMAV_HOST: str | None = None
+    CLAMAV_PORT: int = 3310
+    CLAMAV_TIMEOUT_SECONDS: float = 10.0
+
+    # Distributed rate limiting. Disabled by default because enabling it
+    # without a shared Redis instance would give a false sense of protection.
+    # When enabled, an unavailable Redis fails closed with 503 rather than
+    # silently allowing unlimited traffic.
+    RATE_LIMIT_ENABLED: bool = False
+    RATE_LIMIT_REDIS_URL: str | None = None
+    RATE_LIMIT_REDIS_TIMEOUT_SECONDS: float = 0.5
+    # Only these direct peers may supply X-Forwarded-For. An empty list means
+    # the header is ignored and the TCP peer address is used.
+    RATE_LIMIT_TRUSTED_PROXIES: Annotated[list[str], NoDecode] = []
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_ACCOUNT_REQUEST_WINDOW_SECONDS: int = 3600
+    RATE_LIMIT_TICKET_CREATE: int = 10
+    RATE_LIMIT_COMMENT_CREATE: int = 30
+    RATE_LIMIT_ATTACHMENT_UPLOAD: int = 20
+    RATE_LIMIT_FEEDBACK_CREATE: int = 10
+    RATE_LIMIT_ACCOUNT_REQUEST_CREATE: int = 10
+    RATE_LIMIT_ACCOUNT_REQUEST_COMMENT: int = 30
+    RATE_LIMIT_STAFF_MESSAGE_CREATE: int = 60
+    RATE_LIMIT_INTERNAL_MESSAGE_CREATE: int = 20
+
+    @field_validator("RATE_LIMIT_TRUSTED_PROXIES", mode="before")
+    @classmethod
+    def _parse_trusted_proxies(cls, value: object) -> object:
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            values = (
+                json.loads(text)
+                if text.startswith("[")
+                else [item.strip() for item in text.split(",") if item.strip()]
+            )
+        elif isinstance(value, (list, tuple)):
+            values = list(value)
+        else:
+            return value
+
+        parsed: list[str] = []
+        for item in values:
+            if not isinstance(item, str):
+                raise TypeError("RATE_LIMIT_TRUSTED_PROXIES entries must be strings")
+            network = ipaddress.ip_network(item.strip(), strict=False)
+            parsed.append(str(network))
+        return parsed
 
     model_config = SettingsConfigDict(
         env_file=".env",

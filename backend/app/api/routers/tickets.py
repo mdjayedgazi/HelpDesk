@@ -1,9 +1,9 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
@@ -16,6 +16,7 @@ from app.core.auth import (
     user_dependency,
 )
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import (
     NotificationType,
     Role,
@@ -66,6 +67,7 @@ async def create_ticket(
     payload: TicketCreate,
     session: session_Dependency,
     customer: customer_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("ticket_create"))],
 ) -> Ticket:
     """Open a new ticket. Customer-only; the owner is the authenticated user.
 
@@ -340,7 +342,7 @@ async def claim_ticket(
         )
 
     ticket.assignee_user_id = agent.id
-    ticket.assigned_at = datetime.now(timezone.utc)
+    ticket.assigned_at = datetime.now(UTC)
     record_history(
         session,
         ticket=ticket,
@@ -423,7 +425,7 @@ def _set_status(ticket: Ticket, new_status: TicketStatus) -> None:
     if new_status == ticket.status:
         return
     if new_status == TicketStatus.RESOLVED:
-        ticket.resolved_at = datetime.now(timezone.utc)
+        ticket.resolved_at = datetime.now(UTC)
     elif ticket.status == TicketStatus.RESOLVED:
         ticket.resolved_at = None
     ticket.status = new_status
@@ -459,9 +461,7 @@ async def _set_assignee(
     # ``assigned_at`` drives the fairness tie-break of the automatic
     # assignment service: it is set on every assignment and cleared on
     # unassignment so "last assigned" always reflects reality.
-    ticket.assigned_at = (
-        datetime.now(timezone.utc) if assignee_user_id is not None else None
-    )
+    ticket.assigned_at = datetime.now(UTC) if assignee_user_id is not None else None
 
     if actor is not None:
         record_history(
@@ -714,7 +714,7 @@ async def _try_auto_assign(session, ticket: Ticket, actor: User) -> bool:
                 return False
 
             ticket.assignee_user_id = decision.agent_id
-            ticket.assigned_at = datetime.now(timezone.utc)
+            ticket.assigned_at = datetime.now(UTC)
             session.add(ticket)
 
             record_history(

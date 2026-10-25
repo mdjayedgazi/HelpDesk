@@ -2,13 +2,13 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query
+from sqlmodel import select
 
 from app.core.auth import staff_dependency
 from app.core.database import session_Dependency
 from app.models.ticketHistory import TicketHistory
 from app.schemas.ticketHistorys import TicketHistoryRead
 from app.services.tickets import load_visible_ticket
-from sqlmodel import select
 
 router = APIRouter(
     prefix="/api/v1/tickets/{ticket_id}/history",
