@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 
 import { useUnreadNotificationCount } from '../hooks/useNotifications.ts'
 import { endpoints } from '../lib/api.ts'
+import { unseenNotifications } from '../lib/notificationLogic.ts'
 import { queryKeys } from '../lib/queryKeys.ts'
 import type { Notification } from '../lib/types.ts'
 import { useApi } from '../lib/useApi.ts'
@@ -82,9 +83,7 @@ export function NewNotificationWatcher() {
 
     const arrivals = count - previous
     lastCount.current = count
-    const fresh = items
-      .filter((item) => !seenIds.current!.has(item.id))
-      .slice(0, arrivals)
+    const fresh = unseenNotifications(items, seenIds.current, arrivals)
     for (const item of items) seenIds.current.add(item.id)
 
     if (fresh.length === 0) return

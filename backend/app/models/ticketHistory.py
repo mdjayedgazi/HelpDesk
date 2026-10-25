@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Column, DateTime, func
 from sqlmodel import Field, Relationship, SQLModel
@@ -22,7 +22,7 @@ class TicketHistory(SQLModel, table=True):
     new_value: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},

@@ -39,7 +39,6 @@ const schema = z.object({
     .min(2, 'Username must be at least 2 characters')
     .max(90, 'Username must be 90 characters or fewer')
     .regex(/^[A-Za-z0-9_.-]+$/, 'Use letters, numbers, dots, dashes or underscores'),
-  email: z.string().trim().min(1, 'Email is required').email('Enter a valid email address'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -60,13 +59,12 @@ export function AdminUserDetailPage() {
     return {
       full_name: user.data.full_name,
       username: user.data.username,
-      email: user.data.email,
     }
   }, [user.data])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: '', username: '', email: '' },
+    defaultValues: { full_name: '', username: '' },
     values,
   })
 
@@ -194,10 +192,17 @@ export function AdminUserDetailPage() {
               <FormField
                 label='Email'
                 htmlFor='email'
-                required
-                error={form.formState.errors.email?.message}
+                helperText='Managed by Clerk. The local address is synchronised from the verified Clerk identity and cannot be edited here.'
               >
-                <TextInput id='email' type='email' {...form.register('email')} />
+                <TextInput
+                  id='email'
+                  type='email'
+                  value={account.email}
+                  readOnly
+                  aria-readonly='true'
+                  bg={palette.surfaceMuted}
+                  color={palette.textSecondary}
+                />
               </FormField>
               <Flex gap='2'>
                 <Button

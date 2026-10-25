@@ -1,6 +1,8 @@
 import pytest
+from sqlmodel import select
 
 from app.enums.enums import Role
+from app.models.user import User
 
 
 @pytest.mark.asyncio
@@ -52,6 +54,87 @@ async def test_patch_me_duplicate_username_conflict(client, make_user):
         json={"username": "taken"},
     )
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_patch_me_rejects_another_users_email(client, make_user, session_factory):
+    """An authenticated user cannot claim another account's email address."""
+    victim = await make_user(username="victim", email="victim@example.com")
+    attacker = await make_user(username="attacker", email="attacker@example.com")
+
+    response = await client.patch(
+        "/api/v1/users/me",
+        headers={"X-Test-User": attacker.username},
+        json={"email": victim.email},
+    )
+    assert response.status_code == 422
+    assert "managed by Clerk" in response.json()["detail"]
+
+    async with session_factory() as session:
+        attacker_row = await session.get(User, attacker.id)
+        victim_row = await session.get(User, victim.id)
+        assert attacker_row is not None and victim_row is not None
+        assert attacker_row.email == "attacker@example.com"
+        assert victim_row.email == "victim@example.com"
+        assert victim_row.clerk_id == f"test_{victim.username}"
+
+
+@pytest.mark.asyncio
+async def test_patch_me_rejects_unclaimed_email(client, make_user, session_factory):
+    """Even an unused address cannot be pre-claimed through the profile API."""
+    attacker = await make_user(username="squatter", email="squatter@example.com")
+
+    response = await client.patch(
+        "/api/v1/users/me",
+        headers={"X-Test-User": attacker.username},
+        json={"email": "future.person@example.com"},
+    )
+    assert response.status_code == 422
+
+    async with session_factory() as session:
+        stored = await session.get(User, attacker.id)
+        assert stored is not None
+        assert stored.email == "squatter@example.com"
+        preclaimed = (
+            await session.exec(
+                select(User).where(User.email == "future.person@example.com")
+            )
+        ).first()
+        assert preclaimed is None
+
+
+@pytest.mark.asyncio
+async def test_patch_me_allows_unchanged_email_with_profile_update(client, make_user):
+    """Older clients may submit the whole form; an unchanged email is a no-op."""
+    user = await make_user()
+    response = await client.patch(
+        "/api/v1/users/me",
+        headers={"X-Test-User": user.username},
+        json={"full_name": "Updated Name", "email": user.email.upper()},
+    )
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Updated Name"
+    assert response.json()["email"] == user.email
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_change_a_users_email(client, make_user):
+    """Email stays Clerk-authoritative even for the Owner's management API."""
+    owner = await make_user(role=Role.OWNER)
+    target = await make_user(username="managed", email="managed@example.com")
+
+    response = await client.patch(
+        f"/api/v1/users/{target.id}",
+        headers={"X-Test-User": owner.username},
+        json={"email": "replacement@example.com"},
+    )
+    assert response.status_code == 422
+    assert "managed by Clerk" in response.json()["detail"]
+
+    detail = await client.get(
+        f"/api/v1/users/{target.id}", headers={"X-Test-User": owner.username}
+    )
+    assert detail.json()["email"] == "managed@example.com"
 
 
 @pytest.mark.asyncio

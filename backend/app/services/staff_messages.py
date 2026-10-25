@@ -7,7 +7,7 @@ user is a participant of the conversation being touched.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
@@ -159,7 +159,7 @@ def send_message(
     )
     session.add(message)
 
-    conversation.last_message_at = datetime.now(timezone.utc)
+    conversation.last_message_at = datetime.now(UTC)
     session.add(conversation)
 
     if sender.id == conversation.owner_user_id:
@@ -201,7 +201,7 @@ async def mark_conversation_read(
         StaffMessage.read_at.is_(None),
     )
     rows = (await session.exec(statement)).all()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for row in rows:
         row.read_at = now
         session.add(row)

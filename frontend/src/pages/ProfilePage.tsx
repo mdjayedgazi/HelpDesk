@@ -29,7 +29,6 @@ const schema = z.object({
     .min(2, 'Username must be at least 2 characters')
     .max(90, 'Username must be 90 characters or fewer')
     .regex(/^[A-Za-z0-9_.-]+$/, 'Use letters, numbers, dots, dashes or underscores'),
-  email: z.string().trim().min(1, 'Email is required').email('Enter a valid email address'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -43,13 +42,12 @@ export function ProfilePage() {
     return {
       full_name: me.data.full_name,
       username: me.data.username,
-      email: me.data.email,
     }
   }, [me.data])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: '', username: '', email: '' },
+    defaultValues: { full_name: '', username: '' },
     values,
   })
 
@@ -92,7 +90,7 @@ export function ProfilePage() {
     <>
       <PageHeader
         title='Profile'
-        description='Manage how your name and contact details appear across HelpDesk.'
+        description='Manage your display name and username. Your sign-in email is managed by Clerk.'
       />
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} gap='6' alignItems='start'>
@@ -121,15 +119,17 @@ export function ProfilePage() {
               <FormField
                 label='Email'
                 htmlFor='email'
-                required
-                error={form.formState.errors.email?.message}
-                helperText='Your sign-in email is managed by Clerk. Updating it here changes your HelpDesk contact email.'
+                helperText='Managed by Clerk. Change your primary email in your Clerk account, then sign in again.'
               >
                 <TextInput
                   id='email'
                   type='email'
                   autoComplete='email'
-                  {...form.register('email')}
+                  value={profile.email}
+                  readOnly
+                  aria-readonly='true'
+                  bg={palette.surfaceMuted}
+                  color={palette.textSecondary}
                 />
               </FormField>
 

@@ -156,6 +156,7 @@ export interface Attachment {
   original_filename: string
   content_type: string
   size_bytes: number
+  scan_status: 'PENDING' | 'CLEAN' | 'INFECTED'
   created_at: string
 }
 
@@ -443,13 +444,11 @@ export interface CommentCreateInput {
 export interface ProfileUpdateInput {
   full_name?: string
   username?: string
-  email?: string
 }
 
 export interface AdminUserUpdateInput {
   full_name?: string
   username?: string
-  email?: string
   role?: Role
   is_active?: boolean
 }

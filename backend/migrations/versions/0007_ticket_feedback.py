@@ -41,16 +41,16 @@ place: PostgreSQL cannot remove an enum value without rebuilding the shared
 type, and no existing row is ever rewritten.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0007_ticket_feedback"
-down_revision: Union[str, None] = "0006_internal_messages"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0006_internal_messages"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 # Labels appended to the existing shared notificationtype enum.

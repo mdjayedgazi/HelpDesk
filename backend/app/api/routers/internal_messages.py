@@ -21,12 +21,13 @@ Authorization (enforced in the backend, not only by hiding UI):
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, cast, func, or_
 from sqlmodel import select
 
 from app.core.auth import owner_dependency, staff_dependency
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import InternalAudience, Role
 from app.models.internal_message import InternalMessage, InternalMessageRecipient
 from app.models.user import User
@@ -61,7 +62,7 @@ async def _read_counts(session, message_ids: list[uuid.UUID]) -> dict[uuid.UUID,
         )
         .group_by(InternalMessageRecipient.message_id)
     )
-    return {message_id: count for message_id, count in rows.all()}
+    return dict(rows.all())
 
 
 def _summary(message: InternalMessage, read_count: int) -> InternalMessageSummary:
@@ -129,6 +130,7 @@ async def compose_message(
     payload: InternalMessageCreate,
     session: session_Dependency,
     owner: owner_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("internal_message_create"))],
 ) -> InternalMessageSummary:
     """Compose and send an internal message. Owner-only.
 

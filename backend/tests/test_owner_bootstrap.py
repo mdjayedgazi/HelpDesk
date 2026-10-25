@@ -15,7 +15,6 @@ from app.commands.bootstrap_owner import BootstrapError, promote_owner
 from app.enums.enums import Role
 from app.models.user import User
 
-
 # --------------------------------------------------------------------------- #
 # Clerk fakes
 # --------------------------------------------------------------------------- #

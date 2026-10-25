@@ -22,15 +22,15 @@ restricted to ``is_active``: at most one row may hold the OWNER role at all.
 Downgrade simply drops the index; it never changes any user's role.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0003_single_owner_index"
-down_revision: Union[str, None] = "0002_owner_role"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0002_owner_role"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

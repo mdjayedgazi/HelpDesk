@@ -15,7 +15,7 @@ to ``users.id``; role checks happen in the application layer on every request
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import CheckConstraint, DateTime, Index, Text, func
 from sqlmodel import Field, SQLModel
@@ -38,13 +38,13 @@ class StaffConversation(SQLModel, table=True):
     owner_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
     subject: str = Field(max_length=180, nullable=False)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()},
@@ -70,7 +70,7 @@ class StaffMessage(SQLModel, table=True):
     # Explicit ``Text`` matches the migration DDL exactly (see comment.py).
     body: str = Field(nullable=False, sa_type=Text)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},

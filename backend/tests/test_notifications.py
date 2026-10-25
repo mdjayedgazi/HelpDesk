@@ -7,8 +7,8 @@ from app.enums.enums import Role
 async def test_notifications_are_per_user(
     client, make_user, make_ticket, session_factory
 ):
-    from app.services.notifications import create_notification
     from app.enums.enums import NotificationType
+    from app.services.notifications import create_notification
 
     owner = await make_user()
     other = await make_user()

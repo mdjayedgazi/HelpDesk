@@ -44,7 +44,7 @@ import os
 import sys
 import urllib.parse
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import func, or_, text
@@ -52,7 +52,13 @@ from sqlmodel import select
 
 from app.core.config import settings
 from app.core.database import async_session, engine
-from app.enums.enums import NotificationType, Role, TicketPriority, TicketStatus
+from app.enums.enums import (
+    AttachmentScanStatus,
+    NotificationType,
+    Role,
+    TicketPriority,
+    TicketStatus,
+)
 from app.models import (
     Attachment,
     Comment,
@@ -82,7 +88,7 @@ _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, f"https://helpdesk.qa.local/neon/{MARKER}")
 
-_BASE = datetime(2026, 10, 18, 6, 0, tzinfo=timezone.utc)
+_BASE = datetime(2026, 10, 18, 6, 0, tzinfo=UTC)
 
 
 class SeedRefused(RuntimeError):
@@ -873,6 +879,7 @@ async def _seed_attachments(
                 storage_key=storage_key,
                 content_type=spec["content_type"],
                 size_bytes=len(spec["content"]),
+                scan_status=AttachmentScanStatus.CLEAN,
                 created_at=_at(spec["at"]),
             )
         )
@@ -942,7 +949,7 @@ async def seed(upload_root: Path) -> dict:
             )
             history_counts = await _seed_history(session, users, tickets_map)
             notif_counts = await _seed_notifications(session, users, tickets_map)
-            attach_counts, created_files, attach_collisions = await _seed_attachments(
+            attach_counts, created_files, _attach_collisions = await _seed_attachments(
                 session, users, tickets_map, upload_root
             )
 
@@ -1140,9 +1147,7 @@ async def read_manifest() -> dict:
                     "storage_key": row.storage_key,
                     "content_type": row.content_type,
                     "size_bytes": row.size_bytes,
-                    "path": str(
-                        (Path(settings.UPLOAD_DIR).resolve() / row.storage_key)
-                    ),
+                    "path": str(Path(settings.UPLOAD_DIR).resolve() / row.storage_key),
                 }
             )
     return manifest

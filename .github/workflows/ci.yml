@@ -1,0 +1,199 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend lint and SQLite tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Optional integration test for the Redis rate-limit store. The service
+      # is disposable and never a project/production Redis instance.
+      HD_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13.1"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen --group dev
+
+      - name: Ruff lint
+        working-directory: backend
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        working-directory: backend
+        run: uv run ruff format --check .
+
+      - name: pytest (SQLite; PostgreSQL suites skip)
+        working-directory: backend
+        run: uv run pytest -q
+
+  frontend:
+    name: Frontend typecheck, lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Use the project's npm version
+        run: npm install --global npm@12.2.0
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+  migrations:
+    name: Alembic migrations (disposable PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: verify
+          POSTGRES_PASSWORD: verify
+          POSTGRES_DB: migrate_verify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verify -d migrate_verify"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/migrate_verify
+      CLERK_SECRET_KEY: sk_test_dummy
+      AUTO_CREATE_TABLES: "false"
+      UPLOAD_DIR: /tmp/helpdesk-ci-uploads
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13.1"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen --group dev
+
+      - name: Upgrade to head
+        working-directory: backend
+        run: uv run alembic upgrade head
+
+      - name: Verify current revision
+        working-directory: backend
+        run: uv run alembic current
+
+      - name: Exercise 0009 downgrade and re-upgrade
+        working-directory: backend
+        run: |
+          uv run alembic downgrade 0008_ticket_number_not_null
+          uv run alembic upgrade head
+
+  postgres-integration:
+    name: PostgreSQL integration tests (disposable service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: verify
+          POSTGRES_PASSWORD: verify
+          POSTGRES_DB: hdverify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verify -d hdverify"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The test modules refuse anything whose database name does not contain
+      # "test", "verify" or "ci". These are throw-away service databases.
+      HD_TEST_POSTGRES_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/hdverify
+      HD_DEMO_SEED_POSTGRES_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/helpdesk_demo_verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13.1"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen --group dev
+
+      - name: Create the dedicated demo-seed database
+        run: >-
+          docker exec ${{ job.services.postgres.id }}
+          createdb -U verify helpdesk_demo_verify
+
+      - name: PostgreSQL suites
+        working-directory: backend
+        run: >-
+          uv run pytest -q
+          tests/test_postgres_integration.py
+          tests/test_support_workflows_postgres.py
+          tests/test_internal_messages_postgres.py
+          tests/test_qa_seed_postgres.py
+
+      - name: Demo seed suite (dedicated empty database)
+        working-directory: backend
+        run: uv run pytest -q tests/test_demo_seed_postgres.py

@@ -92,6 +92,19 @@ class EscalationCategory(str, Enum):
     OTHER = "OTHER"
 
 
+class AttachmentScanStatus(str, Enum):
+    """Malware-scan lifecycle for an uploaded attachment.
+
+    ``PENDING`` is the safe default for rows created before scanning existed
+    or while a scan is in progress. Only ``CLEAN`` may be downloaded;
+    ``INFECTED`` files are never served.
+    """
+
+    PENDING = "PENDING"
+    CLEAN = "CLEAN"
+    INFECTED = "INFECTED"
+
+
 class InternalAudience(str, Enum):
     """Who an Owner-composed internal message is addressed to.
 

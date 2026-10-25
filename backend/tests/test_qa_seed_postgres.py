@@ -9,7 +9,6 @@ the single-OWNER partial unique index.
 
 import os
 import uuid
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -22,6 +21,8 @@ from app.commands.seed_qa_data import (
     assert_safe_target,
     personas,
     seed,
+)
+from app.commands.seed_qa_data import (
     tickets as seed_tickets,
 )
 from app.core.database import _normalize_database_url
@@ -81,13 +82,8 @@ async def test_seed_is_idempotent(seeded, factory):
 
 async def test_seed_covers_every_status_and_priority(seeded, factory):
     async with factory() as session:
-        statuses = {
-            row for row in (await session.exec(select(Ticket.status).distinct())).all()
-        }
-        priorities = {
-            row
-            for row in (await session.exec(select(Ticket.priority).distinct())).all()
-        }
+        statuses = set((await session.exec(select(Ticket.status).distinct())).all())
+        priorities = set((await session.exec(select(Ticket.priority).distinct())).all())
     assert statuses == set(TicketStatus)
     assert priorities == set(TicketPriority)
 
@@ -146,12 +142,9 @@ async def test_seed_attachment_metadata_is_valid(seeded, factory, tmp_path):
 
 async def test_seed_history_covers_key_events(seeded, factory):
     async with factory() as session:
-        events = {
-            row
-            for row in (
-                await session.exec(select(TicketHistory.event_type).distinct())
-            ).all()
-        }
+        events = set(
+            (await session.exec(select(TicketHistory.event_type).distinct())).all()
+        )
     assert {
         "TICKET_CREATED",
         "TICKET_ASSIGNED",
