@@ -20,6 +20,13 @@ async def _count(session_factory, model) -> int:
         return (await session.exec(select(func.count()).select_from(model))).one()
 
 
+def test_ticket_number_is_required_by_model_and_schema():
+    """F-10: the invariant is enforced at the model and database layer."""
+    field = Ticket.model_fields["ticket_number"]
+    assert field.is_required()
+    assert Ticket.__table__.c.ticket_number.nullable is False
+
+
 @pytest.mark.asyncio
 async def test_normal_creation_writes_a_single_ticket_and_history(
     client, make_user, session_factory

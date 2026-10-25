@@ -15,13 +15,14 @@ Authorization summary (enforced here, in the backend, not just in the UI):
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import exists, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from app.core.auth import staff_dependency
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import Role
 from app.models.staff_message import StaffConversation, StaffMessage
 from app.models.user import User
@@ -195,6 +196,7 @@ async def post_message(
     payload: StaffMessageCreate,
     session: session_Dependency,
     staff: staff_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("staff_message_create"))],
 ) -> StaffMessageRead:
     """Send a private message. Participants only; the recipient is derived
     from the conversation, never from the request body."""

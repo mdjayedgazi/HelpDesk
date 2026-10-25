@@ -10,11 +10,10 @@ from sqlalchemy.ext.asyncio import (
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.config import settings
-
 # Importing the models package registers every table on SQLModel.metadata.
 # Without this, create_all() would not know about any of our tables.
 import app.models  # noqa: F401  (imported for its side effect)
+from app.core.config import settings
 
 
 def _normalize_database_url(url: str) -> str:
@@ -54,7 +53,7 @@ async_session = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db() -> AsyncGenerator[AsyncSession]:
     async with async_session() as session:
         yield session
 

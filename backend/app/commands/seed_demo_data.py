@@ -57,7 +57,7 @@ import sys
 import urllib.parse
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import func, or_, text
@@ -66,6 +66,7 @@ from sqlmodel import select
 from app.core.config import settings
 from app.core.database import async_session
 from app.enums.enums import (
+    AttachmentScanStatus,
     EscalationCategory,
     EscalationStatus,
     InternalAudience,
@@ -115,7 +116,7 @@ _NAMESPACE = uuid.uuid5(
     uuid.NAMESPACE_URL, f"https://helpdesk.demo.local/neon/{MARKER}"
 )
 
-_BASE = datetime(2026, 8, 15, 7, 0, tzinfo=timezone.utc)
+_BASE = datetime(2026, 8, 15, 7, 0, tzinfo=UTC)
 
 # Distribution of the 99 demo users (the 100th is the preserved Owner).
 N_ADMINS = 5
@@ -604,10 +605,7 @@ def ticket_specs(users: list[UserSpec]) -> list[dict]:
         customer = customers[(i * 11) % len(customers)]
         # Balanced deterministic spread across agents. Every 7th ticket is
         # left unassigned to model the "needs assignment" queue.
-        if i % 7 == 0:
-            agent_key = None
-        else:
-            agent_key = agents[(i * 7) % len(agents)].key
+        agent_key = None if i % 7 == 0 else agents[(i * 7) % len(agents)].key
         created = 30 + i * 37
         hours_open = 1 + (i % 72)
         specs.append(
@@ -1618,6 +1616,7 @@ async def _seed_attachments(
                 storage_key=storage_key,
                 content_type=spec["content_type"],
                 size_bytes=len(spec["content"]),
+                scan_status=AttachmentScanStatus.CLEAN,
                 created_at=_at(spec["at"]),
             )
         )

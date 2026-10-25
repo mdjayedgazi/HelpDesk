@@ -21,7 +21,7 @@ def _valid_email(value: str) -> str:
     send mail).
     """
     if not isinstance(value, str):  # pragma: no cover - defensive
-        raise ValueError("Email address must be a string")
+        raise TypeError("Email address must be a string")
     try:
         validate_email(value, check_deliverability=False, test_environment=True)
     except EmailSyntaxError as exc:
@@ -37,7 +37,13 @@ EmailAddress = Annotated[str, AfterValidator(_valid_email)]
 
 
 class UserUpdate(SQLModel):
-    """Fields a user may change on their own profile (GET/PATCH /users/me)."""
+    """Fields a user may change on their own profile (GET/PATCH /users/me).
+
+    ``email`` is accepted only so a client that submits the whole profile can
+    be rejected with a clear 422 instead of silently changing identity. The
+    router refuses any value that differs from the stored address; Clerk remains
+    the authoritative source of the verified email.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

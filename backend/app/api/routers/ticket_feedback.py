@@ -15,11 +15,13 @@ reveals that another customer's ticket exists).
 """
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.auth import customer_dependency, user_dependency
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import Role
 from app.models.ticket import Ticket
 from app.models.user import User
@@ -83,6 +85,7 @@ async def create_ticket_feedback(
     payload: TicketFeedbackCreate,
     session: session_Dependency,
     customer: customer_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("feedback_create"))],
 ) -> TicketFeedbackRead:
     """Submit the one allowed feedback answer for the caller's resolved ticket.
 

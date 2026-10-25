@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, func, text
 from sqlmodel import Field, Relationship, SQLModel
@@ -43,7 +43,7 @@ class Notification(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("false")},
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},

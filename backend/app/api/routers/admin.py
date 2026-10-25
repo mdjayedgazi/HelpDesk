@@ -24,14 +24,14 @@ async def get_dashboard(
     status_rows = await session.exec(
         select(Ticket.status, func.count()).group_by(Ticket.status)
     )
-    tickets_by_status = {member: 0 for member in TicketStatus}
+    tickets_by_status = dict.fromkeys(TicketStatus, 0)
     for ticket_status, count in status_rows.all():
         tickets_by_status[ticket_status] = count
 
     priority_rows = await session.exec(
         select(Ticket.priority, func.count()).group_by(Ticket.priority)
     )
-    tickets_by_priority = {member: 0 for member in TicketPriority}
+    tickets_by_priority = dict.fromkeys(TicketPriority, 0)
     for ticket_priority, count in priority_rows.all():
         tickets_by_priority[ticket_priority] = count
 

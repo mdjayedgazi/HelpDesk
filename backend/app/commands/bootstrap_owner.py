@@ -111,7 +111,7 @@ async def promote_owner(session, *, clerk, configured_email: str | None) -> User
     try:
         await session.commit()
         await session.refresh(target)
-    except Exception:
+    except Exception:  # noqa: BLE001 - roll back any persistence failure safely
         await session.rollback()
         raise BootstrapError(
             "Could not persist the Owner role; no changes were applied."

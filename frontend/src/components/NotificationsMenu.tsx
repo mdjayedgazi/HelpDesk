@@ -20,6 +20,7 @@ import {
   useUpdateNotification,
 } from '../hooks/useNotifications.ts'
 import { errorMessage } from '../lib/errors.ts'
+import { formatUnreadBadge } from '../lib/notificationLogic.ts'
 import type { NotificationCategory } from '../lib/types.ts'
 import { palette } from '../theme/palette.ts'
 import { NotificationRow } from './NotificationRow.tsx'
@@ -29,12 +30,6 @@ type Filter = 'all' | 'unread'
 type Category = 'all' | NotificationCategory
 
 const RECENT_LIMIT = 20
-
-/** Cap the badge the way the panel header caps it: `12`, `99+`. */
-export function formatUnreadBadge(count: number): string | null {
-  if (count <= 0) return null
-  return count > 99 ? '99+' : String(count)
-}
 
 export function NotificationsMenu() {
   const navigate = useNavigate()

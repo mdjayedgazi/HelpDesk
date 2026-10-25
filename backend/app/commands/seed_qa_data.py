@@ -38,7 +38,7 @@ import logging
 import sys
 import urllib.parse
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import func
@@ -47,6 +47,7 @@ from sqlmodel import select
 from app.core.config import settings
 from app.core.database import async_session
 from app.enums.enums import (
+    AttachmentScanStatus,
     EscalationCategory,
     EscalationStatus,
     NotificationType,
@@ -140,7 +141,7 @@ def _uid(kind: str, key: str) -> uuid.UUID:
 
 
 # A fixed base timestamp keeps ordering and history stable across runs.
-_BASE = datetime(2026, 1, 5, 9, 0, tzinfo=timezone.utc)
+_BASE = datetime(2026, 1, 5, 9, 0, tzinfo=UTC)
 
 
 def _at(minutes: int) -> datetime:
@@ -1264,6 +1265,7 @@ async def _seed_attachments(
                     storage_key=storage_key,
                     content_type=spec["content_type"],
                     size_bytes=len(spec["content"]),
+                    scan_status=AttachmentScanStatus.CLEAN,
                     created_at=_at(spec["at"]),
                 )
             )

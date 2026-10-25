@@ -1,11 +1,11 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Index, Text, func, text
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.enums.enums import TicketCategory, TicketStatus, TicketPriority
+from app.enums.enums import TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User
 
 if TYPE_CHECKING:
@@ -27,11 +27,12 @@ class Ticket(SQLModel, table=True):
     # Human-friendly sequential number. It is assigned in the ticket service
     # (see app.services.tickets) so that it works on both PostgreSQL and the
     # SQLite database used by the tests. The unique index protects us from
-    # duplicates if two requests ever race.
-    ticket_number: int | None = Field(
-        default=None,
+    # duplicates if two requests ever race; the column is NOT NULL because the
+    # API contract and every creation path require it.
+    ticket_number: int = Field(
         unique=True,
         index=True,
+        nullable=False,
     )
     title: str = Field(max_length=180, nullable=False)
     # Explicit ``Text`` matches the migration DDL exactly (see comment.py).
@@ -65,13 +66,13 @@ class Ticket(SQLModel, table=True):
     # tie-break (oldest last assignment wins) and shown in the staff details.
     assigned_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()},
