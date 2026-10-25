@@ -16,7 +16,6 @@ from app.models.attachment import Attachment
 from app.models.notification import Notification
 from app.models.user import User
 
-
 # --------------------------------------------------------------------------- #
 # Authentication: lazy provisioning + linking (mocked Clerk)
 # --------------------------------------------------------------------------- #
@@ -102,6 +101,53 @@ async def test_unverified_email_is_rejected(client, monkeypatch):
 
     response = await client.get("/api/v1/users/me", headers={"X-Test-User": "someone"})
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_cannot_preclaim_an_email_and_block_verified_sign_in(
+    client, make_user, session_factory, monkeypatch
+):
+    """F-13 regression: a local PATCH must not squat a verified Clerk identity.
+
+    The victim's local profile is deliberately unlinked (``clerk_id is None``),
+    exactly like an account created by an earlier import/seed. The attacker
+    tries to claim the victim's address through the self-service profile route.
+    That must fail, and the victim's later verified Clerk sign-in must still link
+    the original profile instead of returning the 409 "linked to another
+    account" lockout.
+    """
+    victim = await make_user(username="victim_local", email="victim@example.com")
+    attacker = await make_user(username="attacker", email="attacker@example.com")
+
+    async with session_factory() as session:
+        victim_row = await session.get(User, victim.id)
+        assert victim_row is not None
+        victim_row.clerk_id = None
+        session.add(victim_row)
+        await session.commit()
+
+    attempt = await client.patch(
+        "/api/v1/users/me",
+        headers={"X-Test-User": attacker.username},
+        json={"email": "victim@example.com"},
+    )
+    assert attempt.status_code == 422
+
+    _patch_clerk(monkeypatch, "victim@example.com")
+    signed_in = await client.get(
+        "/api/v1/users/me", headers={"X-Test-User": "victim_login"}
+    )
+    assert signed_in.status_code == 200
+    assert signed_in.json()["id"] == str(victim.id)
+    assert signed_in.json()["email"] == "victim@example.com"
+
+    async with session_factory() as session:
+        linked = await session.get(User, victim.id)
+        assert linked is not None
+        assert linked.clerk_id == "test_victim_login"
+        stored_attacker = await session.get(User, attacker.id)
+        assert stored_attacker is not None
+        assert stored_attacker.email == "attacker@example.com"
 
 
 # --------------------------------------------------------------------------- #

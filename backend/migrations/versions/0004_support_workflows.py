@@ -49,16 +49,16 @@ value is ever modified.
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0004_support_workflows"
-down_revision: Union[str, None] = "0003_single_owner_index"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0003_single_owner_index"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 # ``create_type=False`` keeps the enum DDL out of ``op.add_column`` /

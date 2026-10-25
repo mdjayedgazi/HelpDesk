@@ -42,7 +42,7 @@ lock. No network request is ever made while the lock is held.
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, func, text
 from sqlmodel import select
@@ -126,7 +126,7 @@ def _timestamp(value: datetime | None, *, default: float) -> float:
     if value is None:
         return default
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     return value.timestamp()
 
 
@@ -223,7 +223,7 @@ async def workload_for_agents(
             resolved_sample_size=current.resolved_sample_size,
         )
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=RECENT_WINDOW_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=RECENT_WINDOW_DAYS)
     resolved_rows = await session.exec(
         select(
             Ticket.assignee_user_id,

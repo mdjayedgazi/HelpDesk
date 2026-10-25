@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -188,7 +188,7 @@ async def _sync_internal_message_reads(session, user_id, notifications) -> None:
             )
         )
     ).all()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for row in rows:
         row.read_at = now
         session.add(row)

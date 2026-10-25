@@ -684,6 +684,7 @@ function AttachmentsPanel({
   }
 
   const download = async (attachment: Attachment) => {
+    if (attachment.scan_status !== 'CLEAN') return
     setDownloadingId(attachment.id)
     try {
       const token = await getToken()
@@ -781,6 +782,7 @@ function AttachmentsPanel({
                           variant='ghost'
                           color={palette.textSecondary}
                           loading={downloadingId === attachment.id}
+                          disabled={attachment.scan_status !== 'CLEAN'}
                           onClick={() => void download(attachment)}
                           aria-label={`Download ${attachment.original_filename}`}
                         >
@@ -789,7 +791,13 @@ function AttachmentsPanel({
                       </Tooltip.Trigger>
                       <Portal>
                         <Tooltip.Positioner>
-                          <Tooltip.Content fontSize='xs'>Download</Tooltip.Content>
+                          <Tooltip.Content fontSize='xs'>
+                            {attachment.scan_status === 'CLEAN'
+                              ? 'Download'
+                              : attachment.scan_status === 'INFECTED'
+                                ? 'File unavailable'
+                                : 'Awaiting malware scan'}
+                          </Tooltip.Content>
                         </Tooltip.Positioner>
                       </Portal>
                     </Tooltip.Root>

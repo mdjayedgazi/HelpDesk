@@ -13,7 +13,6 @@ from sqlmodel import select
 from app.enums.enums import AssignableRole, Role
 from app.models.user import User
 
-
 # --------------------------------------------------------------------------- #
 # Directory access
 # --------------------------------------------------------------------------- #

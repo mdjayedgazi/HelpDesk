@@ -32,8 +32,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.database import _normalize_database_url, get_db
 from app.core.auth import require_auth
+from app.core.database import _normalize_database_url, get_db
 from app.enums.enums import Role, TicketPriority, TicketStatus
 from app.main import app
 from app.models import (  # noqa: F401  (registers every table on metadata)

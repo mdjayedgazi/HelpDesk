@@ -15,6 +15,7 @@ dependencies = [
     "pydantic[email]>=2.14.1",
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.32",
+    "redis>=6.0",
     "sqlalchemy[asyncio]==2.1.5",
     "sqlmodel>=0.0.47",
 ]
@@ -31,3 +32,49 @@ dev = [
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+# Explicit project policy (Ruff 0.17 changed its isolated defaults, so the gate
+# must not depend on tool defaults). Python 3.13 matches `.python-version`.
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+# High-signal correctness/import rules plus the specific families reviewed in
+# the audit: bugbear, blind exceptions, comprehension/string-concat
+# modernization, legacy naming, Ruff-native checks, simplification, and the
+# invalid-type exception rule.
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "BLE",
+    "C4",
+    "ISC",
+    "N999",
+    "RUF",
+    "SIM",
+    "TRY004",
+]
+# ``str, Enum`` is retained for the SQLModel/PostgreSQL enum columns; migrating
+# every enum to ``StrEnum`` is a separate compatibility change, not a lint fix.
+ignore = ["UP042"]
+
+[tool.ruff.lint.per-file-ignores]
+# The large, deterministic seed scripts intentionally use literal-heavy
+# ``dict(...)`` fixture blocks and adjacent string literals. Exempt only those
+# two stylistic rules; every other enabled rule still applies.
+"app/commands/seed_*.py" = ["C408", "ISC004"]
+# Legacy camelCase module names are part of the existing import surface. Renaming
+# them would touch many modules/migrations for no behavioral gain.
+"app/models/ticketHistory.py" = ["N999"]
+"app/schemas/ticketHistorys.py" = ["N999"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

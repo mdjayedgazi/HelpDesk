@@ -9,6 +9,7 @@
     "preview": "vp preview",
     "typecheck": "tsc --noEmit",
     "lint": "vp lint",
+    "test": "vp test run",
     "check": "vp check"
   },
   "dependencies": {
@@ -26,9 +27,12 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
+    "jsdom": "27.4.0",
     "tailwindcss": "4.3.3",
     "typescript": "~6.0.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.2.0",

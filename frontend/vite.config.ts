@@ -4,6 +4,12 @@ import { defineConfig } from 'vite-plus'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    restoreMocks: true,
+  },
   fmt: {
     semi: false,
     singleQuote: true,

@@ -420,15 +420,20 @@ async def test_reserved_test_domain_email_is_serialized(client, make_user):
 
 
 @pytest.mark.asyncio
-async def test_profile_update_accepts_reserved_domain(client, make_user):
+async def test_profile_update_rejects_email_change(client, make_user):
+    """Self-service email changes cannot pre-claim another identity.
+
+    Clerk is authoritative for email. The endpoint must reject the attempt even
+    when the address uses a syntactically reserved test domain.
+    """
     user = await make_user()
     response = await client.patch(
         "/api/v1/users/me",
         headers={"X-Test-User": user.username},
         json={"email": "new.address@example.test"},
     )
-    assert response.status_code == 200
-    assert response.json()["email"] == "new.address@example.test"
+    assert response.status_code == 422
+    assert "managed by Clerk" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

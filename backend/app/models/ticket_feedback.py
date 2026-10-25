@@ -19,7 +19,7 @@ working the ticket, and an administrative viewer.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import CheckConstraint, DateTime, Text, UniqueConstraint, func
 from sqlmodel import Field, SQLModel
@@ -46,7 +46,7 @@ class TicketFeedback(SQLModel, table=True):
     # Explicit ``Text`` matches the migration DDL exactly (see comment.py).
     comment: str | None = Field(default=None, sa_type=Text)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},

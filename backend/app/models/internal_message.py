@@ -17,7 +17,7 @@ Nothing here is customer-visible: the API only exposes a row to the Owner
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     CheckConstraint,
@@ -63,7 +63,7 @@ class InternalMessage(SQLModel, table=True):
     # with the recipient rows in the same transaction.
     recipient_count: int = Field(nullable=False)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},
@@ -97,7 +97,7 @@ class InternalMessageRecipient(SQLModel, table=True):
     recipient_full_name_snapshot: str = Field(max_length=120, nullable=False)
     recipient_email_snapshot: str = Field(max_length=255, nullable=False)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         nullable=False,
         sa_column_kwargs={"server_default": func.now()},

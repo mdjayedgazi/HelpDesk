@@ -6,34 +6,34 @@ The import order matters: dependent models are imported after the models
 they reference.
 """
 
-from app.models.user import User
-from app.models.ticket import Ticket
-from app.models.comment import Comment
-from app.models.attachment import Attachment
-from app.models.notification import Notification
-from app.models.ticketHistory import TicketHistory
-from app.models.staff_message import StaffConversation, StaffMessage
 from app.models.account_request import (
     AccountManagementRequest,
     AccountRequestComment,
     AccountRequestEvent,
 )
+from app.models.attachment import Attachment
+from app.models.comment import Comment
 from app.models.internal_message import InternalMessage, InternalMessageRecipient
+from app.models.notification import Notification
+from app.models.staff_message import StaffConversation, StaffMessage
+from app.models.ticket import Ticket
 from app.models.ticket_feedback import TicketFeedback
+from app.models.ticketHistory import TicketHistory
+from app.models.user import User
 
 __all__ = [
-    "User",
-    "Ticket",
-    "Comment",
-    "Attachment",
-    "Notification",
-    "TicketHistory",
-    "StaffConversation",
-    "StaffMessage",
     "AccountManagementRequest",
     "AccountRequestComment",
     "AccountRequestEvent",
+    "Attachment",
+    "Comment",
     "InternalMessage",
     "InternalMessageRecipient",
+    "Notification",
+    "StaffConversation",
+    "StaffMessage",
+    "Ticket",
     "TicketFeedback",
+    "TicketHistory",
+    "User",
 ]

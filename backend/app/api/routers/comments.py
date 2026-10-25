@@ -1,11 +1,12 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import select
 
 from app.core.auth import user_dependency
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import NotificationType, Role
 from app.models.comment import Comment
 from app.schemas.comments import CommentCreate, CommentRead, PublicCommentRead
@@ -60,6 +61,7 @@ async def create_comment(
     payload: CommentCreate,
     session: session_Dependency,
     user: user_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("comment_create"))],
 ) -> CommentRead | PublicCommentRead:
     """Add a comment or, for staff, an internal note."""
     ticket = await load_visible_ticket(session, ticket_id, user)

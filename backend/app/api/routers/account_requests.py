@@ -25,14 +25,15 @@ trail.
 """
 
 import uuid
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import select
 
 from app.core.auth import admin_dependency, staff_dependency
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import (
     EscalationCategory,
     EscalationStatus,
@@ -72,6 +73,7 @@ async def create_account_request(
     payload: AccountRequestCreate,
     session: session_Dependency,
     staff: staff_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("account_request_create"))],
 ) -> AccountManagementRequest:
     """Open an account-management request for review."""
     if staff.role not in (Role.AGENT, Role.ADMIN):
@@ -246,6 +248,7 @@ async def add_account_request_comment(
     payload: AccountRequestCommentCreate,
     session: session_Dependency,
     staff: staff_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("account_request_comment"))],
 ) -> AccountRequestComment:
     """Add an internal comment (creator and authorized staff only)."""
     request = await load_visible_request(session, request_id, staff)

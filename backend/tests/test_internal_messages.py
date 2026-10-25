@@ -16,7 +16,7 @@ import uuid
 import pytest
 from sqlmodel import func, select
 
-from app.enums.enums import InternalAudience, Role
+from app.enums.enums import Role
 from app.models.internal_message import InternalMessage, InternalMessageRecipient
 
 BASE = "/api/v1/internal-messages"
@@ -479,7 +479,7 @@ async def test_recipient_search_by_name_email_and_account_id(client, make_user):
 async def test_sent_filters_and_pagination(client, make_user):
     owner = await make_user(role=Role.OWNER)
     agent = await make_user(role=Role.AGENT, username="paging_agent")
-    admin = await make_user(role=Role.ADMIN, username="paging_admin")
+    await make_user(role=Role.ADMIN, username="paging_admin")
 
     await _compose(client, owner, audience="agents", subject="To agents")
     await _compose(client, owner, audience="admins", subject="To admins")
