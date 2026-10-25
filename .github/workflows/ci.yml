@@ -13,6 +13,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Required by app.core.config.Settings. CI only needs a syntactically valid
+  # browser origin; the tests stub Clerk and override the auth dependency.
+  FRONTEND_URL: http://localhost:5173
+
 jobs:
   backend:
     name: Backend lint and SQLite tests
