@@ -1110,7 +1110,7 @@ Backend settings: `backend/app/core/config.py` (`pydantic-settings`,
 | `MALWARE_SCAN_ENABLED` / `CLAMAV_*` | production yes | disabled / unset | ClamAV INSTREAM scanning; production fails closed |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_REDIS_URL` | production yes | disabled / unset | Shared Redis fixed-window limiter; no in-process fallback |
 | `RATE_LIMIT_TRUSTED_PROXIES` | production yes | `[]` | Direct proxy/edge CIDRs allowed to supply `X-Forwarded-For` |
-| `DB_POOL_*` / `DB_CONNECT_TIMEOUT_SECONDS` / `DB_STATEMENT_TIMEOUT_MS` | no | conservative defaults | Pool, connect, and server statement timeouts |
+| `DB_POOL_*` / `DB_CONNECT_TIMEOUT_SECONDS` | no | conservative defaults | Pool and connect timeouts |
 | `HSTS_ENABLED` | no | `false` | Emit HSTS only after HTTPS is verified end-to-end |
 | `LOG_JSON` / `LOG_LEVEL` | no | production JSON / `INFO` | Structured, redacted logging |
 

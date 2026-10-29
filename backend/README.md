@@ -168,8 +168,7 @@ per-file cap; see `MAX_ATTACHMENTS_PER_TICKET` and
 
 ## Database timeouts
 
-PostgreSQL connections use the pool/connect/statement timeout settings
-documented in `.env.example` (`DB_POOL_*`, `DB_CONNECT_TIMEOUT_SECONDS`,
-`DB_STATEMENT_TIMEOUT_MS`). A stalled query cannot occupy a pooled connection
-indefinitely. Migrations remain the only supported schema mechanism in
-production; `AUTO_CREATE_TABLES` is a local convenience only.
+PostgreSQL connections use the pool and connect timeout settings documented in
+`.env.example` (`DB_POOL_*`, `DB_CONNECT_TIMEOUT_SECONDS`). Migrations remain
+the only supported schema mechanism in production; `AUTO_CREATE_TABLES` is a
+local convenience only.

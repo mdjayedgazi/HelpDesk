@@ -118,14 +118,13 @@ class Settings(BaseSettings):
     # real deployment should use migrations instead of this flag.
     AUTO_CREATE_TABLES: bool = False
 
-    # PostgreSQL connection pool and statement limits. These are ignored for
+    # PostgreSQL connection pool settings. These are ignored for
     # the in-memory SQLite test database, whose pool is managed by SQLite.
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT_SECONDS: float = 30.0
     DB_POOL_RECYCLE_SECONDS: int = 1800
     DB_CONNECT_TIMEOUT_SECONDS: int = 10
-    DB_STATEMENT_TIMEOUT_MS: int = 30_000
 
     # Where uploaded attachment files are stored, and the maximum size.
     # UPLOAD_DIR must be on a persistent volume in production.
@@ -363,8 +362,6 @@ class Settings(BaseSettings):
             add("DB_POOL_RECYCLE_SECONDS must be zero or positive")
         if self.DB_CONNECT_TIMEOUT_SECONDS <= 0:
             add("DB_CONNECT_TIMEOUT_SECONDS must be positive")
-        if self.DB_STATEMENT_TIMEOUT_MS <= 0:
-            add("DB_STATEMENT_TIMEOUT_MS must be positive")
 
         if self.MAX_UPLOAD_BYTES <= 0:
             add("MAX_UPLOAD_BYTES must be positive")
@@ -382,8 +379,6 @@ class Settings(BaseSettings):
             add("Database pool timeout/recycle settings must be positive")
         if self.DB_CONNECT_TIMEOUT_SECONDS <= 0:
             add("DB_CONNECT_TIMEOUT_SECONDS must be positive")
-        if self.DB_STATEMENT_TIMEOUT_MS <= 0:
-            add("DB_STATEMENT_TIMEOUT_MS must be positive in production")
         if self.MAX_MULTIPART_OVERHEAD_BYTES <= 0:
             add("MAX_MULTIPART_OVERHEAD_BYTES must be positive")
 

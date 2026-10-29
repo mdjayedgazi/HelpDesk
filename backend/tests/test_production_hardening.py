@@ -487,7 +487,6 @@ def test_valid_production_configuration_is_accepted():
         ({"DB_POOL_TIMEOUT_SECONDS": 0}, "DB_POOL_TIMEOUT_SECONDS"),
         ({"DB_POOL_RECYCLE_SECONDS": -1}, "DB_POOL_RECYCLE_SECONDS"),
         ({"DB_CONNECT_TIMEOUT_SECONDS": 0}, "DB_CONNECT_TIMEOUT_SECONDS"),
-        ({"DB_STATEMENT_TIMEOUT_MS": 0}, "DB_STATEMENT_TIMEOUT_MS"),
         (
             {"CORS_ORIGINS": "https://one.example.com,http://localhost:5173"},
             "CORS_ORIGINS",
@@ -541,7 +540,6 @@ def test_production_docs_routes_are_disabled_in_a_fresh_app_process():
     env = {
         **os.environ,
         "ENVIRONMENT": "production",
-        "DB_STATEMENT_TIMEOUT_MS": "5000",
         "DATABASE_URL": (
             "postgresql+psycopg://helpdesk:strongpass@postgres.railway.internal:5432/helpdesk"
         ),
