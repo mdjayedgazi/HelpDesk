@@ -19,6 +19,10 @@ from datetime import UTC, datetime
 # depend on a real .env file or real credentials.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("CLERK_SECRET_KEY", "sk_test_dummy")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("AUTO_CREATE_TABLES", "false")
 
 import pytest
 import pytest_asyncio

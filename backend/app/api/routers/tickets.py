@@ -258,7 +258,7 @@ async def update_ticket(
     tickets. Agents may edit those plus the status, priority and category.
     Admins may edit any of those fields.
     """
-    ticket = await load_visible_ticket(session, ticket_id, user)
+    ticket = await load_visible_ticket(session, ticket_id, user, for_update=True)
     data = payload.model_dump(exclude_unset=True)
 
     if not data:
@@ -266,6 +266,7 @@ async def update_ticket(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="No fields to update",
         )
+    _reject_null_required_fields(data)
 
     # Snapshot the old values so the history entries are accurate.
     old = {
@@ -316,7 +317,14 @@ async def update_ticket(
     )
 
     session.add(ticket)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not update the ticket because of a data conflict",
+        ) from None
     await session.refresh(ticket)
     return ticket
 
@@ -415,6 +423,24 @@ def _apply_text(ticket: Ticket, data: dict) -> None:
         ticket.description = data["description"]
 
 
+def _reject_null_required_fields(data: dict) -> None:
+    """Reject explicit nulls for columns the database requires.
+
+    ``exclude_unset=True`` preserves the difference between "field omitted"
+    and "field explicitly null"; accepting the latter used to assign ``None``
+    to a non-nullable column and surface as an HTTP 500.
+    """
+    required = {"title", "description", "status", "priority", "category"}
+    explicit_nulls = sorted(
+        field for field in required if field in data and data[field] is None
+    )
+    if explicit_nulls:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=("These fields cannot be null: " + ", ".join(explicit_nulls)),
+        )
+
+
 def _apply_contact_phone(ticket: Ticket, data: dict) -> None:
     """Apply the optional contact phone. Both customers and staff may fix it."""
     if "contact_phone" in data:
@@ -426,7 +452,9 @@ def _set_status(ticket: Ticket, new_status: TicketStatus) -> None:
         return
     if new_status == TicketStatus.RESOLVED:
         ticket.resolved_at = datetime.now(UTC)
-    elif ticket.status == TicketStatus.RESOLVED:
+    elif ticket.status == TicketStatus.RESOLVED and new_status != TicketStatus.CLOSED:
+        # Closing a resolved ticket preserves its resolution timestamp. Only a
+        # genuine reopen (RESOLVED -> IN_PROGRESS) clears it.
         ticket.resolved_at = None
     ticket.status = new_status
 

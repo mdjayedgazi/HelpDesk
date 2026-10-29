@@ -35,6 +35,7 @@ from app.schemas.staff_messages import (
     StaffMessageRead,
 )
 from app.services.staff_messages import (
+    conversation_summaries,
     conversation_summary,
     get_owner,
     load_conversation,
@@ -111,13 +112,16 @@ async def list_conversations(
     staff_role: Annotated[Role | None, Query()] = None,
     staff_user_id: Annotated[uuid.UUID | None, Query()] = None,
     unread_only: Annotated[bool, Query()] = False,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[StaffConversationRead]:
     """AGENT/ADMIN: their own thread. OWNER: the whole inbox.
 
     The Owner inbox additionally supports the filters the UI exposes: by the
     staff participant's role, by one specific sender, and by unread threads.
     Those two sender filters are applied for the Owner view only (an agent is
-    already scoped to their own single thread).
+    already scoped to their own single thread). The result is paginated and
+    summaries are built in bulk to avoid N+1 queries.
     """
     if staff.role == Role.OWNER:
         statement = select(StaffConversation)
@@ -147,19 +151,20 @@ async def list_conversations(
             )
         )
 
-    statement = statement.order_by(
-        # Conversations without messages yet fall back to their creation time
-        # so the inbox ordering is stable and portable (works on SQLite too).
-        func.coalesce(
-            StaffConversation.last_message_at, StaffConversation.created_at
-        ).desc(),
-        StaffConversation.created_at.desc(),
+    statement = (
+        statement.order_by(
+            # Conversations without messages yet fall back to their creation time
+            # so the inbox ordering is stable and portable (works on SQLite too).
+            func.coalesce(
+                StaffConversation.last_message_at, StaffConversation.created_at
+            ).desc(),
+            StaffConversation.created_at.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
     )
     conversations = list((await session.exec(statement)).all())
-    return [
-        await conversation_summary(session, conversation, staff)
-        for conversation in conversations
-    ]
+    return await conversation_summaries(session, conversations, staff)
 
 
 @router.get("/conversations/{conversation_id}", response_model=StaffConversationDetail)

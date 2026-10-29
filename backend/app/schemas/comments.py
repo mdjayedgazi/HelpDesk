@@ -1,8 +1,21 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import ConfigDict
+from pydantic import BeforeValidator, ConfigDict
 from sqlmodel import Field, SQLModel
+
+MAX_COMMENT_LENGTH = 10_000
+
+
+def _stripped(value: object) -> object:
+    """Trim before validation so a whitespace-only body cannot pass."""
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+TrimmedText = Annotated[str, BeforeValidator(_stripped)]
 
 
 class CommentCreate(SQLModel):
@@ -14,7 +27,7 @@ class CommentCreate(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    body: str = Field(min_length=1, max_length=10000)
+    body: TrimmedText = Field(min_length=1, max_length=MAX_COMMENT_LENGTH)
     is_internal: bool = False
 
 

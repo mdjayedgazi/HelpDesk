@@ -190,6 +190,24 @@ async def test_upload_endpoint_is_covered(
 
 
 @pytest.mark.asyncio
+async def test_notification_polling_is_covered(
+    client, rate_limited, make_user, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_NOTIFICATION_POLL", 1)
+    user = await make_user()
+    headers = {"X-Test-User": user.username}
+
+    first = await client.get("/api/v1/notifications/unread-count", headers=headers)
+    second = await client.get("/api/v1/notifications/unread-count", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert int(second.headers["retry-after"]) >= 1
+
+
+@pytest.mark.asyncio
 async def test_limiter_is_per_user(client, rate_limited, make_user):
     alice = await make_user()
     bob = await make_user()

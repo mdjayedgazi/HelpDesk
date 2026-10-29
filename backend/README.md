@@ -91,14 +91,17 @@ Infected, timed-out, unavailable, or unknown results delete the file and reject
 the upload. Downloads require `Attachment.scan_status == CLEAN`.
 
 Migration `0009_attachment_scan_status` marks all pre-existing attachments
-`PENDING`; they are not downloadable. After clamd is deployed, rescan them:
+`PENDING`. A `PENDING` attachment is rescanned on demand at download time; the
+file is served only after an explicit `CLEAN` result. After clamd is deployed,
+rescan the whole backlog in one pass:
 
 ```bash
 uv run python -m app.commands.scan_attachments
 ```
 
 The command promotes clean files, deletes infected bytes, and leaves rows
-`PENDING` if the scanner is unavailable.
+`PENDING` if the scanner is unavailable. A scanner failure at download time
+returns `503` and never serves the file.
 
 ## Rate limiting
 
@@ -112,6 +115,61 @@ RATE_LIMIT_REDIS_URL=redis://127.0.0.1:6379/0
 RATE_LIMIT_TRUSTED_PROXIES=
 ```
 
-Protected write endpoints return `429` with `Retry-After`. If Redis is missing
-or unreachable, they fail closed with `503`. There is no in-memory fallback.
-Tune the per-policy limits and windows in `.env.example`.
+Protected write endpoints and notification polling return `429` with
+`Retry-After`. If Redis is missing or unreachable, they fail closed with `503`.
+There is no in-memory fallback. Tune the per-policy limits and windows in
+`.env.example`.
+
+## Production mode
+
+Set `ENVIRONMENT=production` for a deployed instance. In that mode the
+application fails closed at startup unless:
+
+- `FRONTEND_URL` and any `CORS_ORIGINS` are exact HTTPS origins (no localhost or
+  placeholder values);
+- `CLERK_SECRET_KEY` is a Clerk production secret (`sk_live_...`);
+- `DATABASE_URL` and `RATE_LIMIT_REDIS_URL` use non-local PostgreSQL and Redis;
+- `RATE_LIMIT_ENABLED=true`, `MALWARE_SCAN_ENABLED=true`, and
+  `CLAMAV_HOST` is set;
+- `UPLOAD_DIR` is an absolute, durable path on a mounted volume;
+- `AUTO_CREATE_TABLES=false` and `DATABASE_ECHO=false`.
+
+The error message names the invalid variables but never includes secret values.
+See `../docs/DEPLOYMENT.md` for the complete Railway runbook, variables, volume,
+migration command, and smoke tests.
+
+## Health and readiness
+
+| Endpoint | Meaning |
+| --- | --- |
+| `GET /health` and `GET /health/live` | The process can answer HTTP. Works during startup. |
+| `GET /health/ready` | PostgreSQL, the enabled Redis limiter, and the enabled ClamAV scanner are reachable. Returns `503` with coarse check names when a dependency is unavailable. |
+
+Use `/health/ready` as the load-balancer/traffic health check and
+`/health/live` only for process liveness. Readiness deliberately fails if
+malware scanning is enabled but ClamAV is unreachable; uploads are fail-closed
+in that state.
+
+## HTTP hardening
+
+`app/core/middleware.py` rejects oversized JSON bodies (1 MB default) and
+multipart requests (`MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES`) before
+FastAPI parses or spools them. It also adds:
+
+- security headers (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`, CSP, optional HSTS);
+- `Cache-Control: no-store` for API responses;
+- request IDs and structured, redacted request logs.
+
+Swagger/ReDoc and `/openapi.json` are disabled when `ENVIRONMENT=production`.
+Per-ticket attachment count and byte quotas are enforced in addition to the
+per-file cap; see `MAX_ATTACHMENTS_PER_TICKET` and
+`MAX_TICKET_ATTACHMENT_BYTES` in `.env.example`.
+
+## Database timeouts
+
+PostgreSQL connections use the pool/connect/statement timeout settings
+documented in `.env.example` (`DB_POOL_*`, `DB_CONNECT_TIMEOUT_SECONDS`,
+`DB_STATEMENT_TIMEOUT_MS`). A stalled query cannot occupy a pooled connection
+indefinitely. Migrations remain the only supported schema mechanism in
+production; `AUTO_CREATE_TABLES` is a local convenience only.

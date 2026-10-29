@@ -1,0 +1,51 @@
+# SPA static server with a strict, Clerk-compatible Content-Security-Policy.
+#
+# `${API_ORIGIN}` and `${CLERK_FAPI_ORIGIN}` are substituted by
+# docker-entrypoint.sh. All Nginx variables (for example `$uri`) are left intact.
+
+map $uri $cache_control {
+    default "no-cache";
+    ~^/assets/ "public, max-age=31536000, immutable";
+}
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript
+               application/xml image/svg+xml;
+
+    add_header Cache-Control $cache_control always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+    add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' ${CLERK_FAPI_ORIGIN} https://challenges.cloudflare.com https://*.protect.clerk.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://img.clerk.com https://*.clerk.com; font-src 'self' data:; connect-src 'self' ${API_ORIGIN} ${CLERK_FAPI_ORIGIN} https://api.clerk.com https://*.protect.clerk.com:* https://clerk-telemetry.com; worker-src 'self' blob:; frame-src https://challenges.cloudflare.com ${CLERK_FAPI_ORIGIN}; manifest-src 'self'" always;
+
+    include /etc/nginx/conf.d/hsts.inc;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+    }
+
+    # Client-side routes fall back to the SPA shell. Unknown API-looking paths
+    # also go to the shell; the frontend's API client always uses the absolute
+    # backend origin, never this server.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

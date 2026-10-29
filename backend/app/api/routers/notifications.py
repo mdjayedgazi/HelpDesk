@@ -2,11 +2,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import func, select
 
 from app.core.auth import user_dependency
 from app.core.database import session_Dependency
+from app.core.rate_limit import rate_limit
 from app.enums.enums import NotificationType
 from app.models.internal_message import InternalMessageRecipient
 from app.models.notification import Notification
@@ -52,6 +53,7 @@ CATEGORY_TYPES: dict[str, tuple[NotificationType, ...]] = {
 async def unread_count(
     session: session_Dependency,
     user: user_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("notification_poll"))],
 ) -> NotificationUnreadCount:
     """The current user's unread totals (the bell badge's source of truth).
 
@@ -85,6 +87,7 @@ async def unread_count(
 async def list_my_notifications(
     session: session_Dependency,
     user: user_dependency,
+    _rate_limit: Annotated[None, Depends(rate_limit("notification_poll"))],
     is_read: Annotated[bool | None, Query()] = None,
     category: Annotated[
         str | None, Query(pattern="^(tickets|messages|account_requests)$")

@@ -34,16 +34,35 @@ def _normalize_database_url(url: str) -> str:
 
 DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
 
-# SQLite (used by the tests) needs this extra argument; PostgreSQL does not
-# accept it, so only pass it when we really talk to SQLite.
+# SQLite (used by the tests) needs its own connection arguments and does not
+# accept the PostgreSQL pool options. PostgreSQL gets explicit connect, pool,
+# and statement timeouts so a stalled database cannot hold every request
+# forever.
+_engine_kwargs: dict[str, object] = {}
 _connect_args: dict[str, object] = {}
 if DATABASE_URL.startswith("sqlite"):
     _connect_args["check_same_thread"] = False
+else:
+    _connect_args["connect_timeout"] = settings.DB_CONNECT_TIMEOUT_SECONDS
+    _engine_kwargs.update(
+        pool_pre_ping=True,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT_SECONDS,
+        pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
+    )
+    if settings.DB_STATEMENT_TIMEOUT_MS > 0:
+        # psycopg passes ``options`` to the server; this is a server-side
+        # statement timeout and applies to every query on the connection.
+        _connect_args["options"] = (
+            f"-c statement_timeout={settings.DB_STATEMENT_TIMEOUT_MS}"
+        )
 
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
     echo=settings.DATABASE_ECHO,
     connect_args=_connect_args,
+    **_engine_kwargs,
 )
 
 async_session = async_sessionmaker(
