@@ -2,12 +2,15 @@
 
 > Canonical, source-verified project context for the HelpDesk SaaS application.
 >
-> Generated: 2026-10-23; remediation update: 2026-10-24; hardening update: 2026-10-25
+> Generated: 2026-10-23; remediation update: 2026-10-24; hardening update:
+> 2026-10-25; production-hardening update: **2026-10-29**
 > Repository: `/home/jayed/Projects/HelpDesk`
-> Branch inspected: `ruff` (commit `e83f246`, merge of PR #9)
-> Working tree: **dirty** — 74 modified tracked files and 15 untracked paths,
-> including inherited Ruff changes and the remediation/hardening work (see §2
-> and `data.md` §9)
+> Branch inspected: `oddit` (HEAD `e85345b`, same commit as `main`)
+> Working tree: **dirty** — 31 modified tracked files and 17 untracked paths,
+> including inherited Ruff changes and this uncommitted production-hardening
+> work (see §2). Current evidence, statuses, and the Railway runbook are in
+> `data.md` and `docs/DEPLOYMENT.md`; §22–§25 retain their pre-hardening history
+> where they have not been explicitly amended.
 
 ## Claim labels
 
@@ -51,11 +54,11 @@ records what was actually executed; §25 lists finding status and next actions.
 | Product | HelpDesk — multi-role support-ticket SaaS | **Verified** |
 | Backend | FastAPI + SQLModel/SQLAlchemy async + PostgreSQL | **Verified** |
 | Frontend | React 19 SPA (Vite+) + Chakra UI + Clerk | **Verified** |
-| Default branch state | branch `ruff`, commit `e83f246` | **Verified** (`git log`) |
-| Tracked files | 204 at audit baseline; remediation adds tests/migration/CI | **Verified** (`git ls-files`) |
-| Commits | 25 | **Verified** (`git log`) |
-| Working tree | 74 modified tracked files **plus** 15 untracked paths; intentionally not clean | **Verified** (`git status`, `git diff --stat`) |
-| Untracked files | `PROJECT_CONTEXT.md`, migrations `0008`/`0009`, CI workflow, backend rate-limit/malware modules and tests, frontend test/setup files, `notificationLogic.ts`; `data.md` is modified (was empty) | **Verified** (`git status --porcelain`) |
+| Default branch state | branch `oddit`, HEAD `e85345b`; same commit as `main` | **Verified** (`git log`, `git branch -vv`) |
+| Tracked files | 219 | **Verified** (`git ls-files`) |
+| Commits | 29 | **Verified** (`git rev-list --count HEAD`) |
+| Working tree | 31 modified tracked files **plus** 17 untracked paths; intentionally not clean and not committed | **Verified** (`git status --porcelain`) |
+| Untracked files | `backend/Dockerfile`, `.dockerignore`, entrypoint, health/logging/middleware modules, production-hardening tests; frontend Dockerfile, Nginx template, entrypoint, `.env.example`, `.nvmrc`, `theme-init.js`, `apiBase.ts`/test; `docs/DEPLOYMENT.md` | **Verified** (`git status --porcelain`) |
 | Root files | `backend/`, `frontend/`, `data.md`, `PROJECT_CONTEXT.md`, `.github/`, `.gitignore`, `.idea/`, `.junie/`, `package-lock.json` | **Verified** |
 
 ### Nature of the pre-existing uncommitted changes
@@ -72,7 +75,7 @@ Spot-checked diffs: `backend/app/models/user.py`,
 **Verified** for those files; **Inferred** for the remaining modified files,
 based on the equal add/remove counts and the affected rule families.
 
-> Operational note: the 41 pre-existing changes were preserved. No reset,
+> Operational note: the pre-existing changes were preserved. No reset,
 > restore, checkout, stash, rebase, commit, or branch switch was performed.
 > The tree also contains the remediation described in `data.md`; do not attribute
 > the entire diff to one author or one change set.
@@ -1091,15 +1094,30 @@ Backend settings: `backend/app/core/config.py` (`pydantic-settings`,
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
+| `ENVIRONMENT` | no | `development` | `production` enables fail-closed checks and disables docs |
 | `DATABASE_URL` | yes | — | Async SQLAlchemy URL; psycopg v3 |
-| `CLERK_SECRET_KEY` | yes | — | Clerk Backend API / session verification |
-| `FRONTEND_URL` | yes | — | Primary allowed browser origin |
+| `CLERK_SECRET_KEY` | yes | — | Clerk Backend API / session verification; production requires `sk_live_...` |
+| `FRONTEND_URL` | yes | — | Primary allowed browser origin; exact HTTPS origin in production |
 | `CORS_ORIGINS` | no | `[]` | Extra origins; comma-separated or JSON array |
 | `INITIAL_ADMIN_EMAIL` | no | unset | One-time Owner bootstrap identity; never used on the request path |
 | `DATABASE_ECHO` | no | `false` | Echo SQL |
 | `AUTO_CREATE_TABLES` | no | `false` | Create missing tables at startup (local only) |
-| `UPLOAD_DIR` | no | `uploads` | Attachment storage directory |
-| `MAX_UPLOAD_BYTES` | no | `5 MiB` | Upload size cap |
+| `UPLOAD_DIR` | no | `uploads` | Attachment storage directory; absolute durable path in production |
+| `MAX_UPLOAD_BYTES` | no | `5 MiB` | Per-file upload size cap |
+| `MAX_JSON_BODY_BYTES` | no | `1 MB` | JSON request-body cap before parsing |
+| `MAX_ATTACHMENTS_PER_TICKET` | no | `20` | Per-ticket attachment count quota |
+| `MAX_TICKET_ATTACHMENT_BYTES` | no | `50 MiB` | Per-ticket attachment byte quota |
+| `MALWARE_SCAN_ENABLED` / `CLAMAV_*` | production yes | disabled / unset | ClamAV INSTREAM scanning; production fails closed |
+| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_REDIS_URL` | production yes | disabled / unset | Shared Redis fixed-window limiter; no in-process fallback |
+| `RATE_LIMIT_TRUSTED_PROXIES` | production yes | `[]` | Direct proxy/edge CIDRs allowed to supply `X-Forwarded-For` |
+| `DB_POOL_*` / `DB_CONNECT_TIMEOUT_SECONDS` / `DB_STATEMENT_TIMEOUT_MS` | no | conservative defaults | Pool, connect, and server statement timeouts |
+| `HSTS_ENABLED` | no | `false` | Emit HSTS only after HTTPS is verified end-to-end |
+| `LOG_JSON` / `LOG_LEVEL` | no | production JSON / `INFO` | Structured, redacted logging |
+
+Production validation also rejects placeholder/localhost values, wildcard CORS,
+disabled scanning/rate limiting, temporary upload paths, and invalid limiter,
+scanner, pool, HSTS, or logging values. See `backend/app/core/config.py` and
+`docs/DEPLOYMENT.md` for the complete list.
 
 `allowed_origins` = de-duplicated `[FRONTEND_URL, *CORS_ORIGINS]`; used for both
 CORS and Clerk `azp` validation.
@@ -1108,8 +1126,11 @@ Frontend (`frontend/.env`, ignored by git):
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `VITE_CLERK_PUBLISHABLE_KEY` | yes | Clerk frontend key; missing key shows a setup notice |
-| `VITE_API_URL` | no | Backend base URL; defaults to `http://127.0.0.1:8000` |
+| `VITE_CLERK_PUBLISHABLE_KEY` | yes | Clerk frontend key; production builds fail if missing |
+| `VITE_API_URL` | production yes | Backend origin; defaults to `http://127.0.0.1:8000` locally and must be an exact HTTPS origin for a production build |
+| `API_ORIGIN` | container runtime yes | Frontend Nginx CSP `connect-src`; must equal `VITE_API_URL` |
+| `CLERK_FAPI_ORIGIN` | no | Custom Clerk Frontend API origin for CSP |
+| `HSTS_ENABLED` | no | Frontend Nginx HSTS opt-in after TLS verification |
 
 Operational notes:
 
@@ -1139,7 +1160,10 @@ uv run alembic upgrade head
 uv run fastapi dev app/main.py
 ```
 
-Health check: `GET http://127.0.0.1:8000/health`.
+Health checks: `GET /health` and `/health/live` are process liveness;
+`GET /health/ready` additionally checks PostgreSQL, the enabled Redis limiter,
+and the enabled ClamAV scanner. See `docs/DEPLOYMENT.md` for the Railway health
+check and pre-deploy migration command.
 
 ### Frontend
 
@@ -1198,7 +1222,7 @@ and remains untracked/ignored. No live deployment was used.
 
 ## 24. Verification and test coverage
 
-### Commands executed during the remediation session
+### Earlier remediation-pass results (historical)
 
 | Command | Result | Notes |
 | --- | --- | --- |
@@ -1218,6 +1242,27 @@ and remains untracked/ignored. No live deployment was used.
 | `actionlint` on `.github/workflows/ci.yml` | **no findings** | Containerized `rhysd/actionlint:latest` |
 | `npm audit --omit=dev` | **0 production vulnerabilities** | Five moderate dev-toolchain findings remain in `vitest`/`@vitest/ui` |
 
+### Production-hardening verification pass (2026-10-29)
+
+These are the current, post-change results. The rows above are the earlier
+remediation history and must not be used as current counts.
+
+| Command / check | Result | Notes |
+| --- | --- | --- |
+| Backend full suite with disposable PostgreSQL and Redis URLs | **413 passed, 20 skipped in 27.19 s** | Includes SQLite defaults plus opt-in PostgreSQL/Redis suites |
+| `tests/test_postgres_integration.py` | **10 passed** | Includes ticket row-lock concurrency and statement-timeout option |
+| `tests/test_production_hardening.py` | **55 passed** | Config, body/multipart limits, null/whitespace, headers, logging |
+| `tests/test_rate_limit.py` against Redis | **14 passed** | Real Lua fixed-window store and proxy resolution |
+| Alembic `upgrade head`, `0009` downgrade/re-upgrade, `alembic check` | **pass** | Disposable PostgreSQL 18; no production database touched |
+| Frontend typecheck, lint, tests, production build | **pass** | 5 files / 39 tests; ~1.23 MB JS (342 KB gzip) |
+| Backend and frontend Docker builds | **pass** | `helpdesk-backend:final`, `helpdesk-frontend:final` |
+| Backend production container smoke | **pass** | `/health/live=200`, `/health/ready=503` with DB/Redis `ok`, ClamAV intentionally down, docs `404`, API `401` |
+| Frontend container smoke | **pass** | SPA fallback, asset `immutable` caching, missing asset `404`, CSP/security headers/HSTS |
+| `npm audit --omit=dev --audit-level=high` | **0 vulnerabilities** | Five moderate dev-toolchain advisories remain; not shipped |
+| `pip-audit` against exported production requirements | **No known vulnerabilities** | `certifi` upgraded to `2026.10.23` |
+| `actionlint` on CI workflow | **no findings** | Not executed on GitHub |
+| Production frontend build with empty `VITE_API_URL` | **fails as designed** | Build-time fail-closed check |
+
 Baseline before remediation: **288 passed, 43 skipped in 22.62 s**, 134 Ruff
 diagnostics, 2 unformatted files, no frontend tests. The earlier audit's
 `data.md` was 0 bytes; its only commit added an empty file.
@@ -1227,13 +1272,12 @@ diagnostics, 2 unformatted files, no frontend tests. The earlier audit's
 The suite covers authentication/provisioning, ticket visibility/creation/
 transitions, assignment, comments, attachments, feedback, notifications, staff
 and Owner messaging, account requests, Owner bootstrap/protection, seeders,
-rate limiting, malware scanning, and PostgreSQL-only concurrency tests. The 44
-cases skipped in the default SQLite run are opt-in PostgreSQL modules guarded by
-`HD_TEST_POSTGRES_URL` / `HD_DEMO_SEED_POSTGRES_URL` (43 cases) plus the Redis
-integration test guarded by `HD_TEST_REDIS_URL` (1 case). All 43 PostgreSQL cases
-were executed separately against an ephemeral PostgreSQL 18 container and
-passed (23 workflow/integration + 20 demo-seed); the Redis case passed against a
-disposable Redis 7 container. No persistent database was migrated.
+rate limiting, malware scanning, and PostgreSQL-only concurrency tests. In the
+latest full run with `HD_TEST_POSTGRES_URL` and `HD_TEST_REDIS_URL`, **413 passed
+and 20 skipped**; the remaining skips are the opt-in demo-seed suite guarded by
+`HD_DEMO_SEED_POSTGRES_URL`, which requires a separate dedicated disposable
+database. The earlier remediation pass ran those 20 demo-seed cases against a
+second throw-away database and passed. No persistent database was migrated.
 
 Fixtures (`backend/tests/conftest.py`):
 
@@ -1296,24 +1340,24 @@ public at `/`.
 ### F-03 — No CI/CD (Medium) — addressed (configuration)
 
 `.github/workflows/ci.yml` adds backend lint/format/tests (with a disposable
-Redis service), frontend typecheck/lint/tests/build, a disposable PostgreSQL
-migration job, and disposable PostgreSQL integration/demo-seed jobs. It was not
-executed on GitHub in this session; it passes `actionlint`, and all underlying
-backend/frontend/PostgreSQL/Redis/migration commands were run locally. It
-contains no deployment or secret release step. See `data.md` §7 and §13 for the
-verification boundary and draft-PR procedure.
+Redis service), frontend typecheck/lint/tests/build, production dependency
+audits, a disposable PostgreSQL migration job, and disposable PostgreSQL
+integration jobs. It was not executed on GitHub in this session; it passes
+`actionlint`, and all underlying backend/frontend/PostgreSQL/Redis/migration
+commands were run locally. It contains no deployment or secret release step.
+See `data.md` §7 and §13 for the verification boundary and draft-PR procedure.
 
 ### F-04 — No frontend automated tests (Medium) — addressed
 
-Vitest + React Testing Library + jsdom setup, `npm test`, and 32 focused tests
-for navigation, guards, role controls, notification logic, and unread badges.
-Typecheck, lint, and production build pass.
+Vitest + React Testing Library + jsdom setup, `npm test`, and 39 focused tests
+for navigation, guards, role controls, notification logic, unread badges, and
+production API-origin validation. Typecheck, lint, and production build pass.
 
 ### F-05 — Dirty working tree on `ruff` (Low / operational) — preserved
 
-The 41 pre-existing formatting/import modifications remain uncommitted and
-unchanged in intent. No reset/restore/checkout/stash/commit was performed. New
-remediation edits are also uncommitted; the tree is intentionally not clean.
+The inherited formatting/import modifications and the production-hardening
+edits remain uncommitted. No reset/restore/checkout/stash/commit was performed;
+the tree is intentionally not clean and no deployment was made.
 
 ### F-06 — Stray root `package-lock.json` (Low) — deferred
 
@@ -1329,25 +1373,29 @@ It is not used by the frontend workflow.
 exemptions; legacy camelCase module names have N999 exemptions. One global
 ignore (`UP042`) is documented for SQLModel/PostgreSQL enum compatibility.
 
-### F-08 — Uploads lacked content/malware inspection (Medium, hardening) — addressed foundation
+### F-08 — Uploads lacked content/malware inspection (Medium, hardening) — fixed, external verification pending
 
 Uploads now verify content signatures before writing and send `nosniff` on
-download, in addition to the existing allowlist, size cap, path containment, and
-authorization checks. The follow-up adds a real ClamAV INSTREAM adapter,
-quarantine directory, and `PENDING`/`CLEAN`/`INFECTED` lifecycle. Downloads
-require a clean scan; failures are fail-closed. Production still needs a
-deployed clamd and a rescan of legacy files with
-`python -m app.commands.scan_attachments`.
+download, in addition to the existing allowlist, size cap, path containment,
+per-ticket count/byte quotas, and authorization checks. A real ClamAV INSTREAM
+adapter, quarantine directory, and `PENDING`/`CLEAN`/`INFECTED` lifecycle are
+implemented. Downloads require a clean scan; scanner failures are fail-closed
+and legacy `PENDING` files are rescanned on demand. Production still needs a
+deployed, monitored clamd and a one-time rescan with
+`python -m app.commands.scan_attachments`; those external steps are **not
+verified** here.
 
-### F-09 — No application-level rate limiting (Medium, hardening) — implemented, disabled by default
+### F-09 — No application-level rate limiting (Medium, hardening) — fixed, external verification pending
 
 `backend/app/core/rate_limit.py` provides a Redis-backed fixed-window limiter
 for ticket creation, comments, uploads, feedback, account requests, staff
-messages, and Owner internal messages. It returns `429` with `Retry-After`,
-honors `X-Forwarded-For` only from configured trusted proxies, and fails closed
-with `503` when Redis is unavailable. It is disabled by default; enabling it
-requires a shared Redis deployment and `RATE_LIMIT_ENABLED=true` plus
-`RATE_LIMIT_REDIS_URL`. There is no in-process fallback. See `data.md` §6.
+messages, Owner internal messages, and notification polling. It returns `429`
+with `Retry-After`, honors `X-Forwarded-For` only from configured trusted
+proxies, and fails closed with `503` when Redis is unavailable. Production
+requires `RATE_LIMIT_ENABLED=true` plus a shared `RATE_LIMIT_REDIS_URL` and
+trusted proxies; there is no in-process fallback. A disposable Redis test
+passed, but the actual shared Redis deployment is **not verified** here. See
+`data.md` §6.
 
 ### F-10 — `ticket_number` was nullable at the model layer (Low) — fixed in code/migration
 
@@ -1382,16 +1430,21 @@ sequence. See §7 and `data.md` §3.
 
 ### Next actions
 
-1. Run CI on a draft PR, including the disposable PostgreSQL and Redis jobs
-   (F-03).
-2. Deploy a shared Redis and enable rate limiting; do not substitute an
+1. Run CI on a draft PR, including the disposable PostgreSQL and Redis jobs and
+   the dependency-audit job (F-03).
+2. Complete the Railway dashboard runbook in `docs/DEPLOYMENT.md`: services,
+   variables, volume, private PostgreSQL/Redis/ClamAV, pre-deploy migration,
+   custom domains, TLS, backups/PITR, monitoring, and smoke tests.
+3. Deploy a shared Redis and enable rate limiting; do not substitute an
    in-process limiter (F-09).
-3. Deploy/monitor clamd, enable malware scanning, and rescan `PENDING`
+4. Deploy/monitor clamd, enable malware scanning, and rescan `PENDING`
    attachments (F-08).
-4. Decide the root lockfile's fate (F-06).
 5. Apply migrations `0008` and `0009` in staging with a backup, then production,
    together with the matching application code (F-10).
-6. Review and commit the pre-existing Ruff-only work separately (F-05).
+6. Enable HSTS only after the custom domains have verified TLS and the smoke
+   tests pass; keep `/docs` and `/openapi.json` disabled in production.
+7. Decide the root lockfile's fate (F-06).
+8. Review and commit the pre-existing Ruff-only work separately (F-05).
 
 ---
 

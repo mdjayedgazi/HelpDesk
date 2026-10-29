@@ -1,8 +1,24 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import ConfigDict
+from pydantic import BeforeValidator, ConfigDict, Field
 from sqlmodel import SQLModel
+
+MAX_FEEDBACK_COMMENT_LENGTH = 2_000
+
+
+def _blank_to_none(value: object) -> object:
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
+FeedbackComment = Annotated[
+    str | None,
+    BeforeValidator(_blank_to_none),
+    Field(max_length=MAX_FEEDBACK_COMMENT_LENGTH),
+]
 
 
 class TicketFeedbackCreate(SQLModel):
@@ -14,8 +30,8 @@ class TicketFeedbackCreate(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    rating: int
-    comment: str | None = None
+    rating: int = Field(ge=1, le=5)
+    comment: FeedbackComment = None
 
 
 class TicketFeedbackRead(SQLModel):

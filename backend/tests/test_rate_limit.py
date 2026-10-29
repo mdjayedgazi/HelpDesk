@@ -190,6 +190,24 @@ async def test_upload_endpoint_is_covered(
 
 
 @pytest.mark.asyncio
+async def test_notification_polling_is_covered(
+    client, rate_limited, make_user, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_NOTIFICATION_POLL", 1)
+    user = await make_user()
+    headers = {"X-Test-User": user.username}
+
+    first = await client.get("/api/v1/notifications/unread-count", headers=headers)
+    second = await client.get("/api/v1/notifications/unread-count", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert int(second.headers["retry-after"]) >= 1
+
+
+@pytest.mark.asyncio
 async def test_limiter_is_per_user(client, rate_limited, make_user):
     alice = await make_user()
     bob = await make_user()
@@ -289,6 +307,20 @@ def test_invalid_forwarded_hop_falls_back_to_peer(monkeypatch):
 
     monkeypatch.setattr(settings, "RATE_LIMIT_TRUSTED_PROXIES", ["10.0.0.0/8"])
     request = _request("10.1.2.3", "not-an-ip")
+
+    assert resolve_client_ip(request) == "10.1.2.3"
+
+
+def test_trust_all_proxies_never_honours_a_client_supplied_hop(monkeypatch):
+    """With every hop trusted, the spoofable leftmost value must not be used.
+
+    The documented consequence (docs/DEPLOYMENT.md) is that anonymous callers
+    share the edge peer's bucket, which fails safe instead of allowing bypass.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_TRUSTED_PROXIES", ["0.0.0.0/0", "::/0"])
+    request = _request("10.1.2.3", "198.51.100.7, 10.0.0.5")
 
     assert resolve_client_ip(request) == "10.1.2.3"
 

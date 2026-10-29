@@ -1,3 +1,4 @@
+import { resolveApiBase } from './apiBase.ts'
 import type {
   AccountRequest,
   AccountRequestComment,
@@ -49,7 +50,7 @@ import type {
  * Development runs the API on port 8000 (see `VITE_API_URL`). All requests go
  * through `/api/v1` paths that the backend routers actually define.
  */
-const API_BASE = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '')
+const API_BASE = resolveApiBase(import.meta.env.VITE_API_URL, import.meta.env.PROD)
 
 export type TokenGetter = () => Promise<string | null>
 

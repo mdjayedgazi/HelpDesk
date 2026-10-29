@@ -19,6 +19,7 @@ Run against a throwaway database, for example:
         .venv/bin/python -m pytest tests/test_postgres_integration.py -q
 """
 
+import asyncio
 import os
 import uuid
 from types import SimpleNamespace
@@ -27,6 +28,7 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException, Request, status
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, select
@@ -201,6 +203,19 @@ async def make_ticket(factory):
 async def test_metadata_tables_exist(client):
     response = await client.get("/health")
     assert response.status_code == 200
+
+
+async def test_postgres_statement_timeout_connect_option_is_applied():
+    engine = create_async_engine(
+        _normalize_database_url(_PG_URL),
+        connect_args={"options": "-c statement_timeout=1234"},
+    )
+    try:
+        async with engine.connect() as connection:
+            value = await connection.scalar(text("SHOW statement_timeout"))
+        assert value == "1234ms"
+    finally:
+        await engine.dispose()
 
 
 async def test_customer_ticket_creation_and_enum_roundtrip(client, make_user):
@@ -390,6 +405,38 @@ async def test_owner_user_management_on_real_postgres(
         )
         with pytest.raises(IntegrityError):
             await session.commit()
+
+
+async def test_ticket_row_lock_serializes_concurrent_updates(
+    factory, make_user, make_ticket
+):
+    """PostgreSQL really blocks a second FOR UPDATE read until the first commits.
+
+    The API uses this lock for PATCH /tickets/{id}; without it two concurrent
+    staff updates could compute history or status transitions from stale data.
+    """
+    customer = await make_user()
+    agent = await make_user(Role.AGENT)
+    ticket = await make_ticket(customer, assignee=agent)
+
+    async with factory() as session_a:
+        locked = await session_a.get(Ticket, ticket.id, with_for_update=True)
+        assert locked is not None
+
+        async def second_reader():
+            async with factory() as session_b:
+                return await session_b.get(Ticket, ticket.id, with_for_update=True)
+
+        pending = asyncio.create_task(second_reader())
+        await asyncio.sleep(0.2)
+        assert pending.done() is False
+
+        locked.title = "Updated while holding the lock"
+        await session_a.commit()
+
+        observed = await asyncio.wait_for(pending, timeout=5)
+        assert observed is not None
+        assert observed.title == "Updated while holding the lock"
 
 
 async def test_owner_enum_roundtrip(client, owner):

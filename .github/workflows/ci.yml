@@ -66,6 +66,11 @@ jobs:
     name: Frontend typecheck, lint, tests, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Compile-time values only. The production build intentionally fails if
+      # VITE_API_URL is missing, non-HTTPS, or a localhost origin.
+      VITE_API_URL: https://api.ci.example.invalid
+      VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +88,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Audit production frontend dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
       - name: TypeScript typecheck
         working-directory: frontend
         run: npm run typecheck
@@ -98,6 +107,32 @@ jobs:
       - name: Production build
         working-directory: frontend
         run: npm run build
+
+  dependency-audit:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13.1"
+
+      - name: Create production-only Python environment
+        working-directory: backend
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/helpdesk-prod-venv
+        run: uv sync --frozen --no-dev --no-install-project
+
+      - name: Audit Python production dependencies
+        working-directory: backend
+        run: >-
+          uvx pip-audit
+          --path "${{ runner.temp }}/helpdesk-prod-venv/lib/python3.13/site-packages"
+          --progress-spinner off
 
   migrations:
     name: Alembic migrations (disposable PostgreSQL)

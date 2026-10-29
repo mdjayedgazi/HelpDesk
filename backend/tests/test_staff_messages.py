@@ -14,6 +14,7 @@ import uuid
 from uuid import UUID
 
 import pytest
+from sqlalchemy import event
 from sqlmodel import func, select
 
 from app.enums.enums import NotificationType, Role
@@ -225,6 +226,60 @@ async def test_owner_inbox_covers_every_staff_thread(client, make_user):
     # An agent still only sees their own thread.
     agent_inbox = await client.get(BASE, headers={"X-Test-User": agent.username})
     assert {c["id"] for c in agent_inbox.json()} == {agent_thread}
+
+
+@pytest.mark.asyncio
+async def test_owner_inbox_is_paginated(client, make_user):
+    owner = await make_user(role=Role.OWNER, username="owner_paginated")
+    agents = [
+        await make_user(role=Role.AGENT, username=f"page_agent_{index}")
+        for index in range(3)
+    ]
+    for agent in agents:
+        assert (await _start(client, agent)).status_code == 200
+
+    headers = {"X-Test-User": owner.username}
+    first_page = await client.get(f"{BASE}?limit=2", headers=headers)
+    second_page = await client.get(f"{BASE}?limit=2&offset=2", headers=headers)
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    assert len(first_page.json()) == 2
+    assert len(second_page.json()) == 1
+    assert {c["id"] for c in first_page.json()}.isdisjoint(
+        {c["id"] for c in second_page.json()}
+    )
+
+
+@pytest.mark.asyncio
+async def test_owner_inbox_summaries_do_not_issue_n_plus_one_queries(
+    client, make_user, session_factory
+):
+    owner = await make_user(role=Role.OWNER, username="owner_query_count")
+    for index in range(4):
+        agent = await make_user(role=Role.AGENT, username=f"query_agent_{index}")
+        conversation_id = (await _start(client, agent)).json()["id"]
+        assert (
+            await _send(client, agent, conversation_id, f"message {index}")
+        ).status_code == 201
+
+    engine = session_factory.kw["bind"].sync_engine
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        response = await client.get(BASE, headers={"X-Test-User": owner.username})
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert response.status_code == 200
+    assert len(response.json()) == 4
+    # conversations + aggregates + two latest-message windows + participants
+    assert len(statements) <= 6, "\n\n".join(statements)
 
 
 @pytest.mark.asyncio

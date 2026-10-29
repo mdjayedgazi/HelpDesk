@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routers import attachments as attachments_router
 from app.enums.enums import AttachmentScanStatus
 from app.main import app
 from app.models.attachment import Attachment
@@ -289,7 +290,7 @@ async def _make_attachment(
 
 
 @pytest.mark.asyncio
-async def test_pending_attachment_cannot_be_downloaded(
+async def test_pending_attachment_is_rescanned_before_download(
     client, session_factory, make_user, make_ticket
 ):
     customer = await make_user()
@@ -307,7 +308,42 @@ async def test_pending_attachment_cannot_be_downloaded(
         headers={"X-Test-User": customer.username},
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert response.content == b"fixture"
+
+    async with session_factory() as session:
+        stored = await session.get(Attachment, attachment.id)
+    assert stored is not None
+    assert stored.scan_status is AttachmentScanStatus.CLEAN
+
+
+@pytest.mark.asyncio
+async def test_pending_attachment_fails_closed_when_rescan_unavailable(
+    client, session_factory, make_user, make_ticket
+):
+    app.dependency_overrides[get_malware_scanner] = lambda: StubScanner(
+        error=ScannerUnavailable("scanner offline")
+    )
+    customer = await make_user()
+    ticket = await make_ticket(customer)
+    attachment = await _make_attachment(
+        session_factory,
+        customer=customer,
+        ticket=ticket,
+        scan_status=AttachmentScanStatus.PENDING,
+        storage_key="pending-offline.txt",
+    )
+
+    response = await client.get(
+        f"/api/v1/attachments/{attachment.id}/download",
+        headers={"X-Test-User": customer.username},
+    )
+
+    assert response.status_code == 503
+    async with session_factory() as session:
+        stored = await session.get(Attachment, attachment.id)
+    assert stored is not None
+    assert stored.scan_status is AttachmentScanStatus.PENDING
 
 
 @pytest.mark.asyncio
@@ -353,3 +389,93 @@ async def test_unauthorized_user_cannot_download_attachment(
     )
 
     assert response.status_code == 404
+
+
+def _record_download_locks(monkeypatch) -> list[str]:
+    """Record the order of authorization and row-lock calls during a download."""
+    events: list[str] = []
+    original_get = AsyncSession.get
+    original_refresh = AsyncSession.refresh
+    original_visible = attachments_router.load_visible_ticket
+
+    async def recording_get(self, entity, ident, *args, **kwargs):
+        if entity is Attachment:
+            events.append("lock" if kwargs.get("with_for_update") else "get")
+        return await original_get(self, entity, ident, *args, **kwargs)
+
+    async def recording_refresh(self, instance, *args, **kwargs):
+        if isinstance(instance, Attachment) and kwargs.get("with_for_update"):
+            events.append("lock")
+        return await original_refresh(self, instance, *args, **kwargs)
+
+    async def recording_visible(*args, **kwargs):
+        events.append("authorize")
+        return await original_visible(*args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "get", recording_get)
+    monkeypatch.setattr(AsyncSession, "refresh", recording_refresh)
+    monkeypatch.setattr(attachments_router, "load_visible_ticket", recording_visible)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_download_never_locks_the_attachment_row(
+    client, session_factory, make_user, make_ticket, monkeypatch
+):
+    owner = await make_user()
+    outsider = await make_user()
+    ticket = await make_ticket(owner)
+    attachment = await _make_attachment(
+        session_factory,
+        customer=owner,
+        ticket=ticket,
+        scan_status=AttachmentScanStatus.PENDING,
+        storage_key="pending-private.txt",
+    )
+    events = _record_download_locks(monkeypatch)
+
+    response = await client.get(
+        f"/api/v1/attachments/{attachment.id}/download",
+        headers={"X-Test-User": outsider.username},
+    )
+
+    assert response.status_code == 404
+    assert "lock" not in events
+
+
+@pytest.mark.asyncio
+async def test_clean_download_is_lock_free_and_pending_locks_after_authorization(
+    client, session_factory, make_user, make_ticket, monkeypatch
+):
+    customer = await make_user()
+    ticket = await make_ticket(customer)
+    clean = await _make_attachment(
+        session_factory,
+        customer=customer,
+        ticket=ticket,
+        scan_status=AttachmentScanStatus.CLEAN,
+        storage_key="clean-note.txt",
+    )
+    pending = await _make_attachment(
+        session_factory,
+        customer=customer,
+        ticket=ticket,
+        scan_status=AttachmentScanStatus.PENDING,
+        storage_key="pending-locked.txt",
+    )
+    events = _record_download_locks(monkeypatch)
+
+    clean_response = await client.get(
+        f"/api/v1/attachments/{clean.id}/download",
+        headers={"X-Test-User": customer.username},
+    )
+    assert clean_response.status_code == 200
+    assert events == ["get", "authorize"]
+
+    events.clear()
+    pending_response = await client.get(
+        f"/api/v1/attachments/{pending.id}/download",
+        headers={"X-Test-User": customer.username},
+    )
+    assert pending_response.status_code == 200
+    assert events == ["get", "authorize", "lock"]

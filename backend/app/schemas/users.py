@@ -3,10 +3,20 @@ from datetime import datetime
 from typing import Annotated
 
 from email_validator import EmailSyntaxError, validate_email
-from pydantic import AfterValidator, ConfigDict
+from pydantic import AfterValidator, BeforeValidator, ConfigDict
 from sqlmodel import Field, SQLModel
 
 from app.enums.enums import AssignableRole, Role
+
+
+def _stripped(value: object) -> object:
+    """Trim before length validation so whitespace-only names are rejected."""
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+TrimmedText = Annotated[str, BeforeValidator(_stripped)]
 
 
 def _valid_email(value: str) -> str:
@@ -47,8 +57,8 @@ class UserUpdate(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    full_name: str | None = Field(default=None, min_length=2, max_length=120)
-    username: str | None = Field(default=None, min_length=2, max_length=90)
+    full_name: TrimmedText | None = Field(default=None, min_length=2, max_length=120)
+    username: TrimmedText | None = Field(default=None, min_length=2, max_length=90)
     email: EmailAddress | None = None
 
 
@@ -61,8 +71,8 @@ class UserAdminUpdate(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    full_name: str | None = Field(default=None, min_length=2, max_length=120)
-    username: str | None = Field(default=None, min_length=2, max_length=90)
+    full_name: TrimmedText | None = Field(default=None, min_length=2, max_length=120)
+    username: TrimmedText | None = Field(default=None, min_length=2, max_length=90)
     email: EmailAddress | None = None
     role: AssignableRole | None = None
     is_active: bool | None = None
