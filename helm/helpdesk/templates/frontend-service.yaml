@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-frontend
+  labels:
+    {{- include "helpdesk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.frontendService.type }}
+  ports:
+    - port: {{ .Values.frontendService.port }}
+      targetPort: {{ .Values.frontendService.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "helpdesk.frontendSelectorLabels" . | nindent 4 }}

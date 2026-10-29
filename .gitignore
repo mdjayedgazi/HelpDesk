@@ -1,43 +1,78 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Virtual Enviromments
-backend/.venv/
-venv/
-backend/.env/
-
-# Enviromment variables
+# ---------------------------------------------------------------------------
+# Environment variables & secrets
+# ---------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
 
-# Testing
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# ---------------------------------------------------------------------------
+# Node.js / Frontend
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+
+# ---------------------------------------------------------------------------
+# Testing & quality tools
+# ---------------------------------------------------------------------------
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
-
-# Type Checkers / Linters
 .mypy_cache/
 .pyright/
+.pyrefly/
 .ruff_cache/
 
-# IDE
+# ---------------------------------------------------------------------------
+# IDE & OS artifacts
+# ---------------------------------------------------------------------------
 .idea/
-
-# OS
+.vscode/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
 
-# Logs
+# ---------------------------------------------------------------------------
+# Logs & temporary files
+# ---------------------------------------------------------------------------
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
+# ---------------------------------------------------------------------------
 # Build / distribution
+# ---------------------------------------------------------------------------
 build/
-dist/
-*.egg-info/
 
-# Node
-node_modules/
+# ---------------------------------------------------------------------------
+# Helm / Kubernetes local artifacts
+# ---------------------------------------------------------------------------
+# Local Helmfile overrides and secret values (keep templates and safe examples)
+helmfile.yaml.*.override.yaml
+helmfile.yaml.*.secrets.yaml
+# Rendered manifests and chart archives generated locally
+*.tar.gz
+helm/*/templates/*.rendered.yaml
+
+# ---------------------------------------------------------------------------
+# Junie session artifacts (plans are kept; temp files are ignored)
+# ---------------------------------------------------------------------------
+.junie/sessions/

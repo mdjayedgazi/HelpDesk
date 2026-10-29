@@ -1,0 +1,231 @@
+# ---------------------------------------------------------------------------
+# HelpDesk Helm values — development defaults
+# ---------------------------------------------------------------------------
+# These values are safe for linting and template rendering. They do NOT
+# contain real credentials and must be overridden for a real deployment.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Global image settings
+# ---------------------------------------------------------------------------
+global:
+  # Image repositories — replace with your actual registry.
+  # Railway-deployed images are not directly reusable here; build and push
+  # images to a registry (e.g., GHCR, ECR, Docker Hub) first.
+  backendImage:
+    repository: "helpdesk/backend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  frontendImage:
+    repository: "helpdesk/frontend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  # If your registry requires authentication, create a Docker-registry secret
+  # and reference it below.
+  imagePullSecrets: []
+  # - name: my-registry-secret
+
+  # Application URLs — used by ConfigMap and Ingress.
+  backendUrl: "http://helpdesk-backend:8000"
+  frontendUrl: "https://helpdesk.example.com"
+
+# ---------------------------------------------------------------------------
+# Backend deployment
+# ---------------------------------------------------------------------------
+backend:
+  replicaCount: 1
+  # Note: The backend stores uploaded attachments on a local filesystem.
+  # Setting replicaCount > 1 without shared storage (e.g., NFS, S3) will
+  # cause inconsistent attachment access. Migrate to object storage before
+  # scaling beyond 1 replica.
+
+  containerPort: 8000
+
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # Health probes — matches the FastAPI health endpoints
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: 8000
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /health/live
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 10
+
+  # Security context — runs as unprivileged user (uid 10001, matches Dockerfile)
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+  # Environment variables for the backend.
+  # Sensitive values (DATABASE_URL, CLERK_SECRET_KEY, etc.) MUST be provided
+  # via a Kubernetes Secret referenced in `existingSecret`.
+  config:
+    ENVIRONMENT: "production"
+    AUTO_CREATE_TABLES: "false"
+    DATABASE_ECHO: "false"
+    UPLOAD_DIR: "/data/uploads"
+    MALWARE_SCAN_ENABLED: "true"
+    CLAMAV_PORT: "3310"
+    RATE_LIMIT_ENABLED: "true"
+    HSTS_ENABLED: "false"
+    HSTS_MAX_AGE_SECONDS: "31536000"
+    LOG_LEVEL: "INFO"
+    LOG_JSON: "true"
+    DB_POOL_SIZE: "5"
+    DB_MAX_OVERFLOW: "10"
+    DB_CONNECT_TIMEOUT_SECONDS: "10"
+    DB_STATEMENT_TIMEOUT_MS: "30000"
+    MAX_UPLOAD_BYTES: "5242880"
+    MAX_ATTACHMENTS_PER_TICKET: "20"
+    MAX_TICKET_ATTACHMENT_BYTES: "52428800"
+
+  # Name of an existing Kubernetes Secret that contains sensitive backend
+  # environment variables. The secret should contain keys such as:
+  #   DATABASE_URL, CLERK_SECRET_KEY, RATE_LIMIT_REDIS_URL, CLAMAV_HOST,
+  #   RATE_LIMIT_TRUSTED_PROXIES, FRONTEND_URL
+  # This is REQUIRED for production — the chart will fail validation if unset.
+  existingSecret: ""
+
+  # Persistent volume for uploaded attachments
+  persistence:
+    enabled: true
+    # Mount path inside the container — must match UPLOAD_DIR
+    mountPath: /data/uploads
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+    # storageClass: "standard"  # set to your cluster's default or leave empty
+    storageClass: ""
+
+# ---------------------------------------------------------------------------
+# Frontend deployment
+# ---------------------------------------------------------------------------
+frontend:
+  replicaCount: 1
+
+  containerPort: 8080
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # Security context — nginx runs as non-root in the runtime stage
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    # Nginx needs /var/cache, /var/run, /etc/nginx/conf.d writable
+    # The docker-entrypoint.sh handles this; we add emptyDir volumes.
+
+  # Environment variables for the Nginx runtime container.
+  # VITE_* variables are build-time and must be baked into the image.
+  # API_ORIGIN and CLERK_FAPI_ORIGIN are runtime Nginx variables.
+  config:
+    API_ORIGIN: ""  # e.g., https://api.helpdesk.example.com
+    CLERK_FAPI_ORIGIN: ""
+    HSTS_ENABLED: "false"
+    HSTS_MAX_AGE_SECONDS: "31536000"
+
+# ---------------------------------------------------------------------------
+# Service configuration
+# ---------------------------------------------------------------------------
+backendService:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+frontendService:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  # className: "nginx"
+
+  # Annotations — add TLS redirect, rate limiting, etc.
+  annotations: {}
+  # kubernetes.io/tls-acme: "true"
+
+  hosts:
+    - host: helpdesk.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls: []
+  # - secretName: helpdesk-tls
+  #   hosts:
+  #     - helpdesk.example.com
+
+# ---------------------------------------------------------------------------
+# Service Account
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Common labels (overridden automatically by Helm helpers)
+# ---------------------------------------------------------------------------
+commonLabels: {}
