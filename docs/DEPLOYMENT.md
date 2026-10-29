@@ -79,7 +79,6 @@ repository. Configure the services and variables in the Railway dashboard.
 | `LOG_JSON` | `true` |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | Start with `5` / `10`; size against the PostgreSQL connection limit and number of API instances. |
 | `DB_CONNECT_TIMEOUT_SECONDS` | `10` |
-| `DB_STATEMENT_TIMEOUT_MS` | `30000` |
 | `MAX_UPLOAD_BYTES` | `5242880` unless a reviewed product limit says otherwise. |
 | `MAX_ATTACHMENTS_PER_TICKET` | `20` |
 | `MAX_TICKET_ATTACHMENT_BYTES` | `52428800` |

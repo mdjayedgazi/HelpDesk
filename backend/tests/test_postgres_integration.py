@@ -28,7 +28,6 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException, Request, status
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, select
@@ -203,19 +202,6 @@ async def make_ticket(factory):
 async def test_metadata_tables_exist(client):
     response = await client.get("/health")
     assert response.status_code == 200
-
-
-async def test_postgres_statement_timeout_connect_option_is_applied():
-    engine = create_async_engine(
-        _normalize_database_url(_PG_URL),
-        connect_args={"options": "-c statement_timeout=1234"},
-    )
-    try:
-        async with engine.connect() as connection:
-            value = await connection.scalar(text("SHOW statement_timeout"))
-        assert value == "1234ms"
-    finally:
-        await engine.dispose()
 
 
 async def test_customer_ticket_creation_and_enum_roundtrip(client, make_user):
