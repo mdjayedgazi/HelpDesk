@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-backend
+  labels:
+    {{- include "helpdesk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.backend.autoscaling }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "helpdesk.backendSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "helpdesk.backendSelectorLabels" . | nindent 8 }}
+      {{- with .Values.backend.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "helpdesk.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10001
+      containers:
+        - name: backend
+          image: "{{ .Values.global.backendImage.repository }}:{{ .Values.global.backendImage.tag }}"
+          imagePullPolicy: {{ .Values.global.backendImage.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.containerPort }}
+              protocol: TCP
+          {{- with .Values.backend.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backend.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backend.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "helpdesk.fullname" . }}-config
+            {{- if .Values.backend.existingSecret }}
+            - secretRef:
+                name: {{ .Values.backend.existingSecret }}
+            {{- else }}
+            {{- if .Values.backend.config.ENVIRONMENT | eq "production" }}
+            {{- fail "backend.existingSecret is REQUIRED for production deployments. Create a Kubernetes Secret with DATABASE_URL, CLERK_SECRET_KEY, RATE_LIMIT_REDIS_URL, CLAMAV_HOST, RATE_LIMIT_TRUSTED_PROXIES, and FRONTEND_URL, then set backend.existingSecret to the secret name." }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: uploads
+              mountPath: {{ .Values.backend.persistence.mountPath }}
+      volumes:
+        - name: uploads
+          {{- if .Values.backend.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "helpdesk.fullname" . }}-uploads
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

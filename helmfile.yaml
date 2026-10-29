@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Helmfile — HelpDesk Kubernetes deployment
+# ---------------------------------------------------------------------------
+# This file manages the HelpDesk Helm release reproducibly.
+# It is safe to run `helmfile lint` and `helmfile build` locally without
+# a Kubernetes cluster — no cluster changes will occur.
+#
+# To actually deploy, run `helmfile apply` against a configured cluster.
+# ---------------------------------------------------------------------------
+
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 300
+  createNamespace: true
+  atomic: true
+
+releases:
+  - name: helpdesk
+    namespace: helpdesk
+    chart: ./helm/helpdesk
+    values:
+      # Override values here or via separate values files per environment.
+      # Sensitive values MUST be provided via a Kubernetes Secret.
+      # Set backend.existingSecret to the secret name containing:
+      #   DATABASE_URL, CLERK_SECRET_KEY, RATE_LIMIT_REDIS_URL,
+      #   CLAMAV_HOST, RATE_LIMIT_TRUSTED_PROXIES, FRONTEND_URL
+      #
+      # Example (do NOT commit real secrets):
+      # backend:
+      #   existingSecret: helpdesk-secrets
+      #
+      # Image settings — replace with your actual registry:
+      # global:
+      #   backendImage:
+      #     repository: ghcr.io/mdjayedgazi/helpdesk-backend
+      #     tag: v1.0.0
+      #   frontendImage:
+      #     repository: ghcr.io/mdjayedgazi/helpdesk-frontend
+      #     tag: v1.0.0

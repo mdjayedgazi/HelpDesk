@@ -1,0 +1,24 @@
+# Helm chart packaging exclusions
+# These files are excluded when packaging the chart with `helm package`.
+# They are still tracked by Git for local development.
+
+# Git directory
+.git/
+
+# Editor/IDE artifacts
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local overrides (secrets should never be packaged)
+*.secrets.yaml
+*.override.yaml
+
+# Documentation not needed in packaged chart
+*.md
