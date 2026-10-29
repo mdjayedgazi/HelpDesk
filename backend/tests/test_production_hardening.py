@@ -380,7 +380,7 @@ def _production_settings(**overrides) -> Settings:
         "DATABASE_URL": (
             "postgresql+psycopg://helpdesk:strongpass@postgres.railway.internal:5432/helpdesk"
         ),
-        "CLERK_SECRET_KEY": "sk_live_REDACTED",
+        "CLERK_SECRET_KEY": ('sk_live_' + 'x' * 32),
         "FRONTEND_URL": "https://helpdesk.acme-corp.com",
         "RATE_LIMIT_ENABLED": True,
         "RATE_LIMIT_REDIS_URL": "redis://default:strongpass@redis.railway.internal:6379/0",
@@ -410,7 +410,7 @@ def test_valid_production_configuration_is_accepted():
         ({"FRONTEND_URL": "http://localhost:5173"}, "FRONTEND_URL"),
         ({"FRONTEND_URL": "http://helpdesk.example.com"}, "FRONTEND_URL"),
         ({"FRONTEND_URL": "https://helpdesk.example.com"}, "placeholder"),
-        ({"CLERK_SECRET_KEY": "sk_test_REDACTED"}, "CLERK_SECRET_KEY"),
+        ({"CLERK_SECRET_KEY": ('sk_test_' + 'x' * 32)}, "CLERK_SECRET_KEY"),
         ({"DATABASE_URL": "sqlite+aiosqlite://"}, "DATABASE_URL"),
         (
             {"DATABASE_URL": "postgresql+psycopg://u:p@localhost:5432/helpdesk"},
@@ -498,10 +498,11 @@ def test_production_docs_routes_are_disabled_in_a_fresh_app_process():
     env = {
         **os.environ,
         "ENVIRONMENT": "production",
+        "DB_STATEMENT_TIMEOUT_MS": "5000",
         "DATABASE_URL": (
             "postgresql+psycopg://helpdesk:strongpass@postgres.railway.internal:5432/helpdesk"
         ),
-        "CLERK_SECRET_KEY": "sk_live_REDACTED",
+        "CLERK_SECRET_KEY": ('sk_live_' + 'x' * 32),
         "FRONTEND_URL": "https://helpdesk.acme-corp.com",
         "CORS_ORIGINS": "",
         "RATE_LIMIT_ENABLED": "true",
