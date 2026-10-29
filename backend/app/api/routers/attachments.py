@@ -297,14 +297,22 @@ async def download_attachment(
     Legacy ``PENDING`` files are rescanned on demand. A file is served only
     after an explicit CLEAN result; scanner errors remain fail-closed.
     """
-    attachment = await session.get(Attachment, attachment_id, with_for_update=True)
+    attachment = await session.get(Attachment, attachment_id)
     if attachment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Attachment not found",
         )
 
+    # Authorize before taking any lock, so a caller who cannot see the ticket
+    # can never hold a row lock on its attachments.
     await load_visible_ticket(session, attachment.ticket_id, user)
+
+    if attachment.scan_status is AttachmentScanStatus.PENDING:
+        # Only a legacy rescan mutates the row. Lock it for that case alone and
+        # re-read the status, because a concurrent download may have finished
+        # the rescan first. CLEAN downloads stay lock-free.
+        await session.refresh(attachment, with_for_update=True)
 
     root = _upload_root()
     path = (root / attachment.storage_key).resolve()

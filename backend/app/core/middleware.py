@@ -207,12 +207,14 @@ class SecurityHeadersMiddleware:
                         )
                     )
 
-                existing = {
-                    key.lower(): value for key, value in message.get("headers", [])
-                }
-                for key, value in extra:
-                    existing.setdefault(key, value)
-                message["headers"] = list(existing.items())
+                # Keep every application header, including repeated ones such as
+                # Set-Cookie or Vary, and only add defaults that are absent.
+                response_headers = list(message.get("headers", []))
+                present = {key.lower() for key, _ in response_headers}
+                response_headers.extend(
+                    (key, value) for key, value in extra if key not in present
+                )
+                message["headers"] = response_headers
 
             await send(message)
 

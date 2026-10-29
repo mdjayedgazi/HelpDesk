@@ -311,6 +311,20 @@ def test_invalid_forwarded_hop_falls_back_to_peer(monkeypatch):
     assert resolve_client_ip(request) == "10.1.2.3"
 
 
+def test_trust_all_proxies_never_honours_a_client_supplied_hop(monkeypatch):
+    """With every hop trusted, the spoofable leftmost value must not be used.
+
+    The documented consequence (docs/DEPLOYMENT.md) is that anonymous callers
+    share the edge peer's bucket, which fails safe instead of allowing bypass.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_TRUSTED_PROXIES", ["0.0.0.0/0", "::/0"])
+    request = _request("10.1.2.3", "198.51.100.7, 10.0.0.5")
+
+    assert resolve_client_ip(request) == "10.1.2.3"
+
+
 class BrokenRedis:
     async def eval(self, *args, **kwargs):
         raise ConnectionError("connection refused")

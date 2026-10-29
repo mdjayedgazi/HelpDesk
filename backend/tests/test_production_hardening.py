@@ -12,6 +12,7 @@ from app.api.routers.users import _profile_integrity_error
 from app.core.config import Settings
 from app.core.config import settings as app_settings
 from app.core.logging import redact
+from app.core.middleware import SecurityHeadersMiddleware
 from app.enums.enums import Role, TicketStatus
 
 
@@ -260,6 +261,48 @@ async def test_hsts_is_only_added_when_explicitly_enabled(client, monkeypatch):
     enabled = await client.get("/health/live")
     assert enabled.status_code == 200
     assert "max-age=31536000" in enabled.headers["strict-transport-security"]
+
+
+@pytest.mark.asyncio
+async def test_security_headers_preserve_repeated_and_explicit_headers():
+    """Repeated headers (Set-Cookie, Vary) must survive, and app values win."""
+
+    async def downstream(scope, receive, send):
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"set-cookie", b"a=1; Path=/"),
+                    (b"set-cookie", b"b=2; Path=/"),
+                    (b"vary", b"Origin"),
+                    (b"vary", b"Accept-Encoding"),
+                    (b"X-Frame-Options", b"SAMEORIGIN"),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": b""})
+
+    sent: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "GET", "path": "/api/v1/probe", "headers": []}
+    await SecurityHeadersMiddleware(downstream)(scope, receive, send)
+
+    headers = [(key.lower(), value) for key, value in sent[0]["headers"]]
+    assert [v for k, v in headers if k == b"set-cookie"] == [
+        b"a=1; Path=/",
+        b"b=2; Path=/",
+    ]
+    assert [v for k, v in headers if k == b"vary"] == [b"Origin", b"Accept-Encoding"]
+    assert [v for k, v in headers if k == b"x-frame-options"] == [b"SAMEORIGIN"]
+    assert (b"x-content-type-options", b"nosniff") in headers
+    assert (b"cache-control", b"no-store") in headers
 
 
 @pytest.mark.asyncio
