@@ -588,3 +588,39 @@ correct verdict is **NO-GO** for public production.
 
 No production data was modified, no secret was exposed, and no commit, push,
 merge, or deployment was performed.
+
+---
+
+## 11. Addendum: PR branch audit (`audit/production-readiness-pr`)
+
+**Date:** 2026-10-29. This pass supersedes F-05 (dirty tree) and the
+commit/PR row in §5.3: the remediation above is committed on a fresh branch
+created from `origin/main` (`e85345b`) and proposed through a pull request.
+
+### 11.1 History recovery
+
+- `git-filter-repo` (run to redact Stripe-key-shaped fixtures) rewrote the
+  shared history, so `oddit`'s base `e3f5663` and `origin/main` `e85345b`
+  became different commits with an **identical tree**. Merging `origin/main`
+  into `oddit` therefore produced add/add conflicts in every file the
+  remediation touched, although there were no competing edits.
+- The PR branch does not reuse `oddit`'s rewritten commits. The exact content
+  delta `e85345b..oddit` (49 files) was re-applied as a new commit on
+  `origin/main`, then reviewed and extended below.
+- The originally flagged commit is not reachable from any ref in the working
+  repository; it exists only in the offline backup bundle, which is not pushed.
+  Clerk key fixtures in `backend/tests/test_production_hardening.py` are built
+  at runtime from a prefix plus filler.
+
+### 11.2 Additional findings
+
+| ID | Severity | Finding | Status | Evidence / residual note |
+| --- | --- | --- | --- | --- |
+| H-21 | Low | Attachment download took a `FOR UPDATE` row lock before checking ticket visibility, and on every download, so any authenticated caller could hold locks on attachment rows and clean downloads were serialised. | `FIXED AND VERIFIED` | The row is read without a lock, visibility is checked, and only a `PENDING` rescan re-reads the row `FOR UPDATE`. Regression tests assert the call order; they fail on the previous code. |
+| H-22 | Low | `SecurityHeadersMiddleware` rebuilt response headers as a dict, silently dropping repeated headers such as `Set-Cookie` and `Vary`. | `FIXED AND VERIFIED` | Headers are kept as a list and defaults are only appended when absent. Regression test fails on the previous code. |
+| H-23 | Low | `docs/DEPLOYMENT.md` called `RATE_LIMIT_TRUSTED_PROXIES=0.0.0.0/0,::/0` acceptable, but with every hop trusted the limiter falls back to the edge peer, so all anonymous callers share one bucket. | `FIXED AND VERIFIED` (docs) | Runbook corrected; a test pins the fail-safe behaviour (no client-supplied hop is honoured). Choosing the real Railway edge ranges remains an operational task. |
+| H-24 | Low | `test_production_hardening.py` was not `ruff format` clean after the history redaction, which would fail CI. | `FIXED AND VERIFIED` | `ruff format --check` is clean. |
+
+External items in §5.3 and §9 (Railway, TLS, ClamAV, shared Redis, Clerk
+production, backups, monitoring, hosted CI) remain `NOT VERIFIED`; this pass
+did not change them.

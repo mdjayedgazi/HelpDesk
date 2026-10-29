@@ -72,7 +72,7 @@ repository. Configure the services and variables in the Railway dashboard.
 | `CLAMAV_PORT` | `3310` (or the port exposed by the scanner service) |
 | `RATE_LIMIT_ENABLED` | `true` |
 | `RATE_LIMIT_REDIS_URL` | Railway Redis private URL (`redis://...` or `rediss://...`), not localhost. |
-| `RATE_LIMIT_TRUSTED_PROXIES` | Non-empty list of the direct reverse-proxy/edge CIDRs that are allowed to supply `X-Forwarded-For`. Use the actual Railway edge ranges observed for the service. `0.0.0.0/0,::/0` is acceptable only when the service has no network path except Railway's edge; blank is rejected. |
+| `RATE_LIMIT_TRUSTED_PROXIES` | Non-empty list of the direct reverse-proxy/edge CIDRs that are allowed to supply `X-Forwarded-For`. Use the actual Railway edge ranges observed for the service; blank is rejected. Avoid `0.0.0.0/0,::/0`: when every hop is trusted the limiter cannot identify a client hop and falls back to the edge peer address, so all anonymous callers (for example account requests) share one rate-limit bucket. Authenticated limits are keyed per user and are unaffected. |
 | `HSTS_ENABLED` | `false` until the API custom domain has a verified TLS certificate and the smoke tests pass; then `true`. |
 | `HSTS_MAX_AGE_SECONDS` | `31536000` after TLS verification. |
 | `LOG_LEVEL` | `INFO` |
