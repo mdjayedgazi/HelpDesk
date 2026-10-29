@@ -39,6 +39,11 @@ def _blank_phone_to_none(value: object) -> object:
 
 TrimmedText = Annotated[str, BeforeValidator(_stripped)]
 
+# Maximum lengths for free-text ticket fields. The database stores unbounded
+# text, but the API must bound what one request can write.
+MAX_TICKET_TITLE_LENGTH = 180
+MAX_TICKET_DESCRIPTION_LENGTH = 10_000
+
 # A validated phone number: digits with the usual separators, 5-32 characters.
 PhoneNumber = Annotated[
     str,
@@ -56,8 +61,10 @@ class TicketCreate(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    title: TrimmedText = Field(min_length=1, max_length=180)
-    description: TrimmedText = Field(min_length=1)
+    title: TrimmedText = Field(min_length=1, max_length=MAX_TICKET_TITLE_LENGTH)
+    description: TrimmedText = Field(
+        min_length=1, max_length=MAX_TICKET_DESCRIPTION_LENGTH
+    )
     category: TicketCategory
     impact: ImpactLevel | None = None
     # Optional personal contact number. Never required, never echoed back in
@@ -78,8 +85,12 @@ class TicketStaffUpdate(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    title: TrimmedText | None = Field(default=None, min_length=1, max_length=180)
-    description: TrimmedText | None = Field(default=None, min_length=1)
+    title: TrimmedText | None = Field(
+        default=None, min_length=1, max_length=MAX_TICKET_TITLE_LENGTH
+    )
+    description: TrimmedText | None = Field(
+        default=None, min_length=1, max_length=MAX_TICKET_DESCRIPTION_LENGTH
+    )
     status: TicketStatus | None = None
     priority: TicketPriority | None = None
     category: TicketCategory | None = None

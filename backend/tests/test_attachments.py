@@ -289,7 +289,7 @@ async def _make_attachment(
 
 
 @pytest.mark.asyncio
-async def test_pending_attachment_cannot_be_downloaded(
+async def test_pending_attachment_is_rescanned_before_download(
     client, session_factory, make_user, make_ticket
 ):
     customer = await make_user()
@@ -307,7 +307,42 @@ async def test_pending_attachment_cannot_be_downloaded(
         headers={"X-Test-User": customer.username},
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert response.content == b"fixture"
+
+    async with session_factory() as session:
+        stored = await session.get(Attachment, attachment.id)
+    assert stored is not None
+    assert stored.scan_status is AttachmentScanStatus.CLEAN
+
+
+@pytest.mark.asyncio
+async def test_pending_attachment_fails_closed_when_rescan_unavailable(
+    client, session_factory, make_user, make_ticket
+):
+    app.dependency_overrides[get_malware_scanner] = lambda: StubScanner(
+        error=ScannerUnavailable("scanner offline")
+    )
+    customer = await make_user()
+    ticket = await make_ticket(customer)
+    attachment = await _make_attachment(
+        session_factory,
+        customer=customer,
+        ticket=ticket,
+        scan_status=AttachmentScanStatus.PENDING,
+        storage_key="pending-offline.txt",
+    )
+
+    response = await client.get(
+        f"/api/v1/attachments/{attachment.id}/download",
+        headers={"X-Test-User": customer.username},
+    )
+
+    assert response.status_code == 503
+    async with session_factory() as session:
+        stored = await session.get(Attachment, attachment.id)
+    assert stored is not None
+    assert stored.scan_status is AttachmentScanStatus.PENDING
 
 
 @pytest.mark.asyncio

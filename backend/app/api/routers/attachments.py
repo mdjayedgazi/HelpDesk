@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlmodel import select
 
 from app.core.auth import user_dependency
@@ -106,6 +107,18 @@ def _safe_display_name(filename: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9._ -]", "_", name)[:255] or "attachment"
 
 
+async def _ticket_attachment_totals(session, ticket_id: uuid.UUID) -> tuple[int, int]:
+    """Return ``(count, total_bytes)`` for a ticket's stored attachments."""
+    result = await session.exec(
+        select(
+            func.count(Attachment.id),
+            func.coalesce(func.sum(Attachment.size_bytes), 0),
+        ).where(Attachment.ticket_id == ticket_id)
+    )
+    count, total_bytes = result.one()
+    return int(count), int(total_bytes)
+
+
 @router.get(
     "/api/v1/tickets/{ticket_id}/attachments",
     response_model=list[AttachmentRead],
@@ -143,7 +156,24 @@ async def upload_attachment(
     _rate_limit: Annotated[None, Depends(rate_limit("attachment_upload"))],
 ) -> Attachment:
     """Upload, quarantine, scan, and only then publish an attachment."""
-    await load_visible_ticket(session, ticket_id, user)
+    # Locking the ticket serialises concurrent uploads to the same ticket, so
+    # count/byte quotas cannot both be satisfied by racing requests.
+    ticket = await load_visible_ticket(session, ticket_id, user, for_update=True)
+
+    attachment_count, attachment_bytes = await _ticket_attachment_totals(
+        session, ticket.id
+    )
+    if attachment_count >= settings.MAX_ATTACHMENTS_PER_TICKET:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="This ticket has reached its attachment count limit",
+        )
+    if attachment_bytes >= settings.MAX_TICKET_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="This ticket has reached its attachment storage limit",
+        )
+    remaining_ticket_bytes = settings.MAX_TICKET_ATTACHMENT_BYTES - attachment_bytes
 
     content_type = file.content_type or "application/octet-stream"
     if content_type not in ALLOWED_CONTENT_TYPES:
@@ -173,15 +203,24 @@ async def upload_attachment(
                 status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail="File is too large",
             )
+        if size > remaining_ticket_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="This ticket has reached its attachment storage limit",
+            )
 
         with quarantined.open("wb") as out:
             out.write(header)
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
-                if size > settings.MAX_UPLOAD_BYTES:
+                if size > settings.MAX_UPLOAD_BYTES or size > remaining_ticket_bytes:
                     raise HTTPException(
                         status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                        detail="File is too large",
+                        detail=(
+                            "File is too large"
+                            if size > settings.MAX_UPLOAD_BYTES
+                            else "This ticket has reached its attachment storage limit"
+                        ),
                     )
                 out.write(chunk)
 
@@ -251,9 +290,14 @@ async def download_attachment(
     attachment_id: uuid.UUID,
     session: session_Dependency,
     user: user_dependency,
+    scanner: Annotated[MalwareScanner, Depends(get_malware_scanner)],
 ) -> FileResponse:
-    """Download a stored attachment if the user may view its ticket."""
-    attachment = await session.get(Attachment, attachment_id)
+    """Download a stored attachment if the user may view its ticket.
+
+    Legacy ``PENDING`` files are rescanned on demand. A file is served only
+    after an explicit CLEAN result; scanner errors remain fail-closed.
+    """
+    attachment = await session.get(Attachment, attachment_id, with_for_update=True)
     if attachment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -276,6 +320,45 @@ async def download_attachment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Attachment file not found",
         )
+
+    if attachment.scan_status is AttachmentScanStatus.PENDING:
+        try:
+            scan = await scanner.scan(path)
+        except ScannerError as exc:
+            logger.warning("Attachment rescan unavailable: %s", exc)
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Attachment scanning is temporarily unavailable",
+                headers={"Retry-After": "5"},
+            ) from None
+
+        if scan.status is AttachmentScanStatus.CLEAN:
+            attachment.scan_status = AttachmentScanStatus.CLEAN
+            session.add(attachment)
+            await session.commit()
+        elif scan.status is AttachmentScanStatus.INFECTED:
+            path.unlink(missing_ok=True)
+            attachment.scan_status = AttachmentScanStatus.INFECTED
+            session.add(attachment)
+            await session.commit()
+            logger.warning(
+                "Rejected a legacy infected attachment (%s)",
+                scan.detail or "unknown signature",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attachment file not found",
+            )
+        else:
+            # A scanner must explicitly say CLEAN. PENDING/unknown is a failure.
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Attachment scanning did not return a clean result",
+                headers={"Retry-After": "5"},
+            )
+
     if attachment.scan_status is not AttachmentScanStatus.CLEAN:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

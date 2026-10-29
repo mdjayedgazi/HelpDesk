@@ -37,7 +37,7 @@ export function EmployeePicker({
   const [query, setQuery] = useState('')
   const debounced = useDebounced(query, 250)
   const { data, isPending, isError } = useMessageRecipients(
-    { q: debounced.trim() || undefined, limit: 8 },
+    { q: debounced.trim() || undefined, limit: 500 },
     !disabled,
   )
   const results = data ?? []

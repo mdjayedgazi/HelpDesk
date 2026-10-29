@@ -191,6 +191,30 @@ async def get_rate_limit_store() -> RateLimitStore | None:
     return RedisRateLimitStore(client)
 
 
+async def ping_rate_limit_store() -> None:
+    """Verify Redis connectivity, raising ``RateLimitUnavailable`` on failure.
+
+    Used by startup validation and the readiness probe. It never reports a
+    healthy limiter when the shared store cannot be reached.
+    """
+    if not settings.RATE_LIMIT_ENABLED:
+        return
+    client = await _get_redis_client()
+    try:
+        await client.ping()
+    except (RedisError, OSError, TimeoutError) as exc:
+        raise RateLimitUnavailable("Redis rate-limit ping failed") from exc
+
+
+async def close_rate_limit_store() -> None:
+    """Close the shared Redis client during application shutdown."""
+    global _redis_client
+    client = _redis_client
+    _redis_client = None
+    if client is not None:
+        await client.aclose()
+
+
 RateLimitStoreDependency = Annotated[
     RateLimitStore | None,
     Depends(get_rate_limit_store),
@@ -249,6 +273,11 @@ def _policy_for(name: str) -> RateLimitPolicy:
         "internal_message_create": RateLimitPolicy(
             name,
             settings.RATE_LIMIT_INTERNAL_MESSAGE_CREATE,
+            settings.RATE_LIMIT_WINDOW_SECONDS,
+        ),
+        "notification_poll": RateLimitPolicy(
+            name,
+            settings.RATE_LIMIT_NOTIFICATION_POLL,
             settings.RATE_LIMIT_WINDOW_SECONDS,
         ),
     }

@@ -36,6 +36,46 @@ EMAIL_MANAGED_BY_CLERK = (
 )
 
 
+def _reject_null_required_fields(data: dict, allowed_null: set[str]) -> None:
+    """Reject explicit nulls for non-nullable profile/account columns."""
+    nulls = sorted(
+        field
+        for field, value in data.items()
+        if value is None and field not in allowed_null
+    )
+    if nulls:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="These fields cannot be null: " + ", ".join(nulls),
+        )
+
+
+def _is_username_conflict(exc: IntegrityError) -> bool:
+    """Whether an integrity failure is the users.username unique constraint."""
+    orig = getattr(exc, "orig", None)
+    sqlstate = getattr(orig, "sqlstate", None)
+    if sqlstate is not None and sqlstate != "23505":
+        return False
+    diag = getattr(orig, "diag", None)
+    constraint = getattr(diag, "constraint_name", None) if diag is not None else None
+    if constraint:
+        return "username" in constraint.lower()
+    return "username" in str(orig or exc).lower()
+
+
+def _profile_integrity_error(exc: IntegrityError) -> HTTPException:
+    """Map a profile write failure without lying about the constraint."""
+    if _is_username_conflict(exc):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username is already taken",
+        )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Could not update the profile because of a data conflict",
+    )
+
+
 def _reject_email_change(data: dict, current_email: str) -> None:
     """Remove an optional email field, rejecting any attempt to alter it.
 
@@ -110,6 +150,8 @@ async def update_my_profile(
             detail="No fields to update",
         )
 
+    _reject_null_required_fields(data, allowed_null=set())
+
     await _ensure_unique_identity(
         session,
         username=data.get("username"),
@@ -122,12 +164,9 @@ async def update_my_profile(
     session.add(user)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username is already taken",
-        ) from None
+        raise _profile_integrity_error(exc) from None
 
     await session.refresh(user)
     return user
@@ -248,6 +287,8 @@ async def update_user_by_owner(
             detail="No fields to update",
         )
 
+    _reject_null_required_fields(data, allowed_null=set())
+
     if "role" in data:
         data["role"] = _as_role(data["role"])
 
@@ -265,12 +306,9 @@ async def update_user_by_owner(
     session.add(target)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username is already taken",
-        ) from None
+        raise _profile_integrity_error(exc) from None
 
     await session.refresh(target)
     return target
