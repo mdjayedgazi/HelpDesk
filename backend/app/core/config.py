@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     # documentation routes.
     ENVIRONMENT: Literal["development", "test", "production"] = "development"
 
+    # Deployment hardening profile. ``standard`` is the strict commercial
+    # production profile. ``college-demo`` is an explicit, public-demo profile
+    # that may use Clerk development keys and may run without ClamAV *only*
+    # because attachments are disabled. It never relaxes HTTPS, CORS, database,
+    # Redis, role-authorization, or documentation checks.
+    DEPLOYMENT_PROFILE: Literal["standard", "college-demo"] = "standard"
+
     # Additional browser origins allowed by CORS and accepted as the Clerk
     # session token's authorized party (`azp`). Leave empty in production (only
     # FRONTEND_URL is allowed); set it in local development when the frontend
@@ -71,6 +78,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def is_college_demo(self) -> bool:
+        """Whether the explicit public-demo relaxation profile is active.
+
+        Only meaningful together with ``ENVIRONMENT=production``; development
+        and test already use relaxed local settings.
+        """
+        return self.DEPLOYMENT_PROFILE == "college-demo"
 
     @property
     def docs_enabled(self) -> bool:
@@ -114,6 +130,11 @@ class Settings(BaseSettings):
     # Echo every SQL statement. Useful while learning, noisy in production.
     DATABASE_ECHO: bool = False
 
+    # Optional direct (non-pooled) Neon URL used only by Alembic. Runtime uses
+    # DATABASE_URL; migrations may prefer a direct endpoint because DDL through
+    # a transaction pooler adds avoidable failure modes.
+    MIGRATION_DATABASE_URL: str | None = None
+
     # Create missing tables on startup. Handy for local development, but a
     # real deployment should use migrations instead of this flag.
     AUTO_CREATE_TABLES: bool = False
@@ -129,6 +150,10 @@ class Settings(BaseSettings):
     # Where uploaded attachment files are stored, and the maximum size.
     # UPLOAD_DIR must be on a persistent volume in production.
     UPLOAD_DIR: str = "uploads"
+    # Feature kill-switch. When false, no upload is accepted at all: the API
+    # rejects the request before parsing multipart data and never writes a file.
+    # Existing attachment metadata is left untouched.
+    ATTACHMENTS_ENABLED: bool = True
     MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024  # 5 MiB
     # Multipart framing adds a small amount above the file itself. The request
     # body middleware rejects anything larger before FastAPI parses/spools it.
@@ -270,7 +295,15 @@ class Settings(BaseSettings):
         if "*" in self.allowed_origins:
             add("Wildcard CORS origins are not allowed in production")
 
-        if not self.CLERK_SECRET_KEY.startswith("sk_live_"):
+        if self.is_college_demo:
+            # The demo profile is the only place a Clerk development secret is
+            # accepted. A live key remains valid too.
+            if not self.CLERK_SECRET_KEY.startswith(("sk_test_", "sk_live_")):
+                add(
+                    "CLERK_SECRET_KEY must be a Clerk secret "
+                    "(sk_test_ only in the college-demo profile)"
+                )
+        elif not self.CLERK_SECRET_KEY.startswith("sk_live_"):
             add("CLERK_SECRET_KEY must be a Clerk production secret (sk_live_...)")
         if _looks_like_placeholder(self.CLERK_SECRET_KEY):
             add("CLERK_SECRET_KEY contains a placeholder value")
@@ -287,6 +320,22 @@ class Settings(BaseSettings):
         if _looks_like_placeholder(self.DATABASE_URL):
             add("DATABASE_URL contains a placeholder value")
 
+        if self.MIGRATION_DATABASE_URL:
+            migration_db = urlsplit(self.MIGRATION_DATABASE_URL)
+            if migration_db.scheme not in {
+                "postgresql",
+                "postgresql+psycopg",
+                "postgres",
+            }:
+                add("MIGRATION_DATABASE_URL must use PostgreSQL with psycopg")
+            if (
+                not migration_db.hostname
+                or migration_db.hostname.lower() in _LOCAL_HOSTS
+            ):
+                add("MIGRATION_DATABASE_URL must not point at localhost")
+            if _looks_like_placeholder(self.MIGRATION_DATABASE_URL):
+                add("MIGRATION_DATABASE_URL contains a placeholder value")
+
         if not self.RATE_LIMIT_ENABLED:
             add("RATE_LIMIT_ENABLED must be true in production")
         redis = urlsplit(self.RATE_LIMIT_REDIS_URL or "")
@@ -294,10 +343,20 @@ class Settings(BaseSettings):
             add("RATE_LIMIT_REDIS_URL must be a redis:// or rediss:// URL")
         elif redis.hostname.lower() in _LOCAL_HOSTS:
             add("RATE_LIMIT_REDIS_URL must not point at localhost in production")
-        if not self.RATE_LIMIT_TRUSTED_PROXIES:
+        elif self.is_college_demo and redis.scheme != "rediss":
+            add("RATE_LIMIT_REDIS_URL must use TLS (rediss://) in college-demo")
+        if not self.RATE_LIMIT_TRUSTED_PROXIES and not self.is_college_demo:
             add(
                 "RATE_LIMIT_TRUSTED_PROXIES must explicitly describe the "
                 "reverse proxy/edge that supplies X-Forwarded-For"
+            )
+        if self.is_college_demo and any(
+            network in {"0.0.0.0/0", "::/0"}
+            for network in self.RATE_LIMIT_TRUSTED_PROXIES
+        ):
+            add(
+                "RATE_LIMIT_TRUSTED_PROXIES must not trust every address "
+                "in the college-demo profile"
             )
         if self.RATE_LIMIT_REDIS_TIMEOUT_SECONDS <= 0:
             add("RATE_LIMIT_REDIS_TIMEOUT_SECONDS must be positive")
@@ -319,14 +378,28 @@ class Settings(BaseSettings):
             if getattr(self, field_name) <= 0:
                 add(f"{field_name} must be positive")
 
-        if not self.MALWARE_SCAN_ENABLED:
-            add("MALWARE_SCAN_ENABLED must be true in production")
-        if not self.CLAMAV_HOST or self.CLAMAV_HOST.strip().lower() in _LOCAL_HOSTS:
+        if self.ATTACHMENTS_ENABLED:
+            # Uploads are only accepted when a real malware scanner is
+            # configured. Disabling the feature is the supported demo mode;
+            # accepting unscanned files is not.
+            if not self.MALWARE_SCAN_ENABLED:
+                add("MALWARE_SCAN_ENABLED must be true when attachments are enabled")
+            if not self.CLAMAV_HOST or self.CLAMAV_HOST.strip().lower() in _LOCAL_HOSTS:
+                add("CLAMAV_HOST must point at a reachable ClamAV service")
+            if not 1 <= self.CLAMAV_PORT <= 65_535:
+                add("CLAMAV_PORT must be a valid TCP port")
+            if self.CLAMAV_TIMEOUT_SECONDS <= 0:
+                add("CLAMAV_TIMEOUT_SECONDS must be positive")
+
+            upload_dir = self.UPLOAD_DIR.strip()
+            if not upload_dir.startswith("/"):
+                add("UPLOAD_DIR must be an absolute path on a persistent volume")
+            elif upload_dir == "/" or upload_dir.startswith(("/tmp", "/var/tmp")):
+                add("UPLOAD_DIR must be a durable path, not / or a temp directory")
+        elif self.MALWARE_SCAN_ENABLED and (
+            not self.CLAMAV_HOST or self.CLAMAV_HOST.strip().lower() in _LOCAL_HOSTS
+        ):
             add("CLAMAV_HOST must point at a reachable ClamAV service")
-        if not 1 <= self.CLAMAV_PORT <= 65_535:
-            add("CLAMAV_PORT must be a valid TCP port")
-        if self.CLAMAV_TIMEOUT_SECONDS <= 0:
-            add("CLAMAV_TIMEOUT_SECONDS must be positive")
 
         if self.HSTS_MAX_AGE_SECONDS < 0:
             add("HSTS_MAX_AGE_SECONDS must be zero or positive")
@@ -340,12 +413,6 @@ class Settings(BaseSettings):
             "NOTSET",
         }:
             add("LOG_LEVEL must be a standard logging level")
-
-        upload_dir = self.UPLOAD_DIR.strip()
-        if not upload_dir.startswith("/"):
-            add("UPLOAD_DIR must be an absolute path on a persistent volume")
-        elif upload_dir == "/" or upload_dir.startswith(("/tmp", "/var/tmp")):
-            add("UPLOAD_DIR must be a durable path, not / or a temp directory")
 
         if self.AUTO_CREATE_TABLES:
             add("AUTO_CREATE_TABLES must be false in production (use Alembic)")

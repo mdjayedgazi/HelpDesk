@@ -19,7 +19,11 @@ from app.core.rate_limit import ping_rate_limit_store
 
 logger = logging.getLogger(__name__)
 
-_CHECK_TIMEOUT_SECONDS = 3.0
+# Neon's pooled endpoint can need several seconds to establish the first
+# connection after the database or the Railway service wakes from idle. The
+# probe must not report a healthy deployment as unavailable during that window;
+# Railway's own healthcheck timeout is much larger (default 300s).
+_CHECK_TIMEOUT_SECONDS = 10.0
 
 
 async def _database_check() -> str:
