@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     # local account whose verified Clerk primary email matches this address to
     # the permanent OWNER role. It is never consulted on the request path: the
     # application no longer elevates or demotes anyone based on this setting, so
-    # removing it after the Owner has been bootstrapped never changes a stored
+    # removing it after the Owner has never been bootstrapped changes a stored
     # role. Empty/unset disables the bootstrap command.
     # Comparison is whitespace-insensitive and case-insensitive.
     INITIAL_ADMIN_EMAIL: str | None = None
