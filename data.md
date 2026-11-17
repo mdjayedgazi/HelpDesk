@@ -5,7 +5,8 @@
 **PR:** [#18 — Deploy: safe Railway college-demo profile](https://github.com/mdjayedgazi/HelpDesk/pull/18)
 **PR branch:** `deploy/railway-college-demo`
 **Deployment branch:** `main`
-**Current PR head at review start:** `e037831` (plus the frontend CSP fixes described below)
+**PR head after this pass:** `2f6fe0f` (frontend CSP fix + documentation)
+**CI on that head:** all five jobs passed; CodeRabbit skipped manual review
 **Target:** public college demo on Railway's Free plan, using Railway-generated
 HTTPS domains
 
@@ -410,7 +411,20 @@ Railway API origin and the Clerk publishable key. The only `http://localhost`
 strings found are internal library fallbacks in Clerk/Zod code, not application
 requests.
 
-### 7.3 Docker images — PASS
+### 7.3 GitHub Actions CI — PASS
+
+Run on `2f6fe0f` (`CI` workflow):
+
+| Job | Result |
+| --- | --- |
+| Backend lint and SQLite tests | PASS |
+| Frontend typecheck, lint, tests, build | PASS |
+| Production dependency audit | PASS |
+| Alembic migrations (disposable PostgreSQL) | PASS |
+| PostgreSQL integration tests (disposable service) | PASS |
+| CodeRabbit | Skipped: manual review required for this OSS repository |
+
+### 7.4 Docker images — PASS
 
 | Image | Result |
 | --- | --- |
@@ -421,7 +435,7 @@ The frontend build emits a Docker warning that
 `VITE_CLERK_PUBLISHABLE_KEY` is used in `ARG`/`ENV`. That key is public by
 design; no secret key is passed to the frontend build.
 
-### 7.4 Backend container smoke — PASS
+### 7.5 Backend container smoke — PASS
 
 Run with a disposable SQLite database, `ENVIRONMENT=development`, attachments
 disabled, and rate limiting disabled (the production profile would require
@@ -436,7 +450,7 @@ PostgreSQL and Redis):
 | API security headers | Present |
 | API CSP | `default-src 'none'; frame-ancestors 'none'; ...` |
 
-### 7.5 Web container smoke — PASS
+### 7.6 Web container smoke — PASS
 
 | Check | Result |
 | --- | --- |
@@ -449,7 +463,7 @@ PostgreSQL and Redis):
 | CSP with Clerk telemetry/frame entries | Present |
 | Bundle API origin | Only the Railway API origin |
 
-### 7.6 Neon PostgreSQL — PASS (read-only)
+### 7.7 Neon PostgreSQL — PASS (read-only)
 
 | Check | Result |
 | --- | --- |
@@ -465,7 +479,7 @@ PostgreSQL and Redis):
 No migration was run. No data was inserted, updated, or deleted. The runtime URL
 is a Neon pooled host with `sslmode=require`.
 
-### 7.7 Clerk — PASS for configuration, live sign-in NOT VERIFIED
+### 7.8 Clerk — PASS for configuration, live sign-in NOT VERIFIED
 
 - Development instance (`environment_type=development`).
 - Frontend API host: `https://social-ferret-6540.clerk.accounts.dev`.
@@ -478,7 +492,7 @@ is a Neon pooled host with `sslmode=require`.
 - Live sign-up/sign-in cannot be verified until the web service is redeployed
   with the fixed CSP and the API is deployed.
 
-### 7.8 Railway project state — EXTERNAL, partially verified
+### 7.9 Railway project state — EXTERNAL, partially verified
 
 | Item | State |
 | --- | --- |
@@ -497,7 +511,7 @@ is a Neon pooled host with `sslmode=require`.
 | Sleep when idle | Enabled for both |
 | Auto deploy | `main` only, both services, `checkSuites=true` (Wait for CI) |
 
-### 7.9 Live public endpoints — FAIL / NOT VERIFIED
+### 7.10 Live public endpoints — FAIL / NOT VERIFIED
 
 | Check | Observed | Status |
 | --- | --- | --- |
