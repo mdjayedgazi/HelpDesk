@@ -156,6 +156,13 @@ async def upload_attachment(
     _rate_limit: Annotated[None, Depends(rate_limit("attachment_upload"))],
 ) -> Attachment:
     """Upload, quarantine, scan, and only then publish an attachment."""
+    if not settings.ATTACHMENTS_ENABLED:
+        # Defense in depth: the ASGI guard rejects before the body is read.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Attachments are disabled in this deployment",
+        )
+
     # Locking the ticket serialises concurrent uploads to the same ticket, so
     # count/byte quotas cannot both be satisfied by racing requests.
     ticket = await load_visible_ticket(session, ticket_id, user, for_update=True)

@@ -175,9 +175,15 @@ The project is designed for Railway deployment with two services:
 - **Backend** — root directory `backend/`, uses `backend/Dockerfile`, port 8000.
 - **Frontend** — root directory `frontend/`, uses `frontend/Dockerfile`, port 8080.
 
-Full deployment instructions, including variable configuration, volume
+Full production instructions, including variable configuration, volume
 attachment, health checks, and database setup, are in
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+For the public **college demo** on Railway's Free plan — two services, Neon
+PostgreSQL, Upstash Redis, a Clerk development instance, and attachments
+disabled — see
+[docs/RAILWAY_COLLEGE_DEMO.md](docs/RAILWAY_COLLEGE_DEMO.md). That profile is
+deliberately reduced and is not the commercial production profile.
 
 ### Kubernetes / Helm (optional)
 

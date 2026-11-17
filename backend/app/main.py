@@ -20,7 +20,11 @@ from app.core.config import settings
 from app.core.database import create_session_and_tables
 from app.core.health import readiness
 from app.core.logging import configure_logging
-from app.core.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
+from app.core.middleware import (
+    AttachmentsDisabledMiddleware,
+    BodySizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.core.rate_limit import (
     RateLimitUnavailable,
     close_rate_limit_store,
@@ -64,9 +68,10 @@ app = FastAPI(
 )
 
 # Order matters: the body limiter is innermost so the security middleware adds
-# headers to its 413, and CORS is outermost so browser clients can read errors
-# including 413/429/503.
+# headers to its 413, the attachment guard runs before multipart parsing, and
+# CORS is outermost so browser clients can read errors including 413/429/503.
 app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(AttachmentsDisabledMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,

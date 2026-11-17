@@ -63,6 +63,7 @@ import {
 } from '../hooks/useTickets.ts'
 import { useUserDirectory } from '../hooks/useUserDirectory.ts'
 import { errorFieldMap, errorMessage } from '../lib/errors.ts'
+import { attachmentsEnabled } from '../lib/features.ts'
 import {
   escalationCategoryLabels,
   formatBytes,
@@ -727,7 +728,9 @@ function AttachmentsPanel({
             variant='outline'
             borderColor={palette.border}
             loading={upload.isPending}
+            disabled={!attachmentsEnabled}
             onClick={() => inputRef.current?.click()}
+            hidden={!attachmentsEnabled}
           >
             <Upload size={13} aria-hidden />
             Upload
@@ -741,6 +744,13 @@ function AttachmentsPanel({
           />
         </Flex>
 
+        {!attachmentsEnabled ? (
+          <Text fontSize='xs' color={palette.textMuted}>
+            Attachments are unavailable in this college-demo deployment because malware scanning
+            is not enabled. Ticket creation, comments, and downloads of existing files still work.
+          </Text>
+        ) : null}
+
         {attachments.isPending ? (
           <Text fontSize='xs' color={palette.textMuted}>
             Loading attachments…
@@ -751,7 +761,9 @@ function AttachmentsPanel({
           </Text>
         ) : items.length === 0 ? (
           <Text fontSize='xs' color={palette.textMuted}>
-            No files attached. Upload screenshots or documents up to the server size limit.
+            {attachmentsEnabled
+              ? 'No files attached. Upload screenshots or documents up to the server size limit.'
+              : 'No files attached.'}
           </Text>
         ) : (
           <Table.Root size='sm'>

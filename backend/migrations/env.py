@@ -23,7 +23,7 @@ from sqlmodel import SQLModel
 # Importing the models package registers every table on SQLModel.metadata.
 import app.models  # noqa: F401  (imported for its side effect)
 from app.core.config import settings
-from app.core.database import _normalize_database_url
+from app.core.database import _is_pooled_postgres, _normalize_database_url
 
 config = context.config
 
@@ -35,7 +35,14 @@ target_metadata = SQLModel.metadata
 
 
 def _database_url() -> str:
-    return _normalize_database_url(settings.DATABASE_URL)
+    """Prefer the optional direct migration URL, then the runtime URL.
+
+    Neon recommends a direct endpoint for schema changes; a pooled URL works
+    too because migrations run over a single short-lived connection.
+    """
+    return _normalize_database_url(
+        settings.MIGRATION_DATABASE_URL or settings.DATABASE_URL
+    )
 
 
 def run_migrations_offline() -> None:
@@ -65,7 +72,15 @@ def _do_run_migrations(connection: Connection) -> None:
 
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode using an async engine."""
-    connectable = create_async_engine(_database_url(), poolclass=pool.NullPool)
+    url = _database_url()
+    connect_args: dict[str, object] = {}
+    if _is_pooled_postgres(url):
+        connect_args["prepare_threshold"] = None
+    connectable = create_async_engine(
+        url,
+        poolclass=pool.NullPool,
+        connect_args=connect_args,
+    )
 
     async with connectable.connect() as connection:
         await connection.run_sync(_do_run_migrations)

@@ -335,6 +335,24 @@ def resolve_client_ip(request: Request) -> str:
     return peer
 
 
+def rate_limit_scope(user: object | None, request: Request) -> str:
+    """Return the bucket scope for a request.
+
+    Authenticated writes are always keyed by user id, so changing an IP header
+    cannot reset a user's budget. When the true client IP cannot be established
+    safely (the college-demo profile has no verified Railway proxy range yet),
+    anonymous callers share one conservative global bucket instead of trusting
+    ``X-Forwarded-For``. The standard production profile keeps the strict
+    peer/trusted-proxy resolution.
+    """
+    user_id = getattr(user, "id", None)
+    if user_id is not None:
+        return f"user:{user_id}"
+    if settings.is_college_demo and not settings.RATE_LIMIT_TRUSTED_PROXIES:
+        return "anonymous:global"
+    return f"ip:{resolve_client_ip(request)}"
+
+
 def rate_limit(policy_name: str):
     """Create a FastAPI dependency that enforces one named policy."""
 
@@ -348,13 +366,9 @@ def rate_limit(policy_name: str):
         if store is None:
             return
 
-        # Authenticated writes are scoped by user id; the IP fallback exists for
-        # completeness and never lets a user evade a limit by changing headers.
-        scope = (
-            f"user:{user.id}"
-            if user is not None
-            else f"ip:{resolve_client_ip(request)}"
-        )
+        # Authenticated writes are scoped by user id; the anonymous fallback
+        # never lets a caller evade a limit by changing headers.
+        scope = rate_limit_scope(user, request)
         key = f"{_KEY_PREFIX}:{policy.name}:{scope}"
 
         try:

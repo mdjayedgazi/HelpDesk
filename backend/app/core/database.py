@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import (
@@ -32,6 +33,21 @@ def _normalize_database_url(url: str) -> str:
     return url
 
 
+def _is_pooled_postgres(url: str) -> bool:
+    """Whether the URL points at a PgBouncer-style pooled endpoint.
+
+    Neon's ``*-pooler`` host runs PgBouncer in transaction mode, where named
+    prepared statements can collide between clients. psycopg v3 prepares a
+    statement after a few executions unless told otherwise, so the runtime
+    disables that cache for pooled endpoints.
+    """
+    try:
+        hostname = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return "-pooler" in hostname
+
+
 DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
 
 # SQLite (used by the tests) needs its own connection arguments and does not
@@ -43,6 +59,10 @@ if DATABASE_URL.startswith("sqlite"):
     _connect_args["check_same_thread"] = False
 else:
     _connect_args["connect_timeout"] = settings.DB_CONNECT_TIMEOUT_SECONDS
+    if _is_pooled_postgres(DATABASE_URL):
+        # PgBouncer (Neon pooled endpoint) is incompatible with psycopg's
+        # automatic named prepared statements in transaction pooling mode.
+        _connect_args["prepare_threshold"] = None
     _engine_kwargs.update(
         pool_pre_ping=True,
         pool_size=settings.DB_POOL_SIZE,

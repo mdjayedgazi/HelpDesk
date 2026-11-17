@@ -24,6 +24,7 @@ logger = logging.getLogger("app.request")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _BODY_METHODS = {"POST", "PUT", "PATCH"}
 _DOCS_PATHS = ("/docs", "/redoc")
+_ATTACHMENT_UPLOAD_PATH_RE = re.compile(r"^/api/v1/tickets/[^/]+/attachments/?$")
 
 # Swagger UI/ReDoc are only reachable in development/test (production disables
 # the routes). They need the FastAPI CDN assets; API responses do not.
@@ -140,6 +141,34 @@ class BodySizeLimitMiddleware:
             return {"type": "http.disconnect"}
 
         await self.app(scope, replay, send)
+
+
+class AttachmentsDisabledMiddleware:
+    """Reject attachment uploads before multipart data is parsed or stored.
+
+    The feature flag is checked at the edge of the ASGI stack so a disabled
+    deployment never accepts, spools, or scans an uploaded file. Listing and
+    downloading existing metadata remains available.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] == "http"
+            and scope.get("method") == "POST"
+            and not settings.ATTACHMENTS_ENABLED
+            and _ATTACHMENT_UPLOAD_PATH_RE.fullmatch(scope.get("path", ""))
+        ):
+            await _send_json(
+                send,
+                503,
+                "Attachments are disabled in this deployment",
+                headers=[(b"connection", b"close")],
+            )
+            return
+        await self.app(scope, receive, send)
 
 
 class SecurityHeadersMiddleware:

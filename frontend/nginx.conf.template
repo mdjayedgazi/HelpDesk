@@ -28,7 +28,7 @@ server {
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
     add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
     add_header Cross-Origin-Resource-Policy "same-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' ${CLERK_FAPI_ORIGIN} https://challenges.cloudflare.com https://*.protect.clerk.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://img.clerk.com https://*.clerk.com; font-src 'self' data:; connect-src 'self' ${API_ORIGIN} ${CLERK_FAPI_ORIGIN} https://api.clerk.com https://*.protect.clerk.com:* https://clerk-telemetry.com; worker-src 'self' blob:; frame-src https://challenges.cloudflare.com ${CLERK_FAPI_ORIGIN}; manifest-src 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' ${CLERK_FAPI_ORIGIN} https://challenges.cloudflare.com https://*.protect.clerk.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://img.clerk.com https://*.clerk.com; font-src 'self' data:; connect-src 'self' ${API_ORIGIN} ${CLERK_FAPI_ORIGIN} https://api.clerk.com https://*.protect.clerk.com:* https://clerk-telemetry.com https://*.clerk-telemetry.com; worker-src 'self' blob:; frame-src 'self' https://challenges.cloudflare.com https://*.protect.clerk.com ${CLERK_FAPI_ORIGIN}; manifest-src 'self'" always;
 
     include /etc/nginx/conf.d/hsts.inc;
 

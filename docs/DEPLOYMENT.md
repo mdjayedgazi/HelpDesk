@@ -5,6 +5,12 @@ the smoke tests for the backend and frontend in this repository. It does not
 contain real credentials and it does not claim that a Railway deployment has
 already been performed.
 
+> **College demo:** the separate public demo profile (two services, Neon,
+> Upstash, Clerk development keys, attachments disabled) is documented in
+> [`RAILWAY_COLLEGE_DEMO.md`](./RAILWAY_COLLEGE_DEMO.md). The standard profile
+> below remains the strict commercial target; do not mix the two sets of
+> relaxations.
+
 ## Verification boundary
 
 **Verified locally in this remediation pass**
@@ -330,8 +336,10 @@ provider. These are not satisfied by local Docker builds.
 
 - The repository contains no deployment credentials, Railway project IDs, or
   production secrets.
-- No commit, push, merge, or Railway deployment was performed as part of the
-  remediation. The working tree is intentionally uncommitted.
+- This standard production profile has not been deployed. The separate
+  college-demo profile is prepared in PR #18 on
+  `deploy/railway-college-demo`; its live verification is recorded in
+  [`data.md`](../data.md) and [`RAILWAY_COLLEGE_DEMO.md`](./RAILWAY_COLLEGE_DEMO.md).
 - The backend does not use WebSockets, background workers, or an object store.
   Uploads and the scanner are synchronous and fail closed.
 - The frontend production bundle is large (about 1.23 MB JS, 342 KB gzip in the
