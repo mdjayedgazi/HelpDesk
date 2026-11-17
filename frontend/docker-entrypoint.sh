@@ -29,6 +29,12 @@ case "$API_ORIGIN" in
 esac
 
 CLERK_FAPI_ORIGIN="${CLERK_FAPI_ORIGIN:-https://*.clerk.accounts.dev}"
+
+# `envsubst` only reads exported variables. When Railway leaves
+# CLERK_FAPI_ORIGIN unset, the shell default above must still reach the Nginx
+# template or the Clerk-script/frame origins are silently dropped from the CSP.
+export CLERK_FAPI_ORIGIN
+
 case "$CLERK_FAPI_ORIGIN" in
     https://?*) ;;
     *)
