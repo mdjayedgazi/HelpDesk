@@ -42,7 +42,7 @@ Browser
   │                  • /healthz
   │                  • CSP allows only the API + Clerk origins
   │
-  └──────────────► helpdesk-api (Railway, Uvicorn/FastAPI, :8000)
+  └──────────────► helpdesk-api (Railway, Uvicorn/FastAPI, :8080 via $PORT)
                      • Clerk session verification
                      • SQLModel/SQLAlchemy async + psycopg v3
                      • Redis rate limiting (fail closed)
@@ -86,7 +86,8 @@ empty project). Environment: **production**. Region: `ams`.
 | Watch pattern | `backend/**` | `frontend/**` |
 | Healthcheck | `/health/live` | `/healthz` |
 | Healthcheck timeout | 300 s | 300 s |
-| Container port | `8000` (`$PORT`) | `8080` |
+| Container port | `$PORT` (Railway injects `8080`) | `8080` |
+| Public domain target port | must equal `$PORT` (`8080`) | `8080` |
 | Replicas | 1 | 1 |
 | Sleep when idle | on | on |
 | Volume | none | none |
@@ -94,6 +95,16 @@ empty project). Environment: **production**. Region: `ams`.
 
 The services intentionally do **not** use `railway.toml`/`railway.json`; the
 configuration lives in the Railway service settings.
+
+**Port alignment matters.** The API image sets `PORT=8000` as a local default,
+but Railway injects its own `PORT` (observed `8080`) at runtime. The public
+service domain must target that same port. A domain target port of `8000`
+against a container listening on `8080` leaves the deployment `SUCCESS` and the
+container healthy, while every public request returns `502` or hangs at the
+Railway edge. Confirm the running port in the startup log
+(`Uvicorn running on http://0.0.0.0:<port>`) and check the service domain's
+target port whenever the API is unreachable but `/health/live` passes from
+Railway's own healthcheck.
 
 `/health/live` is the **deployment gate**: it answers as soon as the process can
 serve HTTP, so a slow Neon or Redis wake-up does not fail an otherwise healthy
