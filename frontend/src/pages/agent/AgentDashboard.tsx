@@ -185,7 +185,6 @@ export function AgentDashboard({ me }: { me: User }) {
               <DonutChart
                 slices={statusSlices}
                 centerLabel='assigned'
-                totalLabel='assigned tickets'
                 ariaLabel='Your tickets by status'
               />
             ) : (

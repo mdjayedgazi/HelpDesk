@@ -25,8 +25,8 @@ import { ChartDataTable } from './ChartCard.tsx'
 export interface TrendSeries {
   key: string
   label: string
+  /** Stroke colour; the area gradient is derived from it. */
   color: string
-  fill: string
 }
 
 export interface TrendPoint {

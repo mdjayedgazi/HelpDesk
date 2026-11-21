@@ -126,18 +126,8 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
   }))
 
   const trendSeries = [
-    {
-      key: 'created',
-      label: 'Created',
-      color: palette.chart[0],
-      fill: palette.chartSoft[0],
-    },
-    {
-      key: 'resolved',
-      label: 'Resolved',
-      color: palette.chart[2],
-      fill: palette.chartSoft[2],
-    },
+    { key: 'created', label: 'Created', color: palette.chart[0] },
+    { key: 'resolved', label: 'Resolved', color: palette.chart[2] },
   ]
 
   const hasTrendData = data.daily.some(
@@ -317,7 +307,6 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           <DonutChart
             slices={statusSlices}
             centerLabel='tickets'
-            totalLabel='tickets'
             ariaLabel='Tickets by status'
             onSelect={(slice) =>
               navigate(`/tickets?status=${slice.key}`)

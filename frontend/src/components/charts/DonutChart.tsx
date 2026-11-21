@@ -32,14 +32,12 @@ export function DonutChart({
   centerLabel,
   ariaLabel,
   onSelect,
-  totalLabel = 'total',
 }: {
   slices: DonutSlice[]
   centerLabel: string
   ariaLabel: string
   /** When provided, a slice and its legend row become a link to a filtered list. */
   onSelect?: (slice: DonutSlice) => void
-  totalLabel?: string
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null)
 
@@ -64,6 +62,7 @@ export function DonutChart({
   const centerValue = active ? active.value : total
   const centerText = active ? active.label : centerLabel
   const centerPercent = active ? Math.round((active.value / total) * 100) : null
+
 
   return (
     <Flex
@@ -213,10 +212,6 @@ export function DonutChart({
           `${total > 0 ? Math.round((slice.value / total) * 100) : 0}%`,
         ])}
       />
-
-      <Text
-        srOnly
-      >{`${ariaLabel}. Total ${total} ${totalLabel}.`}</Text>
     </Flex>
   )
 }

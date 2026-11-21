@@ -146,7 +146,6 @@ export function CustomerDashboard({ me }: { me: User }) {
               <DonutChart
                 slices={statusSlices}
                 centerLabel='requests'
-                totalLabel='requests'
                 ariaLabel='Your tickets by status'
               />
             ) : (

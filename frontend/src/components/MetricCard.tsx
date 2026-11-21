@@ -111,34 +111,3 @@ export function MetricCard({
     </Box>
   )
 }
-
-/** A compact metric used inside a single surface (e.g. a dashboard header). */
-export function InlineMetric({
-  label,
-  value,
-  tone = 'neutral',
-}: {
-  label: string
-  value: number | string
-  tone?: Tone
-}) {
-  return (
-    <Flex direction='column' gap='1' minW='0'>
-      <Text fontSize='2xs' color={palette.textMuted} truncate>
-        {label}
-      </Text>
-      <Flex align='center' gap='2'>
-        <Box boxSize='1.5' borderRadius='full' bg={tones[tone].solid} aria-hidden />
-        <Text
-          fontSize='lg'
-          fontWeight='semibold'
-          letterSpacing='-0.02em'
-          color={palette.text}
-          fontVariantNumeric='tabular-nums'
-        >
-          {value}
-        </Text>
-      </Flex>
-    </Flex>
-  )
-}
