@@ -5,8 +5,10 @@ Usage, from the ``backend/`` directory with the project environment active:
     uv run python -m app.commands.bootstrap_owner
 
 This promotes the single existing local account whose *verified Clerk primary
-email* matches the configured ``INITIAL_ADMIN_EMAIL`` to the permanent
-``OWNER`` role. It is a deliberate, explicit setup step:
+email* matches the configured ``OWNER_EMAIL`` (or the deprecated
+``INITIAL_ADMIN_EMAIL`` fallback) to the permanent ``OWNER`` role. It is a
+deliberate, explicit setup step, still useful for initial provisioning and for
+operations where automatic reconciliation has not yet run:
 
 * it never runs automatically on application startup,
 * it never creates a user (all signups are CUSTOMER),
@@ -15,9 +17,10 @@ email* matches the configured ``INITIAL_ADMIN_EMAIL`` to the permanent
   transfer ownership,
 * it re-verifies the identity against the Clerk Backend API before promoting.
 
-After a successful run the ``INITIAL_ADMIN_EMAIL`` setting is no longer needed
-at runtime and may be removed from ``.env``: the Owner role is stored in
-PostgreSQL and is never recomputed from configuration.
+After a successful run the Owner role is stored in PostgreSQL. The
+``OWNER_EMAIL`` setting stays authoritative: it is what the request path uses to
+recognise the Owner automatically and to move ownership when the address changes.
+Removing it disables automatic recognition but does not change a stored role.
 """
 
 from __future__ import annotations
@@ -51,7 +54,7 @@ async def promote_owner(session, *, clerk, configured_email: str | None) -> User
     """
     if not configured_email:
         raise BootstrapError(
-            "INITIAL_ADMIN_EMAIL is not set. Configure it in backend/.env, then "
+            "OWNER_EMAIL is not set. Configure it in the backend environment, then "
             "sign in once with that account before running the bootstrap."
         )
 
@@ -103,25 +106,34 @@ async def promote_owner(session, *, clerk, configured_email: str | None) -> User
             "configured bootstrap email. Refusing to promote."
         )
 
-    # 6. Promote transactionally, preserving the primary key, Clerk id, tickets
-    #    and every relationship. The partial unique index on the role column is
-    #    the database-level guarantee that no second Owner can exist.
-    target.role = Role.OWNER
-    session.add(target)
-    try:
-        await session.commit()
-        await session.refresh(target)
-    except Exception:  # noqa: BLE001 - roll back any persistence failure safely
-        await session.rollback()
-        raise BootstrapError(
-            "Could not persist the Owner role; no changes were applied."
-        ) from None
+    # 6. Promote through the shared owner-identity service so the bootstrap and
+    #    the automatic request-path recognition can never use different rules.
+    #    The service re-verifies the Clerk identity, applies the same
+    #    eligibility checks and relies on the partial unique index.
+    from app.services.owner_identity import OwnerIdentityError, reconcile_owner
 
+    try:
+        decision = await reconcile_owner(
+            session,
+            clerk=clerk,
+            candidate=target,
+            configured_email=configured_email,
+            clerk_user=clerk_user,
+        )
+    except OwnerIdentityError as exc:
+        raise BootstrapError(str(exc)) from None
+
+    if not decision.changed and decision.action.value != "already_owner":
+        raise BootstrapError(
+            "The identity did not qualify for ownership; no changes were applied."
+        )
+
+    await session.refresh(target)
     return target
 
 
 async def _main() -> int:
-    configured_email = settings.initial_admin_email
+    configured_email = settings.owner_email
     try:
         async with async_session() as session:
             user = await promote_owner(
@@ -137,7 +149,7 @@ async def _main() -> int:
     print(
         "Owner bootstrap succeeded: "
         f"{user.username} ({user.id}) is now the OWNER. "
-        "You may now remove INITIAL_ADMIN_EMAIL from backend/.env."
+        "OWNER_EMAIL remains authoritative for automatic recognition."
     )
     return 0
 

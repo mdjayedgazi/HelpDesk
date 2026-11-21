@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response, status
@@ -34,6 +35,8 @@ from app.core.rate_limit import (
 
 configure_logging()
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,10 +56,51 @@ async def lifespan(app: FastAPI):
                 "The configured Redis rate-limit store is unreachable"
             ) from exc
 
+    # Reconcile the configured Owner once, at startup, after schema/tables are
+    # available. This is deliberately best-effort: a deployment must never fail
+    # (or delay readiness) because the designated person has not registered yet,
+    # or because Clerk is briefly unreachable. The same reconciliation also runs
+    # on every authenticated request, so a later sign-in still recognises them.
+    await _reconcile_owner_on_startup()
+
     try:
         yield
     finally:
         await close_rate_limit_store()
+
+
+async def _reconcile_owner_on_startup() -> None:
+    """Best-effort Owner reconciliation at startup (never fatal)."""
+    if settings.owner_email is None:
+        return
+    try:
+        from app.core.auth import clerk_client
+        from app.core.database import async_session
+        from app.services.owner_identity import (
+            find_candidate_by_email,
+            reconcile_owner,
+        )
+
+        async with async_session() as session:
+            candidate = await find_candidate_by_email(session, settings.owner_email)
+            if candidate is None:
+                logger.info(
+                    "Owner reconciliation: designated account not registered yet; "
+                    "ownership unchanged"
+                )
+                return
+            decision = await reconcile_owner(
+                session,
+                clerk=clerk_client,
+                candidate=candidate,
+                configured_email=settings.owner_email,
+            )
+        logger.info("Owner reconciliation at startup: %s", decision.action.value)
+    except Exception as exc:  # noqa: BLE001 - startup must stay available
+        logger.warning(
+            "Owner reconciliation at startup skipped (%s); ownership unchanged",
+            type(exc).__name__,
+        )
 
 
 app = FastAPI(

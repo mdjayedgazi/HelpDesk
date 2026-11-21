@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Annotated
 
@@ -19,6 +20,8 @@ from app.models.user import User
 clerk_client = Clerk(
     bearer_auth=settings.CLERK_SECRET_KEY,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_email(value: str | None) -> str | None:
@@ -86,6 +89,40 @@ def require_auth(request: Request) -> RequestState:
     return state
 
 
+async def _reconcile_owner_for(user: User, *, session, clerk_user=None) -> User:
+    """Reconcile the OWNER role for ``user`` against ``OWNER_EMAIL``.
+
+    Imported lazily to avoid a circular import: ``owner_identity`` reuses the
+    email-verification helpers defined in this module. Any failure here is
+    non-fatal — the request continues with the stored role — because ownership
+    reconciliation must never make authentication unavailable.
+    """
+    try:
+        from app.core.config import settings
+        from app.services.owner_identity import reconcile_owner
+
+        configured = settings.owner_email
+        if configured is None:
+            return user
+
+        decision = await reconcile_owner(
+            session,
+            clerk=clerk_client,
+            candidate=user,
+            configured_email=configured,
+            clerk_user=clerk_user,
+        )
+        if decision.changed:
+            await session.refresh(user)
+        return user
+    except Exception:  # noqa: BLE001 - authentication must keep working
+        # A sanitized warning only; never the address or a Clerk secret.
+        logger.warning(
+            "Owner reconciliation skipped for this request; stored role kept"
+        )
+        return user
+
+
 async def get_current_user(
     state: Annotated[RequestState, Depends(require_auth)],
     session: Annotated[AsyncSession, Depends(get_db)],
@@ -108,10 +145,13 @@ async def get_current_user(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Inactive user",
             )
-        # The stored role is authoritative and is never recomputed from the
-        # request, the environment, or the email address. Role changes happen
-        # only through the Owner-only user-management endpoints or the explicit
-        # one-time bootstrap command.
+        # The stored role is authoritative for ordinary roles. The only value
+        # that is re-evaluated on the request path is OWNER, and only against the
+        # configured OWNER_EMAIL and the identity's *verified Clerk primary*
+        # email. This is what makes a configured owner recognised automatically
+        # on sign-in without any manual role edit, and what makes an OWNER_EMAIL
+        # change take effect on the next authenticated request.
+        user = await _reconcile_owner_for(user, session=session)
         return user
 
     # 2. Fetch the user from Clerk if no local profile exists.
@@ -165,9 +205,9 @@ async def get_current_user(
         # comes from Clerk, never from the request.
         existing_user.image_url = getattr(clerk_user, "image_url", None)
 
-        # Never recompute the role while linking. An existing account keeps the
-        # role stored in PostgreSQL; a brand-new identity is provisioned as
-        # CUSTOMER below. Only the explicit bootstrap command may grant OWNER.
+        # Ordinary roles are preserved while linking; the only role that is
+        # re-evaluated is OWNER, and only against OWNER_EMAIL plus the verified
+        # Clerk primary email (checked below, after the link commits).
         try:
             await session.commit()
             await session.refresh(existing_user)
@@ -257,6 +297,12 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user",
         )
+
+    # 6. Automatic Owner recognition for a freshly provisioned or newly linked
+    #    account. This reuses the already-verified ``clerk_user`` so no second
+    #    Clerk call is made, and it is a no-op unless OWNER_EMAIL is configured
+    #    and matches the verified primary email.
+    user = await _reconcile_owner_for(user, session=session, clerk_user=clerk_user)
 
     return user
 
