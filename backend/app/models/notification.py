@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, func, text
+from sqlalchemy import DateTime, Index, func, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.enums.enums import NotificationType
@@ -11,6 +11,17 @@ from app.models.user import User
 
 class Notification(SQLModel, table=True):
     __tablename__ = "notifications"
+    __table_args__ = (
+        # The notification panel lists one recipient's rows newest-first, and
+        # the unread count filters recipient + is_read. The single-column
+        # recipient index cannot serve the ordering; this composite's leading
+        # column also covers plain recipient lookups.
+        Index(
+            "ix_notifications_recipient_created_at",
+            "recipient_user_id",
+            "created_at",
+        ),
+    )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     recipient_user_id: uuid.UUID = Field(
