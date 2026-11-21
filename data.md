@@ -489,7 +489,8 @@ layout shifts.
 | Dependencies changed | **none** |
 | PR #19 | untouched |
 
-- Commit: `ea5e2e8` (`ea5e2e8ab8d09e262e85de3deac43abb69bb16a2`)
+- Implementation commit: `ea5e2e8` (`ea5e2e8ab8d09e262e85de3deac43abb69bb16a2`)
+- Documentation follow-up: `3835b1d` (records this hash and the PR URL)
 - Pushed to `origin/feat/helpdesk-motion-visual-polish`
 - Pull request: https://github.com/mdjayedgazi/HelpDesk/pull/23 — open,
   mergeable, **not merged**
