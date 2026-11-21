@@ -50,7 +50,14 @@ trusted, access-controlled environment, never in CI against production:
 ```bash
 # DATABASE_URL must already be set in the environment; it is never echoed.
 # --no-owner/--no-privileges make the dump portable to the restore database.
-pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" \
+#
+# pg_dump/libpq do NOT understand SQLAlchemy's "postgresql+psycopg://" scheme,
+# so convert it to a plain libpq URL first. This only rewrites the scheme; the
+# value is still never printed.
+PG_DUMP_URL="${DATABASE_URL/postgresql+psycopg:/postgresql:}"
+PG_DUMP_URL="${PG_DUMP_URL/postgresql+asyncpg:/postgresql:}"
+
+pg_dump --format=custom --no-owner --no-privileges "$PG_DUMP_URL" \
   > "helpdesk-$(date -u +%Y%m%dT%H%M%SZ).dump"
 ```
 
@@ -64,9 +71,10 @@ pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" \
 
 ## 3. Restore drill (isolated database only)
 
-**Prerequisite:** a disposable target database that is **not** the production
-database. The command below refuses to run unless the target URL looks
-disposable (its name contains `test`, `verify`, or `restore`).
+**Prerequisite:** an isolated target database that is **not** the production
+database (a Neon branch or a separate database). The command below compares the
+target's host/port/database name with the production URL and refuses when they
+match, so a production URL cannot be used by accident.
 
 ### 3a. Restore from a Neon PITR branch (preferred)
 
@@ -80,28 +88,51 @@ disposable (its name contains `test`, `verify`, or `restore`).
 ### 3b. Restore from a logical dump
 
 ```bash
-# Refuse to run against anything that does not look disposable.
-case "${RESTORE_DATABASE_URL:?set RESTORE_DATABASE_URL}" in
-  *test*|*verify*|*restore*) ;;
-  *) echo "Refusing: RESTORE_DATABASE_URL must name a disposable database" >&2; exit 1 ;;
-esac
+: "${RESTORE_DATABASE_URL:?set RESTORE_DATABASE_URL to the isolated target}"
+: "${PRODUCTION_DATABASE_URL:?set PRODUCTION_DATABASE_URL to compare against}"
 
-# Drop/recreate only the disposable database's schema, then restore into it.
+# libpq does not understand SQLAlchemy's "+driver" scheme.
+RESTORE_LIBPQ_URL="${RESTORE_DATABASE_URL/postgresql+psycopg:/postgresql:}"
+PRODUCTION_LIBPQ_URL="${PRODUCTION_DATABASE_URL/postgresql+psycopg:/postgresql:}"
+
+# Refuse when the target is the production database. Compare host + port +
+# database name (not a substring): a production URL can contain "test" in its
+# password, and a valid isolated branch need not contain any marker at all.
+python - "$RESTORE_LIBPQ_URL" "$PRODUCTION_LIBPQ_URL" <<'IDENTITY'
+import sys
+from urllib.parse import urlsplit
+
+def ident(url: str) -> tuple[str, int | None, str]:
+    parsed = urlsplit(url)
+    return (parsed.hostname or "").lower(), parsed.port, parsed.path.strip("/")
+
+restore, production = ident(sys.argv[1]), ident(sys.argv[2])
+if restore == production:
+    sys.exit("Refusing: RESTORE_DATABASE_URL points at the production database")
+print(f"OK: restoring into host={restore[0]} db={restore[2]!r} (not production)")
+IDENTITY
+
+# Drop/recreate only the isolated target's schema, then restore into it.
 pg_restore --clean --if-exists --no-owner --no-privileges \
-  --dbname "$RESTORE_DATABASE_URL" FILE.dump
+  --dbname "$RESTORE_LIBPQ_URL" FILE.dump
 ```
 
 `--clean` drops objects in the *target* database before restoring. This is why
-the guard above and a disposable target are mandatory.
+the identity check above and an isolated target are mandatory: the check fails
+closed if the target matches production, and it does not depend on the URL
+happening to contain a particular word.
 
 ## 4. Verify the restore
 
-Run these against the restored database only. They are read-only.
+Run these against the restored database only. They are read-only. Reuse the
+`RESTORE_LIBPQ_URL` exported in section 3b (export it again if you are in a new
+shell) so the same identity you already checked is the one being read.
 
 ```bash
-psql "$RESTORE_DATABASE_URL" -c 'SELECT count(*) FROM users;'
-psql "$RESTORE_DATABASE_URL" -c 'SELECT count(*) FROM tickets;'
-psql "$RESTORE_DATABASE_URL" -c 'SELECT version_num FROM alembic_version;'
+: "${RESTORE_LIBPQ_URL:?run section 3b first to set the verified restore URL}"
+psql "$RESTORE_LIBPQ_URL" -c 'SELECT count(*) FROM users;'
+psql "$RESTORE_LIBPQ_URL" -c 'SELECT count(*) FROM tickets;'
+psql "$RESTORE_LIBPQ_URL" -c 'SELECT version_num FROM alembic_version;'
 ```
 
 Then point a **local** backend at the restored database and confirm the
@@ -110,7 +141,8 @@ readiness probe agrees with the code it is running:
 ```bash
 cd backend
 DATABASE_URL="$RESTORE_DATABASE_URL" CLERK_SECRET_KEY=sk_test_dummy \
-  ENVIRONMENT=test UPLOAD_DIR=/tmp/restore-drill-uploads \
+  FRONTEND_URL=http://localhost:5173 ENVIRONMENT=test \
+  UPLOAD_DIR=/tmp/restore-drill-uploads \
   uv run python -c "
 import asyncio
 from app.core.health import schema_status
@@ -145,6 +177,11 @@ in the operations log. Do not paste row contents (personal data) into logs.
 5. Reconcile any writes lost between the restore point and the incident.
 6. Keep the old database until the new one has served cleanly for an agreed
    window; do not delete it as the first recovery step.
+
+> **Migration note:** Alembic prefers `MIGRATION_DATABASE_URL` over
+> `DATABASE_URL` (see `backend/migrations/env.py`). If that variable is set,
+> repoint **both** at the recovered database before running any migration,
+> otherwise `alembic upgrade head` would still target the old database.
 
 ## 6. Monitoring and alerting (EXTERNAL — requires platform access)
 

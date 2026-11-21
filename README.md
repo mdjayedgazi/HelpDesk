@@ -153,16 +153,26 @@ database (they are skipped otherwise). The CI E2E job runs the auth → ticket
 creation → assignment flow this way:
 
 ```bash
-docker run --rm -d --name hd_pg -e POSTGRES_USER=verify \
+docker run -d --name hd_pg -e POSTGRES_USER=verify \
   -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=hdverify \
   -p 127.0.0.1:55432:5432 postgres:18-alpine
 
+# docker run returns before PostgreSQL accepts connections; wait for it or the
+# first fixture connect fails. The loop is bounded so CI cannot hang.
+for _ in $(seq 1 30); do
+  docker exec hd_pg pg_isready -U verify -d hdverify >/dev/null 2>&1 && break
+  sleep 1
+done
+
 HD_TEST_POSTGRES_URL='postgresql+psycopg://verify:verify@127.0.0.1:55432/hdverify' \
   uv run pytest -q tests/test_e2e_support_flow_postgres.py
+
+docker rm -f hd_pg
 ```
 
-The modules refuse to run unless the database URL looks disposable (its name
-contains `test`, `verify`, or `ci`).
+The modules refuse to run unless the **database name** looks disposable (it
+contains `test`, `verify`, `ci`, `demo`, or `disposable`). The check inspects
+the database name only, never the whole URL.
 
 ### Frontend
 

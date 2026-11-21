@@ -7,21 +7,23 @@
 useDefault = true
 
 [allowlist]
-description = "Known non-secret test fixtures and placeholder values"
-paths = [
-  # Tests intentionally construct placeholder keys and URLs.
-  '''backend/tests/.*\.py''',
-  '''backend/migrations/.*\.py''',
-  # Example files contain placeholders only.
-  '''.*\.env\.example''',
-]
+description = "Exact known non-secret test fixtures and documentation placeholders"
+# Deliberately no path allowlist: a real credential committed anywhere,
+# including tests or migrations, must still be reported. Only the exact
+# placeholder *values* below are suppressed.
 regexes = [
-  # Bare placeholder secrets used in tests (e.g. sk_live_ + "x"*32).
-  '''sk_live_x+''',
-  '''sk_test_dummy''',
-  '''sk_test_[A-Za-z0-9_]*placeholder''',
-  '''pk_test_ci_placeholder''',
+  # Test fixtures that spell out a fake key body ("x" repeated).
+  '''^sk_live_x{32}$''',
+  '''^sk_test_x{32}$''',
+  '''^sk_test_dummy$''',
+  '''^sk_test_ci_placeholder$''',
+  '''^sk_test_[A-Za-z0-9_]*placeholder$''',
+  '''^pk_test_[A-Za-z0-9_]*placeholder$''',
+  # Secret-leak assertions that intentionally embed a fake bearer token.
+  '''sk_live_abcdef''',
+  '''sk_test_super-secret-value''',
   # Disposable local test database credentials.
   '''postgresql\+psycopg://verify:verify@''',
+  '''postgresql\+psycopg://helpdesk:disposable@''',
   '''(postgres|redis)://[a-z]*:strongpass@''',
 ]
