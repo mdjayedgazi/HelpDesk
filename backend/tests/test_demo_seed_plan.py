@@ -271,6 +271,67 @@ def test_production_refusal_requires_the_exact_override_phrase():
     sd.assert_not_production({"HELPDESK_ENVIRONMENT": "development"})
 
 
+async def _empty_counts(*_a, **_k):
+    """A complete, zeroed counts dict, matching read_counts()'s shape."""
+    return {
+        "users_total": 0,
+        "users_by_role": {},
+        "demo_users": 0,
+        "tickets_total": 0,
+        "tickets_by_status": {},
+        "tickets_by_priority": {},
+        "tickets_assigned": 0,
+        "tickets_unassigned": 0,
+        "comments": 0,
+        "history": 0,
+        "notifications": 0,
+        "attachments": 0,
+        "staff_conversations": 0,
+        "staff_messages": 0,
+        "account_requests": 0,
+        "account_request_comments": 0,
+        "account_request_events": 0,
+    }
+
+
+def test_verify_alias_is_accepted(monkeypatch, capsys):
+    # `--verify` must behave like `--verify-only` and never insert.
+    monkeypatch.setenv(sd.CONFIRM_ENV, sd.EXPECTED_TOKEN)
+    monkeypatch.setenv("HELPDESK_ENVIRONMENT", "development")
+
+    monkeypatch.setattr(sd, "read_counts", _empty_counts)
+    monkeypatch.setattr(sd, "assert_neon_target", lambda *_a, **_k: None)
+    monkeypatch.setattr(sd, "assert_safe_upload_dir", lambda _p: Path("/tmp/x"))
+    code = asyncio.run(sd._main(["--verify"]))
+    assert code == 0
+
+
+def test_confirm_production_flag_enables_override_but_not_confirmation(monkeypatch):
+    # Without the token, --confirm-production must still be refused.
+    monkeypatch.delenv(sd.CONFIRM_ENV, raising=False)
+    monkeypatch.setenv("HELPDESK_ENVIRONMENT", "production")
+    code = asyncio.run(sd._main(["--confirm-production"]))
+    assert code == 2
+
+
+def test_confirm_production_flag_passes_the_production_guard(monkeypatch):
+    seen = {}
+
+    def _capture(environ):
+        seen["override"] = environ.get(sd.PRODUCTION_OVERRIDE_ENV)
+
+    monkeypatch.setenv(sd.CONFIRM_ENV, sd.EXPECTED_TOKEN)
+    monkeypatch.setenv("HELPDESK_ENVIRONMENT", "production")
+    monkeypatch.setattr(sd, "assert_not_production", _capture)
+    monkeypatch.setattr(sd, "assert_neon_target", lambda *_a, **_k: None)
+    monkeypatch.setattr(sd, "assert_safe_upload_dir", lambda _p: Path("/tmp/x"))
+
+    monkeypatch.setattr(sd, "read_counts", _empty_counts)
+    code = asyncio.run(sd._main(["--confirm-production", "--verify"]))
+    assert code == 0
+    assert seen["override"] == sd.PRODUCTION_OVERRIDE_VALUE
+
+
 def test_guard_rejects_uploads_outside_tmp():
     repo_dir = str(Path(__file__).resolve().parent)
     with pytest.raises(sd.SeedRefused):

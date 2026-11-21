@@ -2516,7 +2516,27 @@ async def _main(argv: list[str]) -> int:
         ),
     )
     parser.add_argument("--confirm", default=os.environ.get(CONFIRM_ENV))
-    parser.add_argument("--verify-only", action="store_true")
+    # `--verify` is the brief's name for `--verify-only`; both do the same thing
+    # (report current rows, insert nothing).
+    parser.add_argument(
+        "--verify",
+        "--verify-only",
+        dest="verify_only",
+        action="store_true",
+        help="Report current row counts without inserting anything.",
+    )
+    # `--confirm-production` acknowledges the demo deployment's declared
+    # production environment. It is an explicit, visible act, but it does NOT
+    # replace the confirmation token and skips no other guard.
+    parser.add_argument(
+        "--confirm-production",
+        dest="confirm_production",
+        action="store_true",
+        help=(
+            "Acknowledge that the target declares ENVIRONMENT=production (the "
+            "college-demo deployment). Still requires the confirmation token."
+        ),
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -2538,7 +2558,12 @@ async def _main(argv: list[str]) -> int:
 
     try:
         assert_confirm(args.confirm)
-        assert_not_production(dict(os.environ))
+        environ = dict(os.environ)
+        if args.confirm_production:
+            # Scoped to this check only; the confirm token above is still
+            # mandatory and every other guard below still runs.
+            environ[PRODUCTION_OVERRIDE_ENV] = PRODUCTION_OVERRIDE_VALUE
+        assert_not_production(environ)
         assert_neon_target(settings.DATABASE_URL)
         upload_root = assert_safe_upload_dir(
             os.environ.get(UPLOAD_ENV, DEMO_UPLOAD_DIR)

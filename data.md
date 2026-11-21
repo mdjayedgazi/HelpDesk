@@ -143,10 +143,18 @@ docs. No other application file changed; no dependency was added.
 9. **Notification gating** — every ticket gets a receipt, a deterministic subset
    gets lifecycle notifications (525–587 total instead of ~1,220).
 10. **CLI** — `--size`, `--dry-run`, plus the existing `--confirm`,
-    `--verify-only`, `--json`.
+    `--verify`/`--verify-only`, `--confirm-production`, `--json`.
 11. **Production override** — a deliberate, exact-phrase opt-in
     (`HELPDESK_DEMO_ALLOW_PRODUCTION`) for the Railway `college-demo` service,
     which declares `ENVIRONMENT=production`. It skips **no** other guard.
+    The brief's `--confirm-production` flag is supported as an equivalent,
+    visible acknowledgement; it still requires the confirmation token.
+12. **Brief-named CLI aliases** — `--verify` (alias of `--verify-only`) and
+    `--confirm-production` are accepted, so the documented commands in the brief
+    work without translation. The module path stays
+    `python -m app.commands.seed_demo_data`, matching the repository convention
+    (there is no `app/seed.py` or `app/seed_demo.py`; the brief's suggested paths
+    were adjusted to the real layout).
 
 ---
 
@@ -305,7 +313,7 @@ In order, with each gate explicit:
    ```
    with `HELPDESK_DEMO_SEED_CONFIRM`, `HELPDESK_DEMO_ALLOW_PRODUCTION` and
    `HELPDESK_DEMO_UPLOAD_DIR=/tmp/helpdesk-demo-uploads` set in that service.
-7. **Verify** with `--verify-only --json`, then open the dashboard using the real
+7. **Verify** with `--verify --json`, then open the dashboard using the real
    Owner session.
 
 If the transaction fails it rolls back automatically; do not blindly re-run —

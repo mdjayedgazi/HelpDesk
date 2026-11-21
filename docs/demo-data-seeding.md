@@ -134,7 +134,7 @@ HELPDESK_DEMO_UPLOAD_DIR=/tmp/helpdesk-demo-uploads \
 uv run python -m app.commands.seed_demo_data --size 100
 
 # 3. Re-read what is stored, without inserting.
-uv run python -m app.commands.seed_demo_data --verify-only --json
+uv run python -m app.commands.seed_demo_data --verify --json
 ```
 
 Options:
@@ -143,7 +143,8 @@ Options:
 | --- | --- |
 | `--size {50,100}` | Users to target (default 100) |
 | `--dry-run` | Print the plan; no DB connection, no writes |
-| `--verify-only` | Report current counts; inserts nothing |
+| `--verify`, `--verify-only` | Report current counts; inserts nothing |
+| `--confirm-production` | Acknowledge the target declares `ENVIRONMENT=production` (still requires the token) |
 | `--json` | Machine-readable output |
 | `--confirm TOKEN` | Same as the confirmation env var |
 
@@ -176,10 +177,12 @@ All of these must hold before a single row is written:
 1. `HELPDESK_DEMO_SEED_CONFIRM` (or `--confirm`) equals
    `HD-DEMO-20261019 @ <verified-host>/neondb`.
 2. `DATABASE_URL` host **and** database name match the verified constants.
-3. The environment is not `production`/`prod`, **or** the deliberate
-   `HELPDESK_DEMO_ALLOW_PRODUCTION=I-UNDERSTAND-THIS-IS-THE-DEMO-DATABASE`
-   override is set (needed for the Railway `college-demo` profile, which declares
-   `ENVIRONMENT=production`). The override skips nothing else.
+3. The environment is not `production`/`prod`, **or** one of the two deliberate
+   acknowledgements is supplied: the `--confirm-production` flag, or
+   `HELPDESK_DEMO_ALLOW_PRODUCTION=I-UNDERSTAND-THIS-IS-THE-DEMO-DATABASE`.
+   This is needed because the Railway `college-demo` profile declares
+   `ENVIRONMENT=production`. Either form still requires the confirmation token
+   and skips no other guard.
 4. The attachment upload directory is under `/tmp`.
 5. A single OWNER already exists; its row is hashed before and after and the
    transaction rolls back on any drift.
