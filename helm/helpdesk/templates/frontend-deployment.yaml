@@ -19,6 +19,15 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # fsGroup makes the emptyDir volumes below group-owned and group-writable
+      # by the unprivileged nginx user (uid/gid 101), so the entrypoint can
+      # render its config and Nginx can write its pid/cache on a read-only root
+      # filesystem.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
       containers:
         - name: frontend
           image: "{{ .Values.global.frontendImage.repository }}:{{ .Values.global.frontendImage.tag }}"

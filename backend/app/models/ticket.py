@@ -20,6 +20,22 @@ class Ticket(SQLModel, table=True):
     __table_args__ = (
         Index("ix_tickets_created_by_user_id", "created_by_user_id"),
         Index("ix_tickets_assignee_user_id", "assignee_user_id"),
+        # Every ticket list orders by created_at (newest first) with
+        # LIMIT/OFFSET. The single-column role indexes cannot serve that
+        # ordering, so this one covers the default listing and pagination.
+        Index("ix_tickets_created_at", "created_at"),
+        # Optional client-supplied idempotency key, unique per creator. A
+        # retried or double-submitted create returns the original ticket
+        # instead of opening a duplicate. NULL keys (the default) are excluded
+        # from the constraint.
+        Index(
+            "uq_tickets_creator_request_key",
+            "created_by_user_id",
+            "client_request_id",
+            unique=True,
+            postgresql_where=text("client_request_id IS NOT NULL"),
+            sqlite_where=text("client_request_id IS NOT NULL"),
+        ),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -34,6 +50,11 @@ class Ticket(SQLModel, table=True):
         index=True,
         nullable=False,
     )
+    # Optional client-supplied idempotency key for the create request. Paired
+    # with ``created_by_user_id`` in a partial unique index so a retried or
+    # double-submitted create returns the original ticket instead of a
+    # duplicate. It is never exposed by the response schemas.
+    client_request_id: str | None = Field(default=None, max_length=100, nullable=True)
     title: str = Field(max_length=180, nullable=False)
     # Explicit ``Text`` matches the migration DDL exactly (see comment.py).
     description: str = Field(nullable=False, sa_type=Text)

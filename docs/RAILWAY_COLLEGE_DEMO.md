@@ -289,8 +289,10 @@ are not at risk.
   `https://helpdesk-web-production-d96f8e2b.up.railway.app` to the instance's
   allowed origins / redirect URLs before retrying.
 - The frontend CSP and the backend `FRONTEND_URL` / Clerk `azp` check must both
-  use exactly this web origin. A trailing slash or a different host fails one
-  of the two checks.
+  use the same web origin. The backend now normalizes a trailing slash (and a
+  redundant default port) in `FRONTEND_URL`/`CORS_ORIGINS` before using them for
+  CORS and the `azp` check, so `https://host/` and `https://host` are treated
+  identically. A genuinely different host still fails both checks.
 
 ## Attachment kill-switch
 

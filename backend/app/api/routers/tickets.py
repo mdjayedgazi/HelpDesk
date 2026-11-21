@@ -1,12 +1,14 @@
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.auth import (
     admin_dependency,
@@ -61,6 +63,11 @@ router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 # How many times we try to allocate a fresh ticket number before giving up.
 _TICKET_NUMBER_RETRIES = 5
 
+# Optional ``Idempotency-Key`` header on ticket creation. Opaque but bounded and
+# header-safe; the same key sent by the same customer returns the original
+# ticket instead of creating a duplicate.
+_IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,100}$")
+
 
 @router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED)
 async def create_ticket(
@@ -68,6 +75,7 @@ async def create_ticket(
     session: session_Dependency,
     customer: customer_dependency,
     _rate_limit: Annotated[None, Depends(rate_limit("ticket_create"))],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Ticket:
     """Open a new ticket. Customer-only; the owner is the authenticated user.
 
@@ -82,13 +90,27 @@ async def create_ticket(
     number on every attempt, and only swallow the specific ticket-number
     unique violation. Any other integrity error is surfaced immediately.
 
+    An optional ``Idempotency-Key`` header makes retries safe. The key is
+    unique per customer (a partial unique index), so a repeated call returns
+    the ticket created by the first call. A concurrent duplicate that passes
+    the pre-check is caught by the same unique index and resolved by
+    re-reading the winning row. Requests without the header keep the previous
+    behavior exactly.
+
     Auto-assignment runs inside a savepoint: if anything unexpected happens
     there, the savepoint is rolled back and the ticket is still created
     (unassigned) instead of the whole request failing.
     """
+    idempotency_key = _validate_idempotency_key(idempotency_key)
+    if idempotency_key is not None:
+        existing = await _find_idempotent_ticket(session, customer.id, idempotency_key)
+        if existing is not None:
+            return existing
+
     for _ in range(_TICKET_NUMBER_RETRIES):
         ticket = Ticket(
             ticket_number=await next_ticket_number(session),
+            client_request_id=idempotency_key,
             title=payload.title,
             description=payload.description,
             category=payload.category,
@@ -141,15 +163,28 @@ async def create_ticket(
             await session.commit()
         except IntegrityError as exc:
             await session.rollback()
+            # rollback() expires every object in the session, including the
+            # authenticated user. Reload it so the next attempt (or the
+            # idempotency lookup below) can read its id.
+            await session.refresh(customer)
+            if idempotency_key is not None and _is_idempotency_conflict(exc):
+                # A concurrent request with the same key won the insert. Return
+                # its ticket instead of failing or creating a duplicate.
+                existing = await _find_idempotent_ticket(
+                    session, customer.id, idempotency_key
+                )
+                if existing is not None:
+                    return existing
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Could not create the ticket",
+                ) from exc
             if not _is_ticket_number_conflict(exc):
                 # A different constraint failed; retrying would not help.
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Could not create the ticket",
                 ) from exc
-            # rollback() expires every object in the session, including the
-            # authenticated user. Reload it so the next attempt can read its id.
-            await session.refresh(customer)
             continue
         await session.refresh(ticket)
         return ticket
@@ -391,6 +426,64 @@ async def assign_ticket(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _validate_idempotency_key(key: str | None) -> str | None:
+    """Trim and validate the optional ``Idempotency-Key`` header.
+
+    An empty/whitespace-only header is treated as absent so existing clients
+    that send a blank value are unaffected.
+    """
+    if key is None:
+        return None
+    trimmed = key.strip()
+    if not trimmed:
+        return None
+    if not _IDEMPOTENCY_KEY_PATTERN.fullmatch(trimmed):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Idempotency-Key must be 1-100 characters using letters, "
+                "digits, '.', '_', ':' or '-'"
+            ),
+        )
+    return trimmed
+
+
+async def _find_idempotent_ticket(
+    session: AsyncSession,
+    creator_id: uuid.UUID,
+    idempotency_key: str,
+) -> Ticket | None:
+    """Return the ticket previously created with this customer/key pair."""
+    result = await session.exec(
+        select(Ticket).where(
+            Ticket.created_by_user_id == creator_id,
+            Ticket.client_request_id == idempotency_key,
+        )
+    )
+    return result.first()
+
+
+def _is_idempotency_conflict(exc: IntegrityError) -> bool:
+    """Return True only for a duplicate idempotency-key violation.
+
+    Mirrors :func:`_is_ticket_number_conflict`: prefer the PostgreSQL
+    constraint name and fall back to matching the column name for SQLite.
+    """
+    orig = getattr(exc, "orig", None)
+    message = str(orig or exc).lower()
+
+    sqlstate = getattr(orig, "sqlstate", None)
+    if sqlstate is not None and sqlstate != "23505":
+        return False
+
+    diag = getattr(orig, "diag", None)
+    constraint = getattr(diag, "constraint_name", None) if diag is not None else None
+    if constraint:
+        return "creator_request" in constraint or "client_request_id" in constraint
+
+    return "creator_request" in message or "client_request_id" in message
 
 
 def _is_ticket_number_conflict(exc: IntegrityError) -> bool:

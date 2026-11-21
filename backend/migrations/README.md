@@ -29,9 +29,18 @@ virtual environment active (for example `uv run alembic ...` or
   `PENDING` default. Existing attachments are **not** marked clean and are not
   downloadable until `python -m app.commands.scan_attachments` is run with a
   configured ClamAV daemon.
+- `0010_ticket_idempotency` adds a nullable `tickets.client_request_id` column
+  and a partial unique index `(created_by_user_id, client_request_id)` where the
+  key is not null. It is additive: existing rows keep `NULL`, which the partial
+  index ignores. It lets a retried ticket-create request return the original
+  ticket instead of opening a duplicate.
+- `0011_query_indexes` adds two non-unique indexes (`tickets.created_at` and
+  `notifications(recipient_user_id, created_at)`) for list ordering. It creates
+  no data and changes no column.
 
-Both migrations have been validated only against disposable PostgreSQL
-databases; they have not been applied to a persistent or production database.
+All migrations have been validated against disposable PostgreSQL databases and
+`alembic check` confirms the models and migrations agree; they have not been
+applied to a persistent or production database by this change set.
 
 ## Inspect the current revision
 
