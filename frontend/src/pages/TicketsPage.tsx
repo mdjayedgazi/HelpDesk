@@ -10,21 +10,30 @@ import { useMe } from '../hooks/useMe.ts'
 import { useAgents } from '../hooks/useAdmin.ts'
 import { useTickets } from '../hooks/useTickets.ts'
 import { useDebounced } from '../hooks/useDebounced.ts'
-import type { TicketListParams, TicketStatus, TicketPriority } from '../lib/types.ts'
+import type { TicketListParams, TicketPriority, TicketStatus } from '../lib/types.ts'
 import { TICKET_PRIORITIES, TICKET_STATUSES } from '../lib/types.ts'
 import { isAdmin, isStaff } from '../lib/roles.ts'
 import { palette } from '../theme/palette.ts'
 
 const PAGE_SIZE = 20
 
+function parseStatus(value: string | null): TicketStatus | '' {
+  return value && TICKET_STATUSES.includes(value as TicketStatus) ? (value as TicketStatus) : ''
+}
+
+function parsePriority(value: string | null): TicketPriority | '' {
+  return value && TICKET_PRIORITIES.includes(value as TicketPriority)
+    ? (value as TicketPriority)
+    : ''
+}
+
 /**
  * Ticket list.
  *
- * Filters are mirrored into the URL query string so a dashboard chart can link
- * straight to the subset it visualises (for example `/tickets?status=RESOLVED`
- * or `/tickets?assignee=none`), and so a filtered view can be bookmarked or
- * shared. The list itself is unchanged: same endpoint, same pagination, same
- * permissions.
+ * The URL is the single source of truth for the status/priority/assignee
+ * filters, so dashboard charts can deep-link to an exact filtered view and the
+ * browser back/forward buttons behave correctly. Only the search box keeps local
+ * state, so typing stays responsive; the debounced value is written to the URL.
  */
 export function TicketsPage() {
   const me = useMe()
@@ -33,38 +42,56 @@ export function TicketsPage() {
   const admin = isAdmin(role)
 
   const [searchParams, setSearchParams] = useSearchParams()
+  const status = parseStatus(searchParams.get('status'))
+  const priority = parsePriority(searchParams.get('priority'))
+  const assignee = searchParams.get('assignee') ?? ''
+  const urlSearch = searchParams.get('q') ?? ''
 
-  const initialStatus = (searchParams.get('status') ?? '') as TicketStatus | ''
-  const initialPriority = (searchParams.get('priority') ?? '') as TicketPriority | ''
-  const initialSearch = searchParams.get('q') ?? ''
-  const initialAssignee = searchParams.get('assignee') ?? ''
-
+  const [search, setSearch] = useState(urlSearch)
   const [page, setPage] = useState(1)
-  const [search, setSearch] = useState(initialSearch)
-  const [status, setStatus] = useState<TicketStatus | ''>(
-    TICKET_STATUSES.includes(initialStatus as TicketStatus) ? initialStatus : '',
-  )
-  const [priority, setPriority] = useState<TicketPriority | ''>(
-    TICKET_PRIORITIES.includes(initialPriority as TicketPriority) ? initialPriority : '',
-  )
-  const [assignee, setAssignee] = useState(initialAssignee)
-
   const debouncedSearch = useDebounced(search)
 
+  // Adopt a `q` that changed outside the input (back/forward, a shared link).
   useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, status, priority, assignee])
+    setSearch((current) => (current === urlSearch ? current : urlSearch))
+  }, [urlSearch])
 
-  // Keep the URL in sync with the active filters without adding history
-  // entries for every keystroke.
+  const updateFilters = (next: {
+    q?: string
+    status?: TicketStatus | ''
+    priority?: TicketPriority | ''
+    assignee?: string
+  }) => {
+    const params = new URLSearchParams(searchParams)
+    const write = (key: string, value: string | undefined) => {
+      if (value) params.set(key, value)
+      else params.delete(key)
+    }
+    if ('q' in next) write('q', next.q)
+    if ('status' in next) write('status', next.status)
+    if ('priority' in next) write('priority', next.priority)
+    if ('assignee' in next) write('assignee', next.assignee)
+    setSearchParams(params, { replace: true })
+    setPage(1)
+  }
+
+  // Push the debounced search term into the URL (and reset paging) once it has
+  // settled, so we never rewrite history on every keystroke. `setSearchParams`
+  // accepts an updater, so this reads the freshest params without re-running on
+  // every URL change.
   useEffect(() => {
-    const next = new URLSearchParams()
-    if (debouncedSearch) next.set('q', debouncedSearch)
-    if (status) next.set('status', status)
-    if (priority) next.set('priority', priority)
-    if (assignee) next.set('assignee', assignee)
-    setSearchParams(next, { replace: true })
-  }, [debouncedSearch, status, priority, assignee, setSearchParams])
+    // Return early rather than navigating to an identical URL: `setSearchParams`
+    // always pushes/replaces, so an unchanged value would cause a redundant
+    // navigation on every render.
+    if (debouncedSearch === (searchParams.get('q') ?? '')) return
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (debouncedSearch) next.set('q', debouncedSearch)
+      else next.delete('q')
+      return next
+    }, { replace: true })
+    setPage(1)
+  }, [debouncedSearch, searchParams, setSearchParams])
 
   const params: TicketListParams = useMemo(
     () => ({
@@ -94,9 +121,8 @@ export function TicketsPage() {
 
   const clearFilters = () => {
     setSearch('')
-    setStatus('')
-    setPriority('')
-    setAssignee('')
+    setPage(1)
+    setSearchParams(new URLSearchParams(), { replace: true })
   }
 
   return (
@@ -131,15 +157,15 @@ export function TicketsPage() {
           search={search}
           onSearchChange={setSearch}
           status={status}
-          onStatusChange={setStatus}
+          onStatusChange={(value) => updateFilters({ status: value })}
           priority={priority}
-          onPriorityChange={setPriority}
+          onPriorityChange={(value) => updateFilters({ priority: value })}
           extra={
             admin ? (
               <NativeSelect.Root size='sm' width='auto' minW='44'>
                 <NativeSelect.Field
                   value={assignee}
-                  onChange={(event) => setAssignee(event.target.value)}
+                  onChange={(event) => updateFilters({ assignee: event.target.value })}
                   aria-label='Filter by assignee'
                   bg={palette.surface}
                   borderColor={palette.border}
@@ -187,13 +213,7 @@ export function TicketsPage() {
           wrap='wrap'
         >
           <Inbox size={14} color={palette.textMuted} aria-hidden />
-          <Flex
-            as='span'
-            fontSize='xs'
-            color={palette.textSecondary}
-            align='center'
-            gap='1'
-          >
+          <Flex as='span' fontSize='xs' color={palette.textSecondary} align='center' gap='1'>
             Showing unassigned tickets on this page. The API does not expose a
             server-side unassigned filter, so the count reflects the current page.
           </Flex>

@@ -193,12 +193,16 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           to='/tickets'
         />
         <MetricCard
-          label='Open'
+          label='Open & in progress'
           value={totals.open_tickets}
           icon={Inbox}
           tone='info'
           hint={openDetail}
-          to='/tickets?status=OPEN'
+          // The API filters one status at a time, so this value (OPEN +
+          // IN_PROGRESS) links to the unfiltered list rather than a subset that
+          // would silently disagree with the number shown.
+          to='/tickets'
+          ariaLabel={`Open and in progress: ${totals.open_tickets}`}
         />
         <MetricCard
           label='Waiting on customer'

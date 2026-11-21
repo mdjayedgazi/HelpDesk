@@ -168,5 +168,8 @@ describe('attentionItems', () => {
     expect(items[0]!.value).toBe(3)
     expect(items[0]!.tone).toBe('danger')
     expect(items.every((item) => item.to.startsWith('/tickets'))).toBe(true)
+    // Aging spans three statuses, so it must not pretend a single-status
+    // filter represents the number it shows.
+    expect(items.find((item) => item.key === 'aging')!.to).toBe('/tickets')
   })
 })

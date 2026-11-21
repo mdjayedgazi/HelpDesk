@@ -1,6 +1,7 @@
-import { Box, Flex, Text } from '@chakra-ui/react'
+import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
 import { useId, useMemo, useState } from 'react'
 
+import { useElementWidth } from '../../hooks/useElementWidth.ts'
 import { palette } from '../../theme/palette.ts'
 import { ChartDataTable } from './ChartCard.tsx'
 
@@ -33,8 +34,8 @@ export interface TrendPoint {
   values: Record<string, number>
 }
 
-const W = 640
 const H = 220
+const MIN_W = 280
 const PAD_L = 34
 const PAD_R = 8
 const PAD_T = 12
@@ -66,6 +67,11 @@ export function TrendChart({
 }) {
   const [active, setActive] = useState<number | null>(null)
   const gradientId = useId().replace(/[:]/g, '')
+  const { ref: measureRef, width } = useElementWidth<HTMLDivElement>()
+
+  // The SVG viewBox is 1:1 with its rendered pixels (never `preserveAspectRatio
+  // ='none'`), so text and ticks keep their proportions at every column width.
+  const W = Math.max(MIN_W, width ?? 640)
 
   const geom = useMemo(() => {
     const rawMax = Math.max(
@@ -98,14 +104,14 @@ export function TrendChart({
     const labelEvery = Math.max(1, Math.ceil(points.length / 6))
 
     return { max, plotW, plotH, x, y, stepX, lines, ticks, labelEvery }
-  }, [points, series, height])
+  }, [points, series, height, W])
 
   if (points.length === 0) return null
 
   const activePoint = active !== null ? points[active] : null
 
   return (
-    <Box position='relative' minW='0'>
+    <Box position='relative' minW='0' ref={measureRef}>
       <Flex justify='flex-end' mb='1'>
         {activePoint ? (
           <Flex
@@ -147,11 +153,13 @@ export function TrendChart({
       </Flex>
 
       <Box position='relative'>
+        {width === null ? (
+          <Skeleton height={`${height}px`} width='100%' bg={palette.inset} borderRadius='l2' />
+        ) : (
         <svg
           viewBox={`0 0 ${W} ${height}`}
           width='100%'
           height={height}
-          preserveAspectRatio='none'
           role='presentation'
           aria-hidden='true'
           className='hd-chart-enter'
@@ -268,6 +276,7 @@ export function TrendChart({
             ) : null,
           )}
         </svg>
+        )}
       </Box>
 
       <ChartDataTable

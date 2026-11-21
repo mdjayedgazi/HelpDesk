@@ -115,6 +115,13 @@ export function AttentionList({ items }: { items: AttentionItem[] }) {
           )
         })}
       </Box>
+      <Flex px='4' py='2.5' borderTopWidth='1px' borderColor={palette.borderSubtle}>
+        <Text fontSize='2xs' color={palette.textFaint}>
+          Counts are exact. Links open the closest matching list; the ticket API
+          filters one value at a time and has no unassigned filter, so a linked view
+          is approximate.
+        </Text>
+      </Flex>
     </Surface>
   )
 }

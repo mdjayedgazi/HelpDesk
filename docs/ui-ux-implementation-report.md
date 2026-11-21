@@ -253,12 +253,13 @@ No second UI architecture was introduced.
 Frontend (`cd frontend && npm test`):
 
 ```
-Test Files  12 passed (12)
-     Tests  74 passed (74)
+Test Files  13 passed (13)
+     Tests  78 passed (78)
 ```
 
-(Was 8 files / 52 tests on `main`; +4 files / +22 tests, all new coverage for the
-analytics helpers and the three role dashboards, including error and empty states.)
+(Was 8 files / 52 tests on `main`; +5 files / +26 tests, all new coverage for the
+analytics helpers, the three role dashboards and the URL-backed ticket filters,
+including error, empty and deep-link states.)
 
 Backend (`cd backend && .venv/bin/python -m pytest -q`):
 
@@ -280,7 +281,7 @@ customer/agent), totals, aging/grace counters, and empty-database behaviour.
 | --- | --- | --- |
 | TypeScript | `npm run typecheck` | clean |
 | Frontend lint | `npm run lint` | clean |
-| Production build | `npm run build` (with production env) | success, 856 ms |
+| Production build | `npm run build` (with production env) | success, ~1 s |
 | Backend lint | `ruff check .` | clean |
 | Backend format | `ruff format --check .` | 116 files formatted |
 
@@ -324,6 +325,31 @@ Recorded in the pull request; the commit is
 
 Created against `main` after the commit — see the PR link returned with this work.
 PR #19 and its history are untouched; no existing branch was reused.
+
+---
+
+## 19a. Self-review findings fixed in this pass
+
+A review pass after the first commit found four genuine defects, all fixed and
+covered:
+
+1. **Distorted chart axis text.** `TrendChart` used `preserveAspectRatio='none'`,
+   which stretched its tick and date labels horizontally. The chart now measures
+   its container (`useElementWidth`) and renders a 1:1 viewBox, so a 652 px column
+   draws a 652-unit viewBox. Verified in-browser: rendered width equals viewBox
+   width at 1440/390/360 px, 0 distorted text nodes, 0 `preserveAspectRatio='none'`.
+2. **Metric did not match its destination.** "Open" counted OPEN +
+   IN_PROGRESS but linked to `?status=OPEN`, so the count never matched the list.
+   The label is now "Open & in progress" and links to the unfiltered list.
+3. **Aging link misrepresented its count.** Aging spans three statuses and linked
+   to `?status=IN_PROGRESS`. It now links to the full list. The attention strip
+   states that counts are exact while linked views are approximate.
+4. **URL vs local state drift.** The ticket and user filters kept duplicated state,
+   so browser Back left the UI out of sync and effects could navigate on every
+   render. The URL is now the single source of truth for filters; only the search
+   box has local state; effects return early when nothing changed. Covered by
+   `src/pages/TicketsPage.test.tsx` (deep link, unknown value, no navigation loop,
+   unassigned sentinel).
 
 ---
 

@@ -86,12 +86,13 @@ export function CustomerDashboard({ me }: { me: User }) {
           to='/tickets'
         />
         <MetricCard
-          label='Open'
+          label='Open & in progress'
           value={loading ? '—' : counts.open + counts.inProgress}
           icon={Inbox}
           tone='info'
           hint={counts.inProgress > 0 ? `${counts.inProgress} in progress` : 'Being reviewed'}
-          to='/tickets?status=OPEN'
+          to='/tickets'
+          ariaLabel={`Open and in progress: ${counts.open + counts.inProgress}`}
         />
         <MetricCard
           label='Waiting on you'

@@ -135,7 +135,10 @@ export function attentionItems(analytics: SupportAnalytics): AttentionItem[] {
       detail: 'Active tickets that have gone quiet',
       value: analytics.aging_over_7_days,
       tone: 'warning',
-      to: '/tickets?status=IN_PROGRESS',
+      // Aging spans OPEN / IN_PROGRESS / WAITING_ON_CUSTOMER, which no single
+      // status filter can express, so this opens the full list rather than a
+      // subset that would not match the number.
+      to: '/tickets',
     })
   }
   if (analytics.answered_without_resolution > 0) {

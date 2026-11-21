@@ -37,13 +37,21 @@ export function AdminUsersPage() {
   )
 
   // Keep the URL in sync so the dashboard can deep-link to a filtered directory
-  // (for example `/admin/users?role=agent`) and the view can be shared.
+  // (for example `/admin/users?role=agent`) and the view can be shared. Only the
+  // params this page owns are touched, and nothing is written when unchanged.
   useEffect(() => {
-    const next = new URLSearchParams()
-    if (role) next.set('role', role)
-    if (active) next.set('active', active)
-    setSearchParams(next, { replace: true })
-  }, [role, active, setSearchParams])
+    if ((searchParams.get('role') ?? '') === role && (searchParams.get('active') ?? '') === active) {
+      return
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (role) next.set('role', role)
+      else next.delete('role')
+      if (active) next.set('active', active)
+      else next.delete('active')
+      return next
+    }, { replace: true })
+  }, [role, active, searchParams, setSearchParams])
 
   const debouncedSearch = useDebounced(search)
 
