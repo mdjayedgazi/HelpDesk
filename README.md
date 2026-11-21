@@ -148,6 +148,22 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+Optional, opt-in integration tests run against a **disposable** PostgreSQL
+database (they are skipped otherwise). The CI E2E job runs the auth → ticket
+creation → assignment flow this way:
+
+```bash
+docker run --rm -d --name hd_pg -e POSTGRES_USER=verify \
+  -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=hdverify \
+  -p 127.0.0.1:55432:5432 postgres:18-alpine
+
+HD_TEST_POSTGRES_URL='postgresql+psycopg://verify:verify@127.0.0.1:55432/hdverify' \
+  uv run pytest -q tests/test_e2e_support_flow_postgres.py
+```
+
+The modules refuse to run unless the database URL looks disposable (its name
+contains `test`, `verify`, or `ci`).
+
 ### Frontend
 
 ```bash

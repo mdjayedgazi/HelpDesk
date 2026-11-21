@@ -11,6 +11,12 @@ already been performed.
 > below remains the strict commercial target; do not mix the two sets of
 > relaxations.
 
+> **Related runbooks:** database backup, restore, and monitoring are in
+> [`DATABASE_BACKUP_RESTORE.md`](./DATABASE_BACKUP_RESTORE.md). External
+> production items (Clerk production instance, Redis/Upstash ownership,
+> object-storage decision) are in
+> [`PRODUCTION_READINESS.md`](./PRODUCTION_READINESS.md).
+
 ## Verification boundary
 
 **Verified locally in this remediation pass**
@@ -85,6 +91,8 @@ repository. Configure the services and variables in the Railway dashboard.
 | `LOG_JSON` | `true` |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | Start with `5` / `10`; size against the PostgreSQL connection limit and number of API instances. |
 | `DB_CONNECT_TIMEOUT_SECONDS` | `10` |
+| `DB_STATEMENT_TIMEOUT_MS` | `15000`. Applied to **direct** PostgreSQL endpoints so a stuck query cannot pin a pooled connection. `0` disables. Pooled (Neon `-pooler`) deployments ignore it here; set `statement_timeout` on the database role instead. |
+| `DB_LOCK_TIMEOUT_MS` | `5000`. Same direct-only application as the statement timeout; set `lock_timeout` on the role for pooled endpoints. |
 | `MAX_UPLOAD_BYTES` | `5242880` unless a reviewed product limit says otherwise. |
 | `MAX_ATTACHMENTS_PER_TICKET` | `20` |
 | `MAX_TICKET_ATTACHMENT_BYTES` | `52428800` |
@@ -260,7 +268,9 @@ Configure, and record evidence for, at least:
 - Log retention. Production JSON logs redact bearer tokens, Clerk keys,
   credential-bearing database/Redis URLs, and common password/secret fields;
   request bodies and authorization headers are not logged.
-- Backup/PITR verification and a restore drill.
+- Backup/PITR verification and a restore drill. The exact procedure, safety
+  guards, and dashboard checks are in
+  [`DATABASE_BACKUP_RESTORE.md`](./DATABASE_BACKUP_RESTORE.md).
 - A spend limit and resource alerts so a runaway client cannot exhaust the
   database, Redis, or scanner.
 - A rollback procedure: redeploy the previous known-good image, then use a
@@ -342,8 +352,9 @@ provider. These are not satisfied by local Docker builds.
   [`data.md`](../data.md) and [`RAILWAY_COLLEGE_DEMO.md`](./RAILWAY_COLLEGE_DEMO.md).
 - The backend does not use WebSockets, background workers, or an object store.
   Uploads and the scanner are synchronous and fail closed.
-- The frontend production bundle is large (about 1.23 MB JS, 342 KB gzip in the
-  verified build). It works, but code-splitting is a future performance task.
+- The frontend production bundle is code-split by route: the shared entry chunk
+  is about 454 KB (122 KB gzip) and each page loads on navigation, instead of a
+  single ~1.23 MB chunk. The earlier single-chunk size is no longer current.
 - Five moderate advisories remain in the frontend **development** toolchain
   (`vitest` / `@vitest/ui` dependencies); production `npm audit --omit=dev`
   reports zero vulnerabilities. See `data.md`.
