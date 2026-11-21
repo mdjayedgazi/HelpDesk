@@ -1,4 +1,4 @@
-"""Seed the *Neon development* database with a realistic demo dataset.
+"""Seed the demo database with a realistic, interconnected dataset.
 
 This is the canonical demo seeder for the live HelpDesk deployment. It exists so
 the Owner can sign in to the real application and browse a coherent, realistic
@@ -6,18 +6,23 @@ dataset. It is deliberately separate from ``app.commands.seed_qa_data`` (which
 targets a loopback-only isolated QA database):
 
 * this command refuses loopback hosts and any database whose name starts with
-  ``helpdesk_qa`` (and it refuses a plain ``helpdesk_qa``-style name);
+  ``helpdesk_qa``;
 * ``seed_qa_data`` refuses any non-loopback host, so it can never touch Neon.
 
-Dataset shape (after the deterministic reset/rebuild)
------------------------------------------------------
-* exactly **100 users total**: the preserved Owner + 5 ADMIN + 15 AGENT + 79
-  CUSTOMER. It never creates a second Owner and never modifies the Owner row.
-* at least 100 tickets spanning every supported status, priority and category,
-  with assigned and unassigned tickets and lifecycle timestamps.
-* comments (public customer/agent replies plus staff-only internal notes),
-  ticket history, notifications, ticket attachments, private staff<->Owner
-  conversations and messages, and account-management requests.
+Dataset shape
+-------------
+The dataset is described by a :class:`DemoPlan`. Two sizes are supported:
+
+* ``--size 100`` (default): 100 users total (the preserved Owner + 8 ADMIN +
+  20 AGENT + 71 CUSTOMER), 300 tickets, ~790 comments, ~520 notifications.
+* ``--size 50``: 50 users total (Owner + 4 + 10 + 35), 150 tickets, scaled
+  comments/notifications.
+
+The database enforces exactly **one** Owner (partial unique index
+``uq_users_single_owner``), so no size creates a second Owner. Tickets are
+spread across the last 45 days with the most recent 14 days deliberately well
+populated, so the analytics trend, aging counts and "created today" scenarios
+are all real. Timestamps are anchored to the moment the seed runs.
 
 Safety model (all must hold before a single row is written)
 ----------------------------------------------------------
@@ -25,10 +30,12 @@ Safety model (all must hold before a single row is written)
   namespace **and** target identity token, e.g.
   ``HD-DEMO-20261019 @ ep-...neon.tech/neondb``;
 * the configured ``DATABASE_URL`` host and database name must match the verified
-  development target constants below;
+  target constants below;
 * a single OWNER must already exist (the preserved Owner) and must be unchanged
   after the run (the row is hashed before and after and rolled back on drift);
-* the environment must not be declared ``production``/``prod``;
+* the environment must not be declared ``production``/``prod`` unless the
+  deliberate ``HELPDESK_DEMO_ALLOW_PRODUCTION`` override is set (needed for the
+  Railway ``college-demo`` profile, which declares itself production);
 * the attachment upload directory must live under ``/tmp``.
 
 Everything it writes belongs to the demo namespace ``HD-DEMO-20261019`` and uses
@@ -38,12 +45,17 @@ startup, and never touches the Owner or any record outside its namespace.
 
 Usage (from ``backend/`` with the project environment active)::
 
-    HELPDESK_DEMO_SEED_CONFIRM='HD-DEMO-20261019 @ <host>/neondb' \\
-    HELPDESK_DEMO_UPLOAD_DIR=/tmp/helpdesk-demo-uploads \\
-    uv run python -m app.commands.seed_demo_data
+    # Preview the full plan - no database connection, no writes.
+    uv run python -m app.commands.seed_demo_data --dry-run --size 100
+
+    # Insert (idempotent; refuses without the confirmation token).
+    HELPDESK_DEMO_SEED_CONFIRM='HD-DEMO-20261019 @ <host>/neondb' \
+    HELPDESK_DEMO_UPLOAD_DIR=/tmp/helpdesk-demo-uploads \
+    uv run python -m app.commands.seed_demo_data --size 100
 
 Add ``--verify-only`` to re-read and report the seeded namespace without
-inserting anything. Add ``--json`` for machine-readable output.
+inserting anything. Add ``--json`` for machine-readable output. See
+``docs/demo-data-seeding.md`` for the full runbook.
 """
 
 from __future__ import annotations
@@ -53,6 +65,7 @@ import asyncio
 import hashlib
 import json
 import os
+import random
 import sys
 import urllib.parse
 import uuid
@@ -116,19 +129,149 @@ _NAMESPACE = uuid.uuid5(
     uuid.NAMESPACE_URL, f"https://helpdesk.demo.local/neon/{MARKER}"
 )
 
-_BASE = datetime(2026, 8, 15, 7, 0, tzinfo=UTC)
+# --------------------------------------------------------------------------- #
+# Dataset plan (size, distribution, time anchor)
+# --------------------------------------------------------------------------- #
 
-# Distribution of the 99 demo users (the 100th is the preserved Owner).
-N_ADMINS = 5
-N_AGENTS = 15
-N_CUSTOMERS = 79
-N_TICKETS = 120
+# The demo timeline is anchored to the moment the seed runs, not a frozen
+# constant. The analytics endpoint derives its 14-day window from
+# ``datetime.now(UTC)``, so a fixed base date would place every ticket outside
+# the window and render the volume trend as a flat zero line. Anchoring to
+# ``now`` is what makes the seeded data produce a real trend, real aging counts
+# and real "created today" rows. Determinism is preserved because every offset
+# is derived from the same anchor and a fixed RNG seed.
+SCENARIO_SPAN_DAYS = 45
+MINUTES_PER_DAY = 24 * 60
+MAX_SPAN_MINUTES = SCENARIO_SPAN_DAYS * MINUTES_PER_DAY
+RNG_SEED = 20261019
+
+# Role distribution. The database enforces exactly ONE owner (partial unique
+# index ``uq_users_single_owner``), so the brief's "2 owners" is intentionally
+# rendered as one Owner plus an extra Administrator. See docs/demo-data-audit.md.
+_ROLE_SPLITS: dict[int, tuple[int, int, int]] = {
+    # size -> (admins, agents, customers); the Owner is additional.
+    100: (8, 20, 71),
+    50: (4, 10, 35),
+}
+
+# Tickets per size. Roughly 3 tickets per user at 100, scaled down at 50.
+_TICKET_COUNTS: dict[int, int] = {100: 300, 50: 150}
+
+# Relative status/priority weights (largest-remainder rounded to the exact
+# ticket count). They reproduce the brief's 300-ticket targets exactly:
+# status 60/60/60/90/30 and priority 45/135/90/30.
+_STATUS_WEIGHTS = {
+    TicketStatus.OPEN: 1.0,
+    TicketStatus.IN_PROGRESS: 1.0,
+    TicketStatus.WAITING_ON_CUSTOMER: 1.0,
+    TicketStatus.RESOLVED: 1.5,
+    TicketStatus.CLOSED: 0.5,
+}
+_PRIORITY_WEIGHTS = {
+    TicketPriority.LOW: 0.15,
+    TicketPriority.NORMAL: 0.45,
+    TicketPriority.HIGH: 0.3,
+    TicketPriority.URGENT: 0.1,
+}
+
+
+@dataclass(frozen=True)
+class DemoPlan:
+    """Everything a single seed run needs to be reproducible and sized."""
+
+    size: int
+    admins: int
+    agents: int
+    customers: int
+    tickets: int
+    staff_conversations: int
+    account_requests: int
+    attachments: int
+    anchor: datetime
+
+    @property
+    def demo_users(self) -> int:
+        return self.admins + self.agents + self.customers
+
+    @property
+    def users_total(self) -> int:
+        # +1 for the preserved Owner.
+        return self.demo_users + 1
+
+
+def _split_counts(total: int, weights: dict) -> dict:
+    """Largest-remainder apportionment of ``total`` over ``weights``.
+
+    Deterministic and exact: the returned counts always sum to ``total``.
+    """
+    weight_sum = sum(weights.values()) or 1.0
+    raw = {key: total * weight / weight_sum for key, weight in weights.items()}
+    counts = {key: int(value) for key, value in raw.items()}
+    remainder = total - sum(counts.values())
+    # Hand out the leftover units to the largest fractional parts, breaking ties
+    # by the enum order for stability.
+    order = sorted(
+        raw, key=lambda key: (-(raw[key] - counts[key]), list(weights).index(key))
+    )
+    for key in order[:remainder]:
+        counts[key] += 1
+    return counts
+
+
+def plan_for(size: int, *, anchor: datetime | None = None) -> DemoPlan:
+    """Build a validated dataset plan for a supported size."""
+    if size not in _ROLE_SPLITS:
+        raise SeedRefused(
+            f"Unsupported --size {size}. Supported sizes: {sorted(_ROLE_SPLITS)}."
+        )
+    admins, agents, customers = _ROLE_SPLITS[size]
+    return DemoPlan(
+        size=size,
+        admins=admins,
+        agents=agents,
+        customers=customers,
+        tickets=_TICKET_COUNTS[size],
+        staff_conversations=max(8, min(agents, 12)),
+        account_requests=12 if size >= 100 else 6,
+        attachments=12 if size >= 100 else 6,
+        anchor=(anchor or datetime.now(UTC)).replace(microsecond=0),
+    )
+
+
+# The plan is resolved once per run and read by the deterministic spec
+# builders. It is ``None`` until an entry point sets it; the default keeps the
+# pure helper functions usable in isolation (tests, exploratory calls).
+_ACTIVE_PLAN: DemoPlan | None = None
+
+
+def active_plan() -> DemoPlan:
+    global _ACTIVE_PLAN
+    if _ACTIVE_PLAN is None:
+        _ACTIVE_PLAN = plan_for(100)
+    return _ACTIVE_PLAN
+
+
+def use_plan(plan: DemoPlan) -> DemoPlan:
+    """Install ``plan`` as the active plan for this run and return it."""
+    global _ACTIVE_PLAN
+    _ACTIVE_PLAN = plan
+    return plan
+
+
+# Backwards-compatible module constants (the 100-user defaults). Existing
+# tests and callers read these; the active plan overrides them at runtime.
+N_ADMINS = _ROLE_SPLITS[100][0]
+N_AGENTS = _ROLE_SPLITS[100][1]
+N_CUSTOMERS = _ROLE_SPLITS[100][2]
+N_TICKETS = _TICKET_COUNTS[100]
 N_STAFF_CONVERSATIONS = 12
 N_ACCOUNT_REQUESTS = 12
 N_ATTACHMENTS = 12
 
-# Customers that are deliberately inactive (varied account status).
-_INACTIVE_CUSTOMER_INDEXES = {74, 76, 78}
+# Inactive accounts at 100 users (scaled proportionally for 50). Kept small and
+# deliberate: a realistic mix, never the Owner.
+_INACTIVE_CUSTOMER_INDEXES = {55, 62, 69}
+_INACTIVE_AGENT_INDEXES = {18, 19}
 
 
 class SeedRefused(RuntimeError):
@@ -140,7 +283,8 @@ def _uid(kind: str, key: str) -> uuid.UUID:
 
 
 def _at(minutes: int) -> datetime:
-    return _BASE + timedelta(minutes=minutes)
+    """A timestamp ``minutes`` from the run anchor (negative = in the past)."""
+    return active_plan().anchor + timedelta(minutes=minutes)
 
 
 def _hours(start_minutes: int, hours: float) -> datetime:
@@ -175,6 +319,14 @@ def assert_confirm(confirm: str | None) -> None:
         )
 
 
+# Opt-in override for the one deployment that is *declared* production but is
+# the intended demo target (Railway's `college-demo` profile). Supplying this
+# value is itself a deliberate, explicit act; it does not skip any other guard
+# (confirm token, host match, /tmp uploads, Owner hash, atomic rollback).
+PRODUCTION_OVERRIDE_ENV = "HELPDESK_DEMO_ALLOW_PRODUCTION"
+PRODUCTION_OVERRIDE_VALUE = "I-UNDERSTAND-THIS-IS-THE-DEMO-DATABASE"
+
+
 def assert_not_production(environ: dict[str, str]) -> None:
     declared = (
         (
@@ -186,8 +338,18 @@ def assert_not_production(environ: dict[str, str]) -> None:
         .strip()
         .lower()
     )
-    if declared in {"production", "prod"}:
-        raise SeedRefused("Refusing to seed: the environment is declared production.")
+    if declared not in {"production", "prod"}:
+        return
+    # The demo deployment declares itself production. Allow it only with the
+    # exact override phrase, and only for the verified demo host (checked
+    # separately by assert_neon_target).
+    override = (environ.get(PRODUCTION_OVERRIDE_ENV) or "").strip()
+    if override != PRODUCTION_OVERRIDE_VALUE:
+        raise SeedRefused(
+            "Refusing to seed: the environment is declared production. If this is "
+            "the college-demo database, set "
+            f"{PRODUCTION_OVERRIDE_ENV}={PRODUCTION_OVERRIDE_VALUE} explicitly."
+        )
 
 
 def assert_neon_target(url: str | None) -> None:
@@ -487,6 +649,13 @@ _AGENT_COMMENTS = [
     "This is resolved on our side. Please confirm everything looks correct.",
 ]
 
+_RESOLUTION_COMMENTS = [
+    "The fix has been deployed — please confirm everything looks correct now.",
+    "I have applied the correction and verified it on our side. This is resolved.",
+    "Your request has been completed. Let us know if anything else comes up.",
+    "This is now working as expected after the change. Marking the ticket resolved.",
+]
+
 _INTERNAL_NOTES = [
     "Internal: linked to the same root cause as the outage incident.",
     "Internal: customer is on an enterprise plan — prioritize accordingly.",
@@ -539,11 +708,12 @@ class UserSpec:
     is_active: bool
 
 
-def demo_users() -> list[UserSpec]:
-    """The 99 deterministic demo users (the 100th is the preserved Owner)."""
+def demo_users(plan: DemoPlan | None = None) -> list[UserSpec]:
+    """The deterministic demo users for the active plan (Owner is additional)."""
+    plan = plan or active_plan()
     specs: list[UserSpec] = []
 
-    def make(role: Role, index: int) -> UserSpec:
+    def make(role: Role, index: int, count: int) -> UserSpec:
         slug = role.value  # customer / agent / admin
         username = f"demo_{slug}_{index:02d}"
         name_index = len(specs)
@@ -551,7 +721,18 @@ def demo_users() -> list[UserSpec]:
             f"{_FIRST_NAMES[name_index % len(_FIRST_NAMES)]} "
             f"{_LAST_NAMES[(name_index * 7) % len(_LAST_NAMES)]}"
         )
-        is_active = not (role == Role.CUSTOMER and index in _INACTIVE_CUSTOMER_INDEXES)
+        # A deliberate, small inactive minority, scaled to the size. Indexes are
+        # scaled so both 50- and 100-user runs get the same *proportion*.
+        inactive_customers = {
+            round(i * plan.customers / 79) for i in _INACTIVE_CUSTOMER_INDEXES
+        }
+        inactive_agents = {round(i * plan.agents / 20) for i in _INACTIVE_AGENT_INDEXES}
+        if role == Role.CUSTOMER:
+            is_active = index not in inactive_customers
+        elif role == Role.AGENT:
+            is_active = index not in inactive_agents
+        else:
+            is_active = True
         return UserSpec(
             key=f"{slug}_{index:02d}",
             role=role,
@@ -561,12 +742,12 @@ def demo_users() -> list[UserSpec]:
             is_active=is_active,
         )
 
-    for i in range(N_ADMINS):
-        specs.append(make(Role.ADMIN, i))
-    for i in range(N_AGENTS):
-        specs.append(make(Role.AGENT, i))
-    for i in range(N_CUSTOMERS):
-        specs.append(make(Role.CUSTOMER, i))
+    for i in range(plan.admins):
+        specs.append(make(Role.ADMIN, i, plan.admins))
+    for i in range(plan.agents):
+        specs.append(make(Role.AGENT, i, plan.agents))
+    for i in range(plan.customers):
+        specs.append(make(Role.CUSTOMER, i, plan.customers))
     return specs
 
 
@@ -575,39 +756,126 @@ def _specs_by_role(users: list[UserSpec], role: Role) -> list[UserSpec]:
 
 
 def ticket_specs(users: list[UserSpec]) -> list[dict]:
-    """Deterministic ticket specs with a balanced, coherent lifecycle."""
+    """Deterministic ticket specs with an exact distribution and real timeline.
+
+    The shape is driven by the active plan:
+
+    * status counts are apportioned to the exact ticket total using the brief's
+      target weights (60/60/60/90/30 at 300);
+    * priority counts likewise (45/135/90/30 at 300);
+    * timestamps are spread over the preceding ``SCENARIO_SPAN_DAYS`` days with
+      the most recent 14 days deliberately well populated, so the analytics
+      trend, the aging counts and the "created today" scenario are all real;
+    * lifecycle timestamps are causally ordered per status (a resolved ticket is
+      created, then assigned, then resolved, never the reverse).
+
+    Assignment leaves roughly 15-20% of *active* tickets unassigned so the
+    unassigned queue and the assignment-coverage metric are meaningful.
+    """
+    plan = active_plan()
     customers = _specs_by_role(users, Role.CUSTOMER)
     agents = _specs_by_role(users, Role.AGENT)
     categories = list(TicketCategory)
-    statuses = [
-        TicketStatus.OPEN,
-        TicketStatus.IN_PROGRESS,
-        TicketStatus.WAITING_ON_CUSTOMER,
-        TicketStatus.RESOLVED,
-        TicketStatus.CLOSED,
-    ]
-    priorities = [
-        TicketPriority.LOW,
-        TicketPriority.NORMAL,
-        TicketPriority.HIGH,
-        TicketPriority.URGENT,
-    ]
-    # Customers that can own tickets have no special constraint; use all of
-    # them (including inactive ones, whose tickets are historical records).
+
+    status_counts = _split_counts(plan.tickets, _STATUS_WEIGHTS)
+    priority_counts = _split_counts(plan.tickets, _PRIORITY_WEIGHTS)
+
+    # Expand the apportioned counts into an ordered list of statuses/priorities.
+    statuses: list[TicketStatus] = []
+    for status, count in status_counts.items():
+        statuses.extend([status] * count)
+    priorities: list[TicketPriority] = []
+    for priority, count in priority_counts.items():
+        priorities.extend([priority] * count)
+    if len(statuses) != plan.tickets or len(priorities) != plan.tickets:
+        raise SeedRefused("Ticket distribution did not match the planned total.")
+
+    rng = random.Random(RNG_SEED)
+    # Creation times are sorted oldest-first, so if statuses were assigned in
+    # block order every OPEN ticket would be old and every CLOSED one recent.
+    # Shuffle (with the fixed seed) so each status is spread across the whole
+    # timeline; this is what makes aging, "created today", and the 14-day
+    # resolved series all realistic at once.
+    rng.shuffle(statuses)
+    rng.shuffle(priorities)
+    n = plan.tickets
+
+    # Spread creation times across the scenario window. The first 40% of index
+    # values are placed inside the last 14 days so the trend has real data;
+    # the remainder reaches further back for aging and closed history. The
+    # split is deterministic and independent of dict ordering.
+    created_minutes: list[int] = []
+    for i in range(n):
+        if i % 5 in (0, 1):
+            # Recent bucket: last 14 days, weighted towards the last few days.
+            day = rng.randint(0, 13)
+            minute = rng.randint(0, MINUTES_PER_DAY - 1)
+            created_minutes.append(-(day * MINUTES_PER_DAY) - minute - 30)
+        else:
+            # Older bucket: 14-45 days ago for aging and closed history.
+            day = rng.randint(14, SCENARIO_SPAN_DAYS - 1)
+            minute = rng.randint(0, MINUTES_PER_DAY - 1)
+            created_minutes.append(-(day * MINUTES_PER_DAY) - minute - 30)
+    created_minutes.sort()  # oldest first; deterministic ordering
+
+    # We must not assign active work to inactive agents.
+    active_agents = [a for a in agents if a.is_active] or agents
+
     specs: list[dict] = []
-    for i in range(N_TICKETS):
-        status = statuses[i % len(statuses)]
-        priority = priorities[(i * 3) % len(priorities)]
+    for i in range(n):
+        status = statuses[i]
+        priority = priorities[i]
         category = categories[(i * 5) % len(categories)]
         title, description = _TICKET_TEMPLATES[category][
             (i // len(categories)) % len(_TICKET_TEMPLATES[category])
         ]
         customer = customers[(i * 11) % len(customers)]
-        # Balanced deterministic spread across agents. Every 7th ticket is
-        # left unassigned to model the "needs assignment" queue.
-        agent_key = None if i % 7 == 0 else agents[(i * 7) % len(agents)].key
-        created = 30 + i * 37
-        hours_open = 1 + (i % 72)
+        created = created_minutes[i]
+        age_minutes = -created
+
+        active_status = status in (
+            TicketStatus.OPEN,
+            TicketStatus.IN_PROGRESS,
+            TicketStatus.WAITING_ON_CUSTOMER,
+        )
+        # Unassigned is concentrated on *active* tickets so the unassigned
+        # queue is realistic (~15-18% of active work), without leaving resolved
+        # or closed tickets ownerless (which would look like unfinished work).
+        # ~17% of active tickets: dense enough for a real queue, sparse enough
+        # that most work has an owner.
+        unassigned = ((i % 7 == 0) or (i % 23 == 0)) if active_status else False
+
+        agent_key = None
+        if not unassigned and active_agents:
+            # Weighted, deterministic spread: earlier agents carry more load.
+            agent_key = active_agents[(i * 7) % len(active_agents)].key
+
+        # ``aging_over_7_days`` is defined against ``now`` (updated_at <= now -
+        # 7 days), not against creation. So an old ticket only *ages* if its
+        # last update is also old. Most older active tickets therefore get a
+        # recent touch (someone looked at them), and a deliberate minority is
+        # left genuinely stale. This keeps the aging count meaningful (~1 in 5
+        # of the older active tickets) instead of flagging the whole backlog.
+        if active_status and age_minutes > 7 * MINUTES_PER_DAY:
+            if i % 5 == 0:
+                # Genuinely stale: last touched shortly after creation.
+                updated_offset = created + 30
+            else:
+                # Reviewed within the last week, but after creation and never
+                # in the future.
+                recent_touch = -rng.randint(0, 6 * MINUTES_PER_DAY)
+                updated_offset = max(recent_touch, created + 30)
+        else:
+            updated_offset = created + min(age_minutes, 120)
+
+        # Offset (minutes from creation) at which a resolved/closed ticket was
+        # resolved; None for still-active tickets. Children (comments, history,
+        # notifications) use this to stay causally ordered.
+        resolved_offset = None
+        if status in (TicketStatus.RESOLVED, TicketStatus.CLOSED):
+            span_cap = max(60, age_minutes - 30)
+            resolved_offset = min(6 * 60 + (i % 48) * 60, span_cap)
+
         specs.append(
             {
                 "key": f"ticket_{i:03d}",
@@ -620,8 +888,10 @@ def ticket_specs(users: list[UserSpec]) -> list[dict]:
                 "customer_key": customer.key,
                 "agent_key": agent_key,
                 "created_at": created,
+                "updated_at": updated_offset,
+                "resolved_offset": resolved_offset,
+                "age_minutes": age_minutes,
                 "has_phone": i % 5 == 0,
-                "hours_open": hours_open,
                 "at": created,
             }
         )
@@ -658,7 +928,20 @@ def comment_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]:
                     "at": at + 30,
                 }
             )
-        # 3) Staff-only internal note on some tickets (never a customer author).
+        # 3) Resolution confirmation on resolved/closed tickets, placed just
+        # before the resolution so the conversation ends coherently.
+        if t.get("resolved_offset") is not None:
+            specs.append(
+                {
+                    "key": f"comment_{i:03d}_resolved",
+                    "ticket_key": t["key"],
+                    "author_key": t["agent_key"],
+                    "body": _RESOLUTION_COMMENTS[i % len(_RESOLUTION_COMMENTS)],
+                    "internal": False,
+                    "at": t["created_at"] + t["resolved_offset"] - 10,
+                }
+            )
+        # 4) Staff-only internal note on some tickets (never a customer author).
         if i % 3 == 0:
             author = agents[(i * 7) % len(agents)].key if agents else admins[0].key
             specs.append(
@@ -736,6 +1019,12 @@ def history_specs(users: list[UserSpec], tickets: list[dict]) -> list[dict]:
     return specs
 
 
+# Every ticket produces a single receipt notification, and only a subset
+# produces the additional lifecycle notifications, so the panel is populated
+# without one ticket generating six rows. Roughly 2 notifications per ticket.
+_EXTRA_NOTIFICATION_STRIDE = 7
+
+
 def notification_specs(
     users: list[UserSpec],
     tickets: list[dict],
@@ -747,8 +1036,9 @@ def notification_specs(
         i = t["index"]
         at = t["created_at"] + 10
         number = "{number}"
+        extra = i % _EXTRA_NOTIFICATION_STRIDE == 0
         # Assignment notification to the assignee.
-        if t["agent_key"] is not None:
+        if extra and t["agent_key"] is not None:
             specs.append(
                 {
                     "key": f"notif_{i:03d}_assigned",
@@ -762,7 +1052,7 @@ def notification_specs(
                 }
             )
         # Status change notification to the customer.
-        if t["status"] != TicketStatus.OPEN:
+        if extra and t["status"] != TicketStatus.OPEN:
             specs.append(
                 {
                     "key": f"notif_{i:03d}_status",
@@ -776,7 +1066,7 @@ def notification_specs(
                 }
             )
         # New-comment notification to the customer on some tickets.
-        if i % 2 == 0 and t["agent_key"] is not None:
+        if extra and t["agent_key"] is not None:
             specs.append(
                 {
                     "key": f"notif_{i:03d}_comment",
@@ -789,8 +1079,8 @@ def notification_specs(
                     "at": at + 55,
                 }
             )
-        # Customer reply notification to the assigned agent on other tickets.
-        if i % 2 == 1 and t["agent_key"] is not None:
+        # Customer reply notification to the assigned agent on some tickets.
+        if extra and t["agent_key"] is not None:
             specs.append(
                 {
                     "key": f"notif_{i:03d}_customer_reply",
@@ -1317,11 +1607,18 @@ async def _seed_tickets(
         next_number += 1
         agent = users.get(spec["agent_key"]) if spec["agent_key"] else None
         created = _at(spec["created_at"])
-        resolved = (
-            _hours(spec["created_at"], 6 + (spec["index"] % 48))
-            if spec["status"] in (TicketStatus.RESOLVED, TicketStatus.CLOSED)
-            else None
-        )
+        # A ticket can only be resolved after it was created; resolution is
+        # placed somewhere in the window between creation and now, then the
+        # updated timestamp follows it. This keeps created <= assigned <=
+        # resolved <= now for every row.
+        resolved = None
+        if spec["resolved_offset"] is not None:
+            resolved = created + timedelta(minutes=spec["resolved_offset"])
+        updated = _at(spec["updated_at"])
+        if resolved is not None:
+            updated = max(updated, resolved)
+        # Never let an update land in the future.
+        updated = min(updated, active_plan().anchor)
         ticket = Ticket(
             id=ticket_id,
             ticket_number=number,
@@ -1337,7 +1634,7 @@ async def _seed_tickets(
             assignee_user_id=agent.id if agent else None,
             assigned_at=(created + timedelta(minutes=5)) if agent else None,
             created_at=created,
-            updated_at=resolved or (created + timedelta(minutes=60)),
+            updated_at=updated,
             resolved_at=resolved,
         )
         session.add(ticket)
@@ -1848,6 +2145,105 @@ async def _seed_account_request_children(
     return comment_counts, event_counts
 
 
+def expected_counts(plan: DemoPlan, tickets: list[dict] | None = None) -> dict:
+    """The exact row counts this plan will produce (pure, no database).
+
+    Used both by the dry-run report and by the post-seed verification, so the
+    two can never disagree.
+    """
+    tickets = tickets if tickets is not None else ticket_specs(demo_users())
+    users = demo_users()
+    conversations = staff_conversation_specs(users)
+    requests = account_request_specs(users)
+    return {
+        "size": plan.size,
+        "users_total": plan.users_total,
+        "owners": 1,
+        "admins": plan.admins,
+        "agents": plan.agents,
+        "customers": plan.customers,
+        "inactive_customers": sum(
+            1 for u in users if u.role == Role.CUSTOMER and not u.is_active
+        ),
+        "inactive_agents": sum(
+            1 for u in users if u.role == Role.AGENT and not u.is_active
+        ),
+        "tickets": len(tickets),
+        "tickets_by_status": {
+            status.value: sum(1 for t in tickets if t["status"] == status)
+            for status in TicketStatus
+        },
+        "tickets_by_priority": {
+            priority.value: sum(1 for t in tickets if t["priority"] == priority)
+            for priority in TicketPriority
+        },
+        "comments": len(comment_specs(users, tickets)),
+        "internal_notes": sum(
+            1 for c in comment_specs(users, tickets) if c["internal"]
+        ),
+        "history": len(history_specs(users, tickets)),
+        "notifications": len(
+            notification_specs(
+                users,
+                tickets,
+                conversations=conversations,
+                requests=requests,
+            )
+        ),
+        "attachments": len(attachment_specs(tickets)),
+        "staff_conversations": len(conversations),
+        "staff_messages": len(staff_message_specs(conversations)),
+        "account_requests": len(requests),
+        "feedback": len(feedback_specs(tickets)),
+        "internal_messages": len(internal_message_specs(users)),
+    }
+
+
+def dry_run_report(plan: DemoPlan) -> dict:
+    """Describe exactly what a seed would insert, without touching a database.
+
+    This performs no I/O beyond building the pure spec lists, so it is safe to
+    run against production configuration. It is the artefact an operator reads
+    before approving a write.
+    """
+    tickets = ticket_specs(demo_users())
+    active = [
+        t
+        for t in tickets
+        if t["status"]
+        in (
+            TicketStatus.OPEN,
+            TicketStatus.IN_PROGRESS,
+            TicketStatus.WAITING_ON_CUSTOMER,
+        )
+    ]
+    unassigned_active = [t for t in active if t["agent_key"] is None]
+    urgent_active = [t for t in active if t["priority"] == TicketPriority.URGENT]
+    now = plan.anchor
+    recent = [t for t in tickets if t["created_at"] >= -14 * MINUTES_PER_DAY]
+    aging = [t for t in active if t["updated_at"] <= -7 * MINUTES_PER_DAY]
+    unassigned_over_24h = [
+        t for t in unassigned_active if t["created_at"] <= -MINUTES_PER_DAY
+    ]
+    return {
+        "marker": MARKER,
+        "dry_run": True,
+        "anchor": now.isoformat(),
+        "expected": expected_counts(plan, tickets),
+        "derived": {
+            "active_tickets": len(active),
+            "unassigned_active": len(unassigned_active),
+            "unassigned_active_pct": (
+                round(100 * len(unassigned_active) / len(active)) if active else 0
+            ),
+            "urgent_active": len(urgent_active),
+            "created_in_last_14_days": len(recent),
+            "aging_over_7_days": len(aging),
+            "unassigned_over_24h": len(unassigned_over_24h),
+        },
+    }
+
+
 async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
     """Insert the deterministic demo dataset (idempotent).
 
@@ -1856,31 +2252,10 @@ async def seed(upload_root: Path, *, session_factory=None) -> SeedResult:
     be exercised without ever touching the configured target.
     """
     factory = session_factory or async_session
+    plan = active_plan()
     tickets = ticket_specs(demo_users())
     result = SeedResult(upload_root=str(upload_root))
-    result.expected = {
-        "users_total": 1 + len(demo_users()),
-        "admins": N_ADMINS,
-        "agents": N_AGENTS,
-        "customers": N_CUSTOMERS,
-        "tickets": len(tickets),
-        "comments": len(comment_specs(demo_users(), tickets)),
-        "history": len(history_specs(demo_users(), tickets)),
-        "notifications": len(
-            notification_specs(
-                demo_users(),
-                tickets,
-                conversations=staff_conversation_specs(demo_users()),
-                requests=account_request_specs(demo_users()),
-            )
-        ),
-        "attachments": len(attachment_specs(tickets)),
-        "staff_conversations": N_STAFF_CONVERSATIONS,
-        "staff_messages": 3 * N_STAFF_CONVERSATIONS,
-        "account_requests": N_ACCOUNT_REQUESTS,
-        "feedback": len(feedback_specs(tickets)),
-        "internal_messages": len(internal_message_specs(demo_users())),
-    }
+    result.expected = expected_counts(plan, tickets)
 
     created_files: list[Path] = []
     async with factory() as session:
@@ -2122,11 +2497,44 @@ def _print_counts(counts: dict) -> None:
 
 
 async def _main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Seed realistic demo data (Neon).")
+    parser = argparse.ArgumentParser(
+        description="Seed the isolated demo dataset (INSERT-only, idempotent)."
+    )
+    parser.add_argument(
+        "--size",
+        type=int,
+        choices=sorted(_ROLE_SPLITS),
+        default=100,
+        help="Number of application users to target (default: 100).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Compute and print the full insertion plan without opening a write "
+            "transaction or touching the database."
+        ),
+    )
     parser.add_argument("--confirm", default=os.environ.get(CONFIRM_ENV))
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+
+    try:
+        plan = use_plan(plan_for(args.size))
+    except SeedRefused as exc:
+        print(f"Seed refused: {exc}", file=sys.stderr)
+        return 2
+
+    # The dry-run deliberately skips the target/confirmation guards: it performs
+    # no I/O, so an operator can inspect the plan before configuring anything.
+    if args.dry_run:
+        report = dry_run_report(plan)
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            _print_dry_run(report)
+        return 0
 
     try:
         assert_confirm(args.confirm)
@@ -2139,7 +2547,10 @@ async def _main(argv: list[str]) -> int:
         print(f"Seed refused: {exc}", file=sys.stderr)
         return 2
 
-    print(f"Target: {redacted_target(settings.DATABASE_URL)} (namespace {MARKER})")
+    print(
+        f"Target: {redacted_target(settings.DATABASE_URL)} "
+        f"(namespace {MARKER}, size {plan.size}, anchor {plan.anchor.isoformat()})"
+    )
 
     if args.verify_only:
         counts = await read_counts()
@@ -2168,6 +2579,49 @@ async def _main(argv: list[str]) -> int:
     else:
         _print_counts(counts)
     return 0 if not result.conflicts else 3
+
+
+def _print_dry_run(report: dict) -> None:
+    expected = report["expected"]
+    derived = report["derived"]
+    print(f"\nDRY RUN — no database connection, no writes (namespace {MARKER})")
+    print(f"Anchor (UTC)        : {report['anchor']}")
+    print(f"Dataset size        : {expected['size']} users")
+    print(
+        f"Users               : {expected['users_total']} total "
+        f"(1 owner, {expected['admins']} admins, {expected['agents']} agents, "
+        f"{expected['customers']} customers)"
+    )
+    print(
+        f"Inactive accounts   : {expected['inactive_customers']} customers, "
+        f"{expected['inactive_agents']} agents"
+    )
+    print(f"Tickets             : {expected['tickets']}")
+    print(f"  by status         : {json.dumps(expected['tickets_by_status'])}")
+    print(f"  by priority       : {json.dumps(expected['tickets_by_priority'])}")
+    print(
+        f"  active            : {derived['active_tickets']} "
+        f"(unassigned {derived['unassigned_active']}, "
+        f"{derived['unassigned_active_pct']}% of active)"
+    )
+    print(f"  urgent active     : {derived['urgent_active']}")
+    print(f"  created last 14d  : {derived['created_in_last_14_days']}")
+    print(f"  aging > 7 days    : {derived['aging_over_7_days']}")
+    print(f"  unassigned > 24h  : {derived['unassigned_over_24h']}")
+    print(
+        f"Comments            : {expected['comments']} "
+        f"(internal notes {expected['internal_notes']})"
+    )
+    print(f"History events      : {expected['history']}")
+    print(f"Notifications       : {expected['notifications']}")
+    print(f"Attachments         : {expected['attachments']}")
+    print(
+        f"Staff conversations : {expected['staff_conversations']} "
+        f"({expected['staff_messages']} messages)"
+    )
+    print(f"Account requests    : {expected['account_requests']}")
+    print(f"Feedback            : {expected['feedback']}")
+    print(f"Internal messages   : {expected['internal_messages']}")
 
 
 def main() -> int:

@@ -1,3 +1,340 @@
+# HelpDesk — Demo Dataset Generation, Database Seeding & Workspace Verification
+
+**Review date:** 2026-11-21
+**Repository:** `mdjayedgazi/HelpDesk`
+**Branch:** `feat/demo-dataset-seeding` (new, from `main` @ `69045ff`)
+**Companion documents:** [`docs/demo-data-audit.md`](docs/demo-data-audit.md),
+[`docs/demo-data-seeding.md`](docs/demo-data-seeding.md),
+[`docs/demo-data-seed-report.md`](docs/demo-data-seed-report.md)
+**Verdict:** The demo dataset is built, validated end-to-end on a disposable
+PostgreSQL 16, and safe to run against production **after** the operator gates
+in Part L. No production write was performed by this pass.
+
+> **Document preservation.** `main`'s `data.md` held the PR #19
+> production-readiness review. This pass appends its own review above that
+> document rather than replacing it; the original is reproduced verbatim from
+> Part Z onward.
+
+---
+
+## Part A — Git and PR state at the start
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD | `69045ff` — merge of PR #24 |
+| PR #22, #23, #24 | all **MERGED** |
+| Open PRs | none |
+| Working tree | `data.md` had been emptied locally; restored from `HEAD` and then extended with this review |
+| New branch | `feat/demo-dataset-seeding` |
+
+No existing PR was modified. No deployment was triggered. No Railway
+configuration or environment variable was changed.
+
+---
+
+## Part B — The most important audit finding: a seeder already existed
+
+The repository already contained a **2,179-line, reviewed demo seeder** at
+`backend/app/commands/seed_demo_data.py`, plus a separate loopback-only
+`seed_qa_data.py`. This changed the job from "write a seeder" to "make the
+existing, hardened seeder meet the brief without weakening its guarantees".
+
+What it already did well, and was preserved untouched:
+
+- INSERT-only (no `DROP`/`TRUNCATE`/`DELETE`), atomic, rollback on failure;
+- deterministic `uuid5` ids, so re-runs are idempotent;
+- refuses loopback hosts and QA-named databases;
+- requires an exact confirmation token that names the host and database;
+- refuses a declared production environment;
+- refuses upload directories outside `/tmp`;
+- hashes the Owner row before/after and rolls back on any drift;
+- never writes a `clerk_id`.
+
+### B1. The defect that made the dashboard useless
+
+`_BASE = datetime(2026, 8, 15, …)` anchored every timestamp to a fixed past date.
+The analytics endpoint derives its 14-day window from `datetime.now(UTC)`, so
+**all 120 tickets fell outside the window**:
+
+```
+seeded ticket range 2026-08-15 → 2026-08-18
+analytics window    2026-11-08 → 2026-11-21
+```
+
+Consequence: status/priority/category charts would be correct, but the *Ticket
+volume* trend and its sparkline would render **a flat zero line**, and the
+"created today / yesterday / last 14 days" scenarios were impossible.
+
+**Fixed** by anchoring to `datetime.now(UTC)` at run time, with a fixed RNG seed
+to keep the shape deterministic. Verified: all 14 window days now carry activity
+(108 created, 49 resolved).
+
+### B2. Requirement gaps closed
+
+| Brief | Before | Now |
+| --- | --- | --- |
+| `--size 50/100` | fixed at 100 | implemented, exact splits |
+| `--dry-run` | absent | implemented, writes nothing |
+| ~300 tickets at 100 | 120 | 300 |
+| 60/60/60/90/30 status | modular blend | exact |
+| 45/135/90/30 priority | modular blend | exact |
+| 14-day trend populated | **empty** | all 14 days |
+| 15–20% unassigned active | ≈14% blended | 17% of active |
+| realistic aging | all-or-nothing | 24 aging tickets |
+| ~600–900 comments | ~650 | 789 |
+| ~300–500 notifications | ~? | 525–587 |
+| 2 owners | — | **impossible (schema)** |
+
+---
+
+## Part C — Schema and authorization (verified, not assumed)
+
+Ten tables: `users`, `tickets`, `comments`, `notifications`, `ticket_history`,
+`attachments`, `staff_conversations`, `staff_messages`, `internal_messages` (+
+recipients), `account_management_requests` (+ comments/events), `ticket_feedback`.
+Full column/constraint inventory is in `docs/demo-data-audit.md` §3.
+
+Authorization: `CUSTOMER` sees only its own tickets and public comments;
+`AGENT` works assigned/unassigned tickets and may author internal notes;
+`ADMIN` sees all tickets, analytics and the directory; `OWNER` adds role/status
+management. The backend re-checks the local role on every request. Seed data only
+*satisfies* these rules — it never bypasses them.
+
+### C1. The 2-owner request is blocked by the schema
+
+`uq_users_single_owner` is a **partial unique index** (`ON users (role) WHERE
+role = 'OWNER'`). The application's entire ownership model — and
+`bootstrap_owner`'s "refuse once an owner exists" rule — depends on it.
+
+**Decision:** honour the schema. One Owner. The extra head-count moved to
+Administrators:
+
+| Size | Owner | Admin | Agent | Customer | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 100 | 1 | 8 | 20 | 71 | **100** |
+| 50 | 1 | 4 | 10 | 35 | **50** |
+
+This is a documented deviation, not a silent approximation.
+
+---
+
+## Part D — What was implemented
+
+All changes are inside `backend/app/commands/seed_demo_data.py` plus tests and
+docs. No other application file changed; no dependency was added.
+
+1. **`DemoPlan`** — a frozen dataclass carrying size, role split, ticket count,
+   conversation/request/attachment counts and the run anchor.
+2. **`plan_for(size)`** — validates the size and builds the plan.
+3. **`_split_counts`** — largest-remainder apportionment so status/priority
+   targets are exact, not rounded.
+4. **`expected_counts` / `dry_run_report`** — pure functions; the dry-run never
+   opens a database session (a test proves this by monkeypatching
+   `async_session` to raise).
+5. **Time anchoring** — `_at()`/`_hours()` read the active plan's anchor.
+6. **Ticket generator rewrite** — shuffled statuses/priorities (fixed seed) so
+   each status is spread across the 45-day timeline; recent bucket concentrated
+   in the last 14 days; causal `resolved_offset`; stale-vs-recent `updated_at` so
+   aging is realistic.
+7. **`_seed_tickets`** — uses the stored offsets, clamps `updated_at` to now,
+   guarantees `created ≤ assigned ≤ resolved ≤ now`.
+8. **Comments** — resolution confirmation placed before resolution; internal
+   notes remain staff-only.
+9. **Notification gating** — every ticket gets a receipt, a deterministic subset
+   gets lifecycle notifications (525–587 total instead of ~1,220).
+10. **CLI** — `--size`, `--dry-run`, plus the existing `--confirm`,
+    `--verify-only`, `--json`.
+11. **Production override** — a deliberate, exact-phrase opt-in
+    (`HELPDESK_DEMO_ALLOW_PRODUCTION`) for the Railway `college-demo` service,
+    which declares `ENVIRONMENT=production`. It skips **no** other guard.
+
+---
+
+## Part E — Data integrity (measured on real PostgreSQL 16)
+
+| Check | Result |
+| --- | ---: |
+| Tickets resolved before creation | 0 |
+| Tickets created in the future | 0 |
+| Comments before their ticket | 0 |
+| Non-AGENT assignees | 0 |
+| Customer-authored internal notes | 0 |
+| Orphaned foreign keys | 0 |
+| Duplicate emails/usernames | 0 |
+| Tickets duplicated on a second run | **0** |
+| Owner row changed | no |
+
+Second run: every entity inserted `0` and reported `reused` for its full count —
+idempotency proven, not assumed.
+
+---
+
+## Part F — Analytics comparison (endpoint vs direct SQL)
+
+Every aggregate matched exactly:
+
+| Field | API | SQL |
+| --- | ---: | ---: |
+| total_tickets | 300 | 300 |
+| total_users | 100 | 100 |
+| open_tickets | 120 | 120 |
+| resolved / closed | 90 / 30 | 90 / 30 |
+| unassigned_tickets | 31 | 31 |
+| unassigned_over_24h | 29 | 29 |
+| aging_over_7_days | 24 | 24 |
+| urgent_open_tickets | 20 | 20 |
+| waiting_on_customer | 60 | 60 |
+| active_agents | 18 | 18 |
+| status / priority / category maps | identical | identical |
+
+14-day trend: **14/14 days** carry activity (108 created, 49 resolved). The
+previous build produced zeros here.
+
+Agent workload is a real, uneven spread (top: 12, 10, 10 active tickets) across
+18 active agents, 149 active assignments in total.
+
+---
+
+## Part G — Notifications and content
+
+- 789 comments, of which **100 internal**, **0** authored by customers.
+- 567–587 notifications, **73.3% read / 26.7% unread** (inside the requested band).
+- All eleven supported notification types appear; every recipient owns the
+  referenced row; internal-message notification state mirrors the recipient's
+  `read_at`.
+
+---
+
+## Part H — Tests and tooling results
+
+| Check | Result |
+| --- | --- |
+| Full backend suite | **485 passed**, 58 skipped (opt-in PG/Redis) |
+| New plan/CLI tests | 25 passed |
+| PG seed integration tests | 31 passed on disposable PostgreSQL 16 |
+| `ruff check .` | clean |
+| `ruff format --check .` | 117 files formatted |
+| Frontend `tsc --noEmit` | clean |
+| Frontend tests | 136 passed |
+
+The new tests cover: plan sizes and the single-Owner rule, exact apportionment,
+timeline anchoring and 14-day coverage, causal timestamps, comments never
+preceding tickets, staff-only internal notes, no active work assigned to inactive
+agents, urgent work spread across statuses, dry-run consistency and
+no-database guarantee, and every CLI guard.
+
+---
+
+## Part I — Safety verification of the production gate
+
+| Gate | Result |
+| --- | --- |
+| Real run without confirmation token | exit **2**, refused |
+| `--dry-run` | exit **0**, no DB session |
+| Wrong host / DB name | refused (unit test) |
+| Upload dir outside `/tmp` | refused |
+| `ENVIRONMENT=production` without override | refused |
+| `ENVIRONMENT=production` with exact override phrase | allowed |
+| Override skipping any other guard | **no** |
+| Secret printed by the command | **no** |
+
+---
+
+## Part J — Production database identity (non-secret)
+
+Verified via the linked Railway project, reading **names only**:
+
+| Item | Value |
+| --- | --- |
+| Railway project | `helpdesk-college-demo` |
+| Environment | `production` |
+| Backend service | `helpdesk-api` |
+| Frontend service | `helpdesk-web` |
+| `DEPLOYMENT_PROFILE` | `college-demo` |
+| `ENVIRONMENT` | `production` |
+| `AUTO_CREATE_TABLES` | `false` |
+| `ATTACHMENTS_ENABLED` | `false` |
+| Database | Neon pooled endpoint, `/neondb` |
+| Seeder's verified target constant | matches the Neon host/db above |
+
+No connection string, password, key or token is reproduced here.
+
+> **Process note.** While checking the backend variables, one `railway variables`
+> invocation printed live values to this session's terminal. No secret was
+> written to any file under version control, and every subsequent query used
+> `--json` and selected **names only**. The exposed values should be rotated if
+> this session's terminal history is retained anywhere.
+
+---
+
+## Part K — What was NOT done (stated plainly)
+
+1. **No production write.** The brief reserves the Neon cleanup for the operator
+   and requires explicit approval of the exact command (Phase 12). This pass
+   stopped before that gate.
+2. **No live role-by-role browsing.** There is no authorised Clerk session for
+   the Owner or for synthetic accounts (synthetic accounts cannot have one by
+   design). Role behaviour is covered by the API authorization test suite.
+3. **No Neon backup/branch verification.** That is an operator step in Phase 2.3;
+   a local disposable PostgreSQL 16 was used for validation instead.
+4. **No Railway deployment, no env-var change, no secret change.**
+
+---
+
+## Part L — Required steps to seed production
+
+In order, with each gate explicit:
+
+1. **Verify a recoverable Neon branch/backup** exists for `/neondb`.
+2. **Confirm the real Owner row** exists (`role='OWNER'`, non-null `clerk_id`)
+   and is active. If it is missing, run `python -m app.commands.bootstrap_owner`
+   — never hand-write a `clerk_id`.
+3. **Manually clear** the intended application records (operator action; the
+   seeder never does this).
+4. **Re-check table counts** after cleanup: schema intact, migrations intact, the
+   Owner intact.
+5. **Run the dry-run** and review the plan:
+   ```bash
+   railway run --service helpdesk-api --environment production \
+     python -m app.commands.seed_demo_data --dry-run --size 100
+   ```
+6. **Approve the exact command**, then execute once:
+   ```bash
+   railway run --service helpdesk-api --environment production \
+     sh -c 'python -m app.commands.seed_demo_data --size 100'
+   ```
+   with `HELPDESK_DEMO_SEED_CONFIRM`, `HELPDESK_DEMO_ALLOW_PRODUCTION` and
+   `HELPDESK_DEMO_UPLOAD_DIR=/tmp/helpdesk-demo-uploads` set in that service.
+7. **Verify** with `--verify-only --json`, then open the dashboard using the real
+   Owner session.
+
+If the transaction fails it rolls back automatically; do not blindly re-run —
+diagnose the constraint first.
+
+---
+
+## Part M — Delivery
+
+| Deliverable | Location |
+| --- | --- |
+| Database/backend audit | `docs/demo-data-audit.md` |
+| Seeding runbook | `docs/demo-data-seeding.md` |
+| Seed report | `docs/demo-data-seed-report.md` |
+| This review | `data.md` (Part Z preserves the original PR #19 review) |
+| Seeder | `backend/app/commands/seed_demo_data.py` |
+| Plan/CLI tests | `backend/tests/test_demo_seed_plan.py` |
+| PG integration tests | `backend/tests/test_demo_seed_postgres.py` |
+
+Branch: `feat/demo-dataset-seeding`. No merge, no force-push, no deployment.
+
+---
+
+## Part Z — Preserved original `data.md` (PR #19 production-readiness review)
+
+The following is the exact content of `data.md` on `main` before this branch,
+preserved so this work does not repeat the earlier document-replacement
+regression. Nothing below was edited.
+
 # HelpDesk — full production readiness review (finalization pass)
 
 **Review date:** 2026-11-21
