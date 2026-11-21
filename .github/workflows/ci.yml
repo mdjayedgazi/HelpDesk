@@ -38,10 +38,10 @@ jobs:
       # is disposable and never a project/production Redis instance.
       HD_TEST_REDIS_URL: redis://127.0.0.1:6379/15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           enable-cache: true
           python-version: "3.13.1"
@@ -58,6 +58,10 @@ jobs:
         working-directory: backend
         run: uv run ruff format --check .
 
+      - name: Type check (pyrefly)
+        working-directory: backend
+        run: uv run pyrefly check
+
       - name: pytest (SQLite; PostgreSQL suites skip)
         working-directory: backend
         run: uv run pytest -q
@@ -72,10 +76,10 @@ jobs:
       VITE_API_URL: https://api.ci.example.invalid
       VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.15.0"
           cache: npm
@@ -113,10 +117,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           enable-cache: true
           python-version: "3.13.1"
@@ -158,10 +162,10 @@ jobs:
       AUTO_CREATE_TABLES: "false"
       UPLOAD_DIR: /tmp/helpdesk-ci-uploads
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           enable-cache: true
           python-version: "3.13.1"
@@ -177,6 +181,10 @@ jobs:
       - name: Verify current revision
         working-directory: backend
         run: uv run alembic current
+
+      - name: Verify models and migrations agree
+        working-directory: backend
+        run: uv run alembic check
 
       - name: Exercise 0009 downgrade and re-upgrade
         working-directory: backend
@@ -208,10 +216,10 @@ jobs:
       HD_TEST_POSTGRES_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/hdverify
       HD_DEMO_SEED_POSTGRES_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/helpdesk_demo_verify
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           enable-cache: true
           python-version: "3.13.1"
@@ -225,6 +233,10 @@ jobs:
           docker exec ${{ job.services.postgres.id }}
           createdb -U verify helpdesk_demo_verify
 
+      - name: E2E support flow (auth -> create -> assignment)
+        working-directory: backend
+        run: uv run pytest -q tests/test_e2e_support_flow_postgres.py
+
       - name: PostgreSQL suites
         working-directory: backend
         run: >-
@@ -237,3 +249,125 @@ jobs:
       - name: Demo seed suite (dedicated empty database)
         working-directory: backend
         run: uv run pytest -q tests/test_demo_seed_postgres.py
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build backend image
+        run: docker build -t helpdesk-backend:ci ./backend
+
+      - name: Build frontend image
+        run: >-
+          docker build
+          --build-arg VITE_API_URL=https://api.ci.example.invalid
+          --build-arg VITE_CLERK_PUBLISHABLE_KEY=pk_test_ci_placeholder
+          --build-arg VITE_ATTACHMENTS_ENABLED=false
+          -t helpdesk-frontend:ci ./frontend
+
+      - name: Frontend image serves health and runs as non-root
+        run: |
+          docker run -d --name helpdesk-web-ci -p 8080:8080 \
+            -e API_ORIGIN=https://api.ci.example.invalid helpdesk-frontend:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/healthz
+          # The image is built to run unprivileged; assert it, not just assume it.
+          test "$(docker exec helpdesk-web-ci id -u)" = "101"
+          docker stop helpdesk-web-ci
+
+      # Image scanning is reported to the Security tab as SARIF. Gating on the
+      # result is intentionally opt-in: the base images are pinned by tag, so an
+      # unfixed base-image CVE must not fail every PR. Once the baseline is
+      # reviewed, change `exit-code` to "1" (and keep `ignore-unfixed: true`).
+      - name: Trivy image scan (backend)
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: helpdesk-backend:ci
+          format: sarif
+          output: trivy-backend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload backend scan
+        if: always()
+        uses: github/codeql-action/upload-sarif@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        with:
+          sarif_file: trivy-backend.sarif
+
+      - name: Trivy image scan (frontend)
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: helpdesk-frontend:ci
+          format: sarif
+          output: trivy-frontend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload frontend scan
+        if: always()
+        uses: github/codeql-action/upload-sarif@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        with:
+          sarif_file: trivy-frontend.sarif
+
+  helm:
+    name: Helm chart validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v3.16.4
+
+      - name: Lint chart
+        run: helm lint helm/helpdesk --set backend.existingSecret=helpdesk-secrets
+
+      - name: Render chart (default and ingress variants)
+        run: |
+          helm template helpdesk helm/helpdesk \
+            --set backend.existingSecret=helpdesk-secrets >/dev/null
+          helm template helpdesk helm/helpdesk \
+            --set backend.existingSecret=helpdesk-secrets \
+            --set ingress.enabled=true \
+            --set 'ingress.apiHosts[0].host=api.helpdesk.example.com' >/dev/null
+
+  security:
+    name: Static security analysis and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        with:
+          languages: python, javascript-typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
