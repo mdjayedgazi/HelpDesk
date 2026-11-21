@@ -52,7 +52,7 @@ function buildAnalytics(): SupportAnalytics {
     })),
     aging_over_7_days: 2,
     unassigned_over_24h: 1,
-    answered_without_resolution: 3,
+    waiting_on_customer: 3,
     agent_workload: [
       {
         user_id: 'agent-1',
@@ -130,7 +130,7 @@ describe('AdminDashboard', () => {
     healthy.totals.urgent_open_tickets = 0
     healthy.aging_over_7_days = 0
     healthy.unassigned_over_24h = 0
-    healthy.answered_without_resolution = 0
+    healthy.waiting_on_customer = 0
 
     useSupportAnalyticsMock.mockReturnValue({
       isPending: false,

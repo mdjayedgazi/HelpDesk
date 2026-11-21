@@ -99,7 +99,7 @@ export function CustomerDashboard({ me }: { me: User }) {
           value={loading ? '—' : counts.waiting}
           icon={MessageSquare}
           tone={counts.waiting > 0 ? 'warning' : 'neutral'}
-          hint={counts.waiting > 0 ? 'The team replied — please respond' : 'Nothing needs a reply'}
+          hint={counts.waiting > 0 ? 'The team is waiting for your response' : 'Nothing needs a reply'}
           to='/tickets?status=WAITING_ON_CUSTOMER'
         />
         <MetricCard
@@ -176,8 +176,8 @@ export function CustomerDashboard({ me }: { me: User }) {
                   </Text>
                   <Text fontSize='xs' color={palette.textSecondary}>
                     {counts.waiting === 1
-                      ? 'One of your tickets has a reply that needs an answer.'
-                      : `${counts.waiting} of your tickets have replies that need an answer.`}
+                      ? 'One ticket is set to awaiting your response — open it to continue the conversation.'
+                      : `${counts.waiting} tickets are set to awaiting your response — open them to continue the conversation.`}
                   </Text>
                   <Button
                     asChild

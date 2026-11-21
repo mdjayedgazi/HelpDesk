@@ -76,6 +76,11 @@ class AnalyticsRead(SQLModel):
     """Active tickets whose last update is older than seven days."""
     unassigned_over_24h: int
     """Unassigned tickets created more than 24 hours ago."""
-    answered_without_resolution: int
-    """Active tickets that are WAITING_ON_CUSTOMER."""
+    waiting_on_customer: int
+    """Tickets currently in the WAITING_ON_CUSTOMER status.
+
+    This is a status count, not proof that the team replied: a staff member could
+    move a ticket here without a customer-visible message. The UI copy says
+    "waiting on customer" accordingly.
+    """
     agent_workload: list[AgentWorkload]

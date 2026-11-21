@@ -196,10 +196,10 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
         />
         <MetricCard
           label='Waiting on customer'
-          value={data.answered_without_resolution}
+          value={data.waiting_on_customer}
           icon={Clock}
           tone='warning'
-          hint='Replied, blocked on a response'
+          hint='Tickets set to waiting on the customer'
           to='/tickets?status=WAITING_ON_CUSTOMER'
         />
         <MetricCard

@@ -344,7 +344,12 @@ covered:
 3. **Aging link misrepresented its count.** Aging spans three statuses and linked
    to `?status=IN_PROGRESS`. It now links to the full list. The attention strip
    states that counts are exact while linked views are approximate.
-4. **URL vs local state drift.** The ticket and user filters kept duplicated state,
+4. **A misleading metric name.** `answered_without_resolution` was only the
+   WAITING_ON_CUSTOMER count, yet the name and copy claimed the team had replied
+   — which the data cannot prove (a ticket can be moved to that status without a
+   customer-visible message). Renamed to `waiting_on_customer` and the copy now
+   describes the status rather than asserting a reply.
+5. **URL vs local state drift.** The ticket and user filters kept duplicated state,
    so browser Back left the UI out of sync and effects could navigate on every
    render. The URL is now the single source of truth for filters; only the search
    box has local state; effects return early when nothing changed. Covered by

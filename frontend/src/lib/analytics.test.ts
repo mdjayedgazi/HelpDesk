@@ -56,7 +56,7 @@ function buildAnalytics(overrides: Partial<SupportAnalytics> = {}): SupportAnaly
     daily: buildDaily(Array.from({ length: 14 }, () => [1, 1] as [number, number])),
     aging_over_7_days: 0,
     unassigned_over_24h: 0,
-    answered_without_resolution: 2,
+    waiting_on_customer: 2,
     agent_workload: [],
     ...overrides,
   }
@@ -146,7 +146,7 @@ describe('attentionItems', () => {
       totals: { ...buildAnalytics().totals, urgent_open_tickets: 0 },
       aging_over_7_days: 0,
       unassigned_over_24h: 0,
-      answered_without_resolution: 0,
+      waiting_on_customer: 0,
     })
     expect(attentionItems(analytics)).toHaveLength(0)
   })
@@ -156,7 +156,7 @@ describe('attentionItems', () => {
       totals: { ...buildAnalytics().totals, urgent_open_tickets: 3 },
       aging_over_7_days: 4,
       unassigned_over_24h: 1,
-      answered_without_resolution: 2,
+      waiting_on_customer: 2,
     })
     const items = attentionItems(analytics)
     expect(items.map((item) => item.key)).toEqual([

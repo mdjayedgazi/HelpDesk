@@ -245,6 +245,6 @@ async def get_analytics(
         daily=daily,
         aging_over_7_days=aging_over_7_days,
         unassigned_over_24h=unassigned_over_24h,
-        answered_without_resolution=tickets_by_status[TicketStatus.WAITING_ON_CUSTOMER],
+        waiting_on_customer=tickets_by_status[TicketStatus.WAITING_ON_CUSTOMER],
         agent_workload=agent_workload,
     )

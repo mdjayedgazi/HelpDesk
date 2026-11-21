@@ -57,7 +57,7 @@ async def test_analytics_totals_and_breakdowns(client, make_user, make_ticket):
     assert body["tickets_by_status"]["OPEN"] == 2
     assert body["tickets_by_status"]["CLOSED"] == 1
     assert body["tickets_by_priority"]["URGENT"] == 1
-    assert body["answered_without_resolution"] == 1
+    assert body["waiting_on_customer"] == 1
 
     # The window is contiguous and ends today.
     daily = body["daily"]

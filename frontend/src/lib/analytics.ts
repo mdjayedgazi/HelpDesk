@@ -83,7 +83,7 @@ export function openShare(analytics: SupportAnalytics): number | null {
 /** Share of active tickets that are already assigned to someone. */
 export function assignmentCoverage(analytics: SupportAnalytics): number | null {
   const activeWork =
-    analytics.totals.open_tickets + analytics.answered_without_resolution
+    analytics.totals.open_tickets + analytics.waiting_on_customer
   if (activeWork === 0) return null
   const unassigned = analytics.totals.unassigned_tickets
   return Math.round(((activeWork - unassigned) / activeWork) * 100)
@@ -141,12 +141,12 @@ export function attentionItems(analytics: SupportAnalytics): AttentionItem[] {
       to: '/tickets',
     })
   }
-  if (analytics.answered_without_resolution > 0) {
+  if (analytics.waiting_on_customer > 0) {
     items.push({
       key: 'waiting',
       label: 'Waiting on the customer',
-      detail: 'The team replied and is blocked on a response',
-      value: analytics.answered_without_resolution,
+      detail: 'In the waiting status — confirm the customer actually has a reply',
+      value: analytics.waiting_on_customer,
       tone: 'info',
       to: '/tickets?status=WAITING_ON_CUSTOMER',
     })

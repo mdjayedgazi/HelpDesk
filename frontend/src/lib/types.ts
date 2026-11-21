@@ -443,8 +443,8 @@ export interface SupportAnalytics {
   aging_over_7_days: number
   /** Unassigned active tickets older than 24 hours. */
   unassigned_over_24h: number
-  /** Active tickets blocked on the customer (WAITING_ON_CUSTOMER). */
-  answered_without_resolution: number
+  /** Tickets in the WAITING_ON_CUSTOMER status (a status count, not proof of a reply). */
+  waiting_on_customer: number
   agent_workload: AgentWorkload[]
 }
 
