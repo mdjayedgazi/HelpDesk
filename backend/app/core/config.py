@@ -157,25 +157,52 @@ class Settings(BaseSettings):
                 origins.append(normalized)
         return origins
 
-    # One-time Owner bootstrap input. This is read *only* by the explicit
-    # `app.commands.bootstrap_owner` command, which promotes the already-linked
-    # local account whose verified Clerk primary email matches this address to
-    # the permanent OWNER role. It is never consulted on the request path: the
-    # application no longer elevates or demotes anyone based on this setting, so
-    # removing it after the Owner has never been bootstrapped changes a stored
-    # role. Empty/unset disables the bootstrap command.
-    # Comparison is whitespace-insensitive and case-insensitive.
+    # Canonical Owner identity. The backend reads this address and, whenever an
+    # account is synchronised from Clerk, promotes the account whose *verified
+    # Clerk primary email* matches it. Changing this value in the deployment
+    # configuration moves ownership without any source change or manual role
+    # edit. Comparison is whitespace- and case-insensitive; the value is never
+    # echoed in logs.
+    OWNER_EMAIL: str | None = None
+
+    # Deprecated alias kept for backward compatibility with the original
+    # one-time bootstrap flow. ``OWNER_EMAIL`` takes precedence whenever both are
+    # set. Prefer ``OWNER_EMAIL``.
     INITIAL_ADMIN_EMAIL: str | None = None
 
     @property
-    def initial_admin_email(self) -> str | None:
-        """Normalized (trimmed, lowercased) bootstrap Owner email, or ``None``.
+    def owner_email(self) -> str | None:
+        """Normalized configured Owner email, or ``None`` when unset.
 
-        ``None`` means no bootstrap identity is configured, so the bootstrap
-        command refuses to run. The runtime application never calls this.
+        Resolution order is ``OWNER_EMAIL`` then the deprecated
+        ``INITIAL_ADMIN_EMAIL``. Whitespace and case are normalized so
+        configuration differences cannot cause a false mismatch.
         """
-        value = (self.INITIAL_ADMIN_EMAIL or "").strip().lower()
-        return value or None
+        for candidate in (self.OWNER_EMAIL, self.INITIAL_ADMIN_EMAIL):
+            value = (candidate or "").strip().lower()
+            if value:
+                return value
+        return None
+
+    @property
+    def initial_admin_email(self) -> str | None:
+        """Deprecated accessor; retained for the bootstrap command and tests.
+
+        It resolves through :attr:`owner_email`, so a deployment that has moved
+        to ``OWNER_EMAIL`` still drives the bootstrap command with one identity.
+        """
+        return self.owner_email
+
+    @property
+    def owner_email_conflict(self) -> bool:
+        """True when both variables are set to *different* addresses.
+
+        Callers log a single sanitized warning but still use ``OWNER_EMAIL`` as
+        authoritative. The addresses themselves are never returned or logged.
+        """
+        primary = (self.OWNER_EMAIL or "").strip().lower()
+        legacy = (self.INITIAL_ADMIN_EMAIL or "").strip().lower()
+        return bool(primary and legacy and primary != legacy)
 
     # Echo every SQL statement. Useful while learning, noisy in production.
     DATABASE_ECHO: bool = False

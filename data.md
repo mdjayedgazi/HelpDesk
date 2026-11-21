@@ -1,3 +1,269 @@
+# HelpDesk — Configurable Owner Identity & Automatic Ownership Transfer
+
+**Review date:** 2026-11-21
+**Repository:** `mdjayedgazi/HelpDesk`
+**Branch:** `feat/configurable-owner-email` (new, from `main` @ `917af4b`)
+**Companions:** [`docs/owner-identity-endpoint-audit.md`](docs/owner-identity-endpoint-audit.md),
+[`docs/owner-identity-implementation-report.md`](docs/owner-identity-implementation-report.md),
+[`docs/owner-identity-operations.md`](docs/owner-identity-operations.md)
+**Verdict:** Implemented and tested. The Railway production variable is
+**staged, not active** — the behaviour goes live only when this branch merges and
+Railway deploys it.
+
+> **Document preservation.** The previous review (demo dataset) occupies the rest
+> of this file, and the PR #19 production-readiness review beneath that, both
+> verbatim. This task's review is prepended, not substituted.
+
+---
+
+## Part A — Repository and remote state at the start
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD | `917af4b` — merge of PR #25 (demo seeding) |
+| Open PRs | none |
+| Merged PRs | #19, #20, #21, #22, #23, #24, #25 |
+| Existing owner implementation | `app/commands/bootstrap_owner.py`, `INITIAL_ADMIN_EMAIL` |
+| Existing feature branches | `feat/demo-dataset-seeding`, `feat/helpdesk-motion-visual-polish`, `feat/helpdesk-ui-ux-modernization` — all merged; none reused |
+| New branch | `feat/configurable-owner-email` |
+| `gh auth` | authenticated as `mdjayedgazi` (`repo`, `workflow`) |
+| `data.md` | found emptied locally; restored from `HEAD` and extended with this review |
+
+---
+
+## Part B — Audit findings that shaped the design
+
+1. **`INITIAL_ADMIN_EMAIL` was bootstrap-only.** Its own docstring says it is
+   "never consulted on the request path". The brief needs a canonical setting that
+   also drives recognition and transfer, so `OWNER_EMAIL` was added as the
+   authority with the legacy variable as a fallback.
+2. **One synchronisation point.** `app/core/auth.py::get_current_user` is the only
+   code that provisions or links users. That is the correct single place for
+   recognition, so signup and every later sign-in share it.
+3. **No webhook exists.** Registration is synchronised synchronously on the first
+   authenticated request. No new webhook was added; the existing reliable path was
+   used.
+4. **`bootstrap_owner` could not transfer.** It refuses when an Owner exists, so
+   it can never be the transfer mechanism. It was re-pointed at the shared service
+   but kept its initial-setup role.
+5. **Single-Owner is a database invariant.** `uq_users_single_owner` is a partial
+   unique index; every change must be one transaction that never shows two Owners.
+
+The full endpoint inventory (30 endpoints, with auth/authorization/role-impact
+columns) is in `docs/owner-identity-endpoint-audit.md`.
+
+---
+
+## Part C — Configuration
+
+`OWNER_EMAIL` is added to `backend/app/core/config.py`. Resolution order:
+
+1. `OWNER_EMAIL` (trimmed, lowercased);
+2. deprecated `INITIAL_ADMIN_EMAIL` when `OWNER_EMAIL` is unset;
+3. else `None` — automatic recognition disabled.
+
+`owner_email_conflict` reports (as a boolean only) whether both are set to
+different addresses; `OWNER_EMAIL` still wins. No property or log line ever
+returns an address.
+
+`backend/.env.example` contains the placeholder `OWNER_EMAIL=owner@example.com`
+and marks `INITIAL_ADMIN_EMAIL` deprecated. **The real address appears in no
+tracked file** (verified by grep across `backend/`, docs and the diff).
+
+---
+
+## Part D — Implementation
+
+### D1. One shared algorithm — `app/services/owner_identity.py`
+
+| Function | Role |
+| --- | --- |
+| `normalize_email` | the single comparison convention |
+| `evaluate` | pure decision (no writes, no I/O beyond a Clerk read) |
+| `reconcile_owner` | atomic promotion/transfer, locked |
+| `find_candidate_by_email` | normalized lookup of the designated account |
+
+Callers: request path, startup, `reconcile_owner` command, and `bootstrap_owner`.
+There is no second promotion path.
+
+### D2. Request-path recognition
+
+`get_current_user` calls `_reconcile_owner_for` for (a) an existing local user and
+(b) a freshly provisioned/linked user (reusing the Clerk object already fetched).
+It is a no-op unless `OWNER_EMAIL` is set and the verified primary email matches.
+
+### D3. Deployment reconciliation
+
+- `lifespan` performs one best-effort reconciliation before readiness; a missing
+  account or Clerk outage logs a sanitized warning and never fails boot.
+- `python -m app.commands.reconcile_owner` is the operator/deploy command
+  (`--json` supported). Exit codes: `0` safe/no-op, `2` no config, `1` a genuine
+  transaction failure (rolled back).
+
+### D4. Bootstrap preserved
+
+`bootstrap_owner` keeps "refuse if an Owner exists" and now delegates the actual
+promotion to `reconcile_owner`, so the two can never diverge.
+
+---
+
+## Part E — Clerk verification (security core)
+
+Promotion requires **all** of: a Clerk identity from the trusted token `sub`; a
+successful `clerk.users.get_async`; a `primary_email_address_id` whose
+verification status is `verified`; that normalized address equal to
+`OWNER_EMAIL`; and an active local account.
+
+Explicitly rejected: form-supplied email, client-supplied role, secondary email,
+unverified email, Clerk metadata, cached local email. Clerk being unreachable
+yields `identity_unavailable` and changes nothing.
+
+---
+
+## Part F — Transaction and locking
+
+`reconcile_owner`:
+
+1. `pg_advisory_xact_lock` (key `20261122`) — transaction scope;
+2. target and previous Owner selected `FOR UPDATE`;
+3. **demote previous → ADMIN and flush**, then promote target and flush;
+4. one commit, full rollback on any error.
+
+SQLite skips the lock; the partial unique index is the final guarantee.
+
+---
+
+## Part G — Previous Owner behaviour
+
+Role becomes `ADMIN`. The row is otherwise untouched: `is_active` stays true,
+`clerk_id` unchanged, tickets/comments/notifications/feedback/conversations
+untouched. `ADMIN` retains administrative access but loses Owner-exclusive
+abilities (role/status management, Owner broadcasts). Deletion and deactivation
+never happen automatically; deactivation is a separate, reversible Owner action.
+
+---
+
+## Part H — Tests actually executed
+
+| Suite | Result |
+| --- | --- |
+| Full backend suite (`pytest -q`) | **521 passed**, 64 skipped (opt-in PG/Redis) |
+| `tests/test_owner_identity.py` (SQLite + Clerk doubles) | 33 passed |
+| `tests/test_owner_identity_postgres.py` (disposable PG 16) | 6 passed |
+| `ruff check` / `ruff format --check` | clean (121 files formatted) |
+
+Coverage highlights:
+
+- **Configuration:** unset, whitespace, case, empty, legacy fallback, precedence,
+  conflict flag, and that no address is exposed.
+- **Recognition:** verified primary match, verified-but-different, unverified,
+  secondary-only, Clerk failure, inactive, no-config, missing local account,
+  case/whitespace insensitivity.
+- **Ownership:** promotion, already-owner idempotency, transfer with previous
+  Owner → ADMIN, unrelated users and ticket/comment data preserved, repeated
+  reconciliation producing no second transfer.
+- **Security:** customer/agent/admin escalation attempts, `owner` rejected as an
+  assignable role, Owner cannot assign OWNER to another, unverified promotion
+  attempt, Clerk failure at the request path.
+- **PostgreSQL:** real partial index present, promotion, transfer leaves one
+  Owner, **five concurrent reconciliations converge to one Owner**, forced failure
+  rolls back, transfer preserves tickets and comments.
+- **Operational:** reconcile command no-config → 2, unregistered target → 0
+  (non-fatal), startup hook never raises on a broken database.
+
+---
+
+## Part I — Railway production configuration
+
+Verified with the authorised CLI (`railway whoami` confirmed the account; I did
+not re-run it because it echoes the owner's address).
+
+| Item | Value |
+| --- | --- |
+| Project | `helpdesk-college-demo` |
+| Environment | `production` |
+| Backend service | `helpdesk-api` |
+| Frontend service | `helpdesk-web` |
+| Variable count before | 27 |
+| Variable count after | 28 |
+| `OWNER_EMAIL` set | yes (value compared privately; matches the designated address) |
+| `INITIAL_ADMIN_EMAIL` | absent (no legacy value to reconcile) |
+| Other variables changed | none (DATABASE_URL, CLERK_SECRET_KEY, ENVIRONMENT, DEPLOYMENT_PROFILE, ATTACHMENTS_ENABLED all still present) |
+| Frontend variables | unchanged; `OWNER_EMAIL` **not** added (19 keys, no OWNER_EMAIL) |
+| Deploy triggered | **no** — set with `--skip-deploys` |
+
+The value was supplied on stdin so it never appeared in the command line or the
+output. No secret was printed.
+
+---
+
+## Part J — Activation status
+
+**Staged, not deployed.** The variable is stored on `helpdesk-api`/`production`,
+but the running backend is still the previous `main` build, which does not read
+`OWNER_EMAIL`. Verification:
+
+- live `GET /health/live` → **200** (service healthy, unchanged);
+- `OWNER_EMAIL` support exists only on this branch (`backend/app/core/config.py`);
+- no deployment was triggered (`--skip-deploys`).
+
+Ownership recognition becomes live only when this PR is merged to `main` and
+Railway deploys that merged commit.
+
+---
+
+## Part K — API regression
+
+The 488 pre-existing tests continued to pass before the new owner tests were
+added (final count 521). The only request-path behaviour change is that an
+account matching `OWNER_EMAIL` with a verified primary email becomes Owner; all
+other roles and endpoints are unchanged. The frontend already refetches
+`GET /api/v1/users/me`, so a promoted role is reflected on the next fetch with no
+frontend change.
+
+---
+
+## Part L — Limitations (stated plainly)
+
+1. **No live production verification.** Behaviour is proven by tests, not by
+   signing in as the designated Owner on production — that requires the merge and
+   deploy, which this task explicitly must not trigger.
+2. **The designated person must register and verify** before recognition. Until
+   then the previous Owner is preserved by design.
+3. **SQLite cannot prove concurrency**, hence the PostgreSQL suite; the
+   advisory-lock code path only executes on PostgreSQL.
+4. **`--skip-deploys` means the staged variable is inert** until a real deploy.
+5. **The `railway whoami` output echoed the owner's email** in the terminal
+   (Railway's own CLI behaviour). No secret (key, password, URL) was printed, and
+   no address was written to any tracked file. Consider rotating only if terminal
+   history is retained and considered sensitive.
+
+---
+
+## Part M — Delivery checklist
+
+| Requirement | Status |
+| --- | --- |
+| Canonical `OWNER_EMAIL` setting | done |
+| Verified Clerk primary email only | done |
+| Automatic recognition on signup/sync | done |
+| Automatic transfer after address change | done |
+| Previous Owner → ADMIN, data intact | done |
+| Exactly one Owner guaranteed | done (partial index + lock) |
+| Signup and sync share one algorithm | done |
+| Idempotent deployment reconciliation | done |
+| Railway `helpdesk-api`/`production` variable | set (staged, `--skip-deploys`) |
+| Tests pass | 521 backend + 6 PG |
+| Separate branch | `feat/configurable-owner-email` |
+| Open PR | see the hand-off (PR number/URL) |
+| No merge, no force-push, no deploy | honoured |
+
+---
+
+## Part Z — Preserved prior reviews
+
+The demo-dataset review (PR #25) and, beneath it, the PR #19 production-readiness
+review follow verbatim.
 # HelpDesk — Demo Dataset Generation, Database Seeding & Workspace Verification
 
 **Review date:** 2026-11-21
