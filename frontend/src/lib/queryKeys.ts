@@ -62,6 +62,7 @@ export const queryKeys = {
 
   admin: {
     dashboard: ['admin', 'dashboard'] as const,
+    analytics: ['admin', 'analytics'] as const,
     agents: ['admin', 'agents'] as const,
     users: {
       all: ['admin', 'users'] as const,

@@ -1,4 +1,4 @@
-import { Flex, IconButton, Input, InputGroup, NativeSelect, Text } from '@chakra-ui/react'
+import { Box, Flex, IconButton, Input, InputGroup, NativeSelect, Text } from '@chakra-ui/react'
 import { Search, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -18,6 +18,20 @@ export interface TicketFilterBarProps {
   extra?: ReactNode
 }
 
+const selectStyles = {
+  bg: palette.surface,
+  borderColor: palette.border,
+  borderRadius: 'l2',
+  fontSize: 'sm',
+  height: '9',
+  _hover: { borderColor: palette.borderStrong },
+  _focusVisible: {
+    outline: '2px solid',
+    outlineColor: palette.focus,
+    outlineOffset: '1px',
+  },
+} as const
+
 export function TicketFilterBar({
   search,
   onSearchChange,
@@ -27,20 +41,26 @@ export function TicketFilterBar({
   onPriorityChange,
   extra,
 }: TicketFilterBarProps) {
-  const selectStyles = {
-    bg: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 'l2',
-    fontSize: 'sm',
-    height: '9',
-    _hover: { borderColor: palette.borderStrong },
-    _focus: { borderColor: palette.ink },
-  } as const
+  const activeCount = [status, priority, search].filter(Boolean).length
 
   return (
-    <Flex gap='2.5' wrap='wrap' align='center'>
+    <Flex gap='2.5' wrap='wrap' align='center' width={{ base: 'full', md: 'auto' }}>
       <InputGroup
         startElement={<Search size={15} color={palette.textMuted} aria-hidden />}
+        endElement={
+          search ? (
+            <IconButton
+              aria-label='Clear search'
+              size='2xs'
+              variant='ghost'
+              color={palette.textMuted}
+              _hover={{ bg: palette.hover, color: palette.text }}
+              onClick={() => onSearchChange('')}
+            >
+              <X size={13} aria-hidden />
+            </IconButton>
+          ) : undefined
+        }
         maxW={{ base: 'full', sm: '72' }}
         flex={{ base: '1 1 100%', sm: '0 1 auto' }}
       >
@@ -51,21 +71,9 @@ export function TicketFilterBar({
           aria-label='Search tickets by title'
           {...selectStyles}
           ps='8'
+          pe={search ? '8' : undefined}
         />
       </InputGroup>
-
-      {search ? (
-        <IconButton
-          aria-label='Clear search'
-          size='sm'
-          variant='ghost'
-          color={palette.textMuted}
-          _hover={{ bg: palette.hover, color: palette.text }}
-          onClick={() => onSearchChange('')}
-        >
-          <X size={15} aria-hidden />
-        </IconButton>
-      ) : null}
 
       <NativeSelect.Root size='sm' width='auto' minW='40'>
         <NativeSelect.Field
@@ -105,10 +113,21 @@ export function TicketFilterBar({
 
       {extra}
 
-      {search || status || priority ? (
-        <Text fontSize='xs' color={palette.textFaint} ml='auto'>
-          Filters applied
-        </Text>
+      {activeCount > 0 ? (
+        <Box
+          as='span'
+          px='2'
+          py='0.5'
+          borderRadius='full'
+          borderWidth='1px'
+          borderColor={palette.border}
+          bg={palette.surfaceMuted}
+          ml={{ base: '0', md: 'auto' }}
+        >
+          <Text fontSize='2xs' color={palette.textMuted} fontVariantNumeric='tabular-nums'>
+            {activeCount} {activeCount === 1 ? 'filter' : 'filters'}
+          </Text>
+        </Box>
       ) : null}
     </Flex>
   )

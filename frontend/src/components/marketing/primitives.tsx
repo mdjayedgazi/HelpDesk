@@ -75,21 +75,3 @@ export function SectionLead({ children, ...rest }: BoxProps) {
     </Text>
   )
 }
-
-/**
- * Small monochrome status dot used across the illustrative product visuals.
- * The status is always paired with a text label, never colour alone.
- */
-export function StatusDot({ filled = false }: { filled?: boolean }) {
-  return (
-    <Box
-      boxSize='2'
-      borderRadius='full'
-      borderWidth='1px'
-      borderColor={filled ? palette.ink : palette.borderStrong}
-      bg={filled ? palette.ink : 'transparent'}
-      flexShrink={0}
-      aria-hidden
-    />
-  )
-}

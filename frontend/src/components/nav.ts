@@ -2,7 +2,6 @@ import {
   Bell,
   Gauge,
   Inbox,
-  LayoutDashboard,
   LayoutList,
   Mail,
   Plus,
@@ -21,6 +20,8 @@ export interface NavItem {
   icon: LucideIcon
   /** Match only the exact path (used for index-like routes). */
   end?: boolean
+  /** Optional short description for the mobile drawer. */
+  hint?: string
 }
 
 export interface NavSection {
@@ -32,37 +33,52 @@ export interface NavSection {
  * Navigation is derived from the *application role returned by the backend*,
  * never from anything client-controlled. The backend independently enforces
  * every permission; this only shapes what the user sees.
+ *
+ * Admin and owner share one coherent structure: the previous layout exposed
+ * "Dashboard" and "Admin overview" as two routes rendering the same component,
+ * which made it impossible to know which one was "home". There is now a single
+ * dashboard destination and the administrative tools live in one section.
  */
 export function navSectionsForRole(role: Role): NavSection[] {
   if (role === 'admin' || role === 'owner') {
     return [
       {
         label: 'Overview',
-        items: [{ label: 'Dashboard', to: '/dashboard', icon: Gauge, end: true }],
+        items: [
+          {
+            label: 'Dashboard',
+            to: '/dashboard',
+            icon: Gauge,
+            end: true,
+            hint: 'Support health and workload',
+          },
+        ],
+      },
+      {
+        label: 'Support',
+        items: [
+          { label: 'Tickets', to: '/tickets', icon: Ticket, hint: 'All customer requests' },
+          {
+            label: 'Account requests',
+            to: '/account-requests',
+            icon: ShieldQuestion,
+            hint: 'Privileged account actions',
+          },
+        ],
       },
       {
         label: 'Management',
         items: [
-          { label: 'Tickets', to: '/tickets', icon: Ticket },
-          { label: 'Users', to: '/admin/users', icon: Users },
-          { label: 'Account requests', to: '/account-requests', icon: ShieldQuestion },
-        ],
-      },
-      {
-        label: 'Messaging',
-        items: [
+          { label: 'Users', to: '/admin/users', icon: Users, hint: 'Accounts, roles and access' },
           {
             // The Owner *answers* the private staff channel from the inbox;
             // admins start/reply in their own thread with the Owner.
             label: role === 'owner' ? 'Owner inbox' : 'Message Owner',
             to: '/messages',
             icon: Mail,
+            hint: 'Private staff messaging',
           },
         ],
-      },
-      {
-        label: 'Administration',
-        items: [{ label: 'Admin overview', to: '/admin', icon: LayoutDashboard, end: true }],
       },
       {
         label: 'Account',
@@ -78,13 +94,21 @@ export function navSectionsForRole(role: Role): NavSection[] {
     return [
       {
         label: 'Overview',
-        items: [{ label: 'Dashboard', to: '/dashboard', icon: Gauge, end: true }],
+        items: [
+          {
+            label: 'Dashboard',
+            to: '/dashboard',
+            icon: Gauge,
+            end: true,
+            hint: 'Your workload at a glance',
+          },
+        ],
       },
       {
         label: 'Workspace',
         items: [
-          { label: 'My queue', to: '/queue', icon: Inbox },
-          { label: 'All tickets', to: '/tickets', icon: LayoutList },
+          { label: 'My queue', to: '/queue', icon: Inbox, hint: 'Claim and work tickets' },
+          { label: 'All tickets', to: '/tickets', icon: LayoutList, hint: 'Everything you can see' },
           { label: 'Account requests', to: '/account-requests', icon: ShieldQuestion },
           { label: 'Message Owner', to: '/messages', icon: Mail },
         ],
@@ -105,13 +129,21 @@ export function navSectionsForRole(role: Role): NavSection[] {
   return [
     {
       label: 'Overview',
-      items: [{ label: 'Dashboard', to: '/dashboard', icon: Gauge, end: true }],
+      items: [
+        {
+          label: 'Dashboard',
+          to: '/dashboard',
+          icon: Gauge,
+          end: true,
+          hint: 'Your requests at a glance',
+        },
+      ],
     },
     {
       label: 'Support',
       items: [
-        { label: 'My tickets', to: '/tickets', icon: Ticket },
-        { label: 'New ticket', to: '/tickets/new', icon: Plus, end: true },
+        { label: 'My tickets', to: '/tickets', icon: Ticket, hint: 'Track your requests' },
+        { label: 'New ticket', to: '/tickets/new', icon: Plus, end: true, hint: 'Ask for help' },
       ],
     },
     {
@@ -137,4 +169,17 @@ export function sectionTitleForPath(pathname: string): string {
   if (pathname.startsWith('/notifications')) return 'Notifications'
   if (pathname.startsWith('/profile')) return 'Profile'
   return 'HelpDesk'
+}
+
+/** The nav section a path belongs to, used for the top bar's context line. */
+export function navSectionForPath(role: Role, pathname: string): string | null {
+  const sections = navSectionsForRole(role)
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (item.end ? pathname === item.to : pathname.startsWith(item.to)) {
+        return section.label
+      }
+    }
+  }
+  return null
 }

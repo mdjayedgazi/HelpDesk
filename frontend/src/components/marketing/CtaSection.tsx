@@ -32,10 +32,10 @@ export function CtaSection() {
             color={palette.text}
             textWrap='balance'
           >
-            Make every support conversation count.
+            Give every request a clear next step.
           </Heading>
           <Text fontSize={{ base: 'sm', md: 'md' }} color={palette.textSecondary} lineHeight='1.7'>
-            Keep requests, replies and internal notes together — so nothing is lost between a
+            Keep requests, replies and internal notes together, so nothing slips between a
             customer's first message and a resolved ticket.
           </Text>
 

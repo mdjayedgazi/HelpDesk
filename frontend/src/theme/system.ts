@@ -12,11 +12,15 @@ const monoStack =
  * HelpDesk design system.
  *
  * Built on Chakra's default system but re-tuned to a strict monochrome palette:
- * neutral gray tokens replace the default hue scale and every semantic color
- * (including error/success/warning/info) collapses to grayscale so that no
- * component can accidentally introduce a rainbow accent.
+ * neutral gray tokens replace the default hue scale so the product keeps its
+ * black / white / grey identity. Semantic colour is deliberately *not* a full
+ * rainbow — only four meaning-bearing families exist (info, success, warning,
+ * danger) and they are used for status, priority and data visualisation. They
+ * resolve to the themed custom properties in `tokens.css`, so a component can
+ * read `fg.error` or `palette.semantic.danger` and get a value that flips with
+ * the active theme.
  *
- * Theme-able values resolve to the CSS custom properties declared in
+ * Theme-able values resolve to CSS custom properties declared in
  * `tokens.css` (via `palette`). Because those properties change under
  * `html.dark`, every semantic token — and every component that reads them —
  * follows the active light/dark theme without any per-component branching.
@@ -109,20 +113,20 @@ const config = defineConfig({
           emphasized: { value: palette.border },
           inverted: { value: palette.ink },
           panel: { value: palette.surface },
-          error: { value: palette.inset },
-          warning: { value: palette.inset },
-          success: { value: palette.inset },
-          info: { value: palette.inset },
+          error: { value: palette.semantic.dangerSoft },
+          warning: { value: palette.semantic.warningSoft },
+          success: { value: palette.semantic.successSoft },
+          info: { value: palette.semantic.infoSoft },
         },
         fg: {
           DEFAULT: { value: palette.text },
           muted: { value: palette.textSecondary },
           subtle: { value: palette.textMuted },
           inverted: { value: palette.textOnInk },
-          error: { value: palette.text },
-          warning: { value: palette.text },
-          success: { value: palette.text },
-          info: { value: palette.text },
+          error: { value: palette.semantic.danger },
+          warning: { value: palette.semantic.warning },
+          success: { value: palette.semantic.success },
+          info: { value: palette.semantic.info },
         },
         border: {
           DEFAULT: { value: palette.border },
@@ -130,10 +134,10 @@ const config = defineConfig({
           subtle: { value: palette.borderSubtle },
           emphasized: { value: palette.borderStrong },
           inverted: { value: palette.ink },
-          error: { value: palette.border },
-          warning: { value: palette.border },
-          success: { value: palette.border },
-          info: { value: palette.border },
+          error: { value: palette.semantic.dangerBorder },
+          warning: { value: palette.semantic.warningBorder },
+          success: { value: palette.semantic.successBorder },
+          info: { value: palette.semantic.infoBorder },
         },
       },
     },

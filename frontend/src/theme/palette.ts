@@ -37,7 +37,8 @@ export const palette = {
 
   /** Ink used for primary actions and emphasis. */
   ink: 'var(--hd-ink)',
-    logo: 'rgba(11,11,13,0.74)',
+  /** Logo plate tone (themed, unlike the old hard-coded value). */
+  logo: 'var(--hd-logo-plate)',
   /** Ink hover. */
   inkHover: 'var(--hd-ink-hover)',
 
@@ -64,6 +65,57 @@ export const palette = {
   shadowLg: 'var(--hd-shadow-lg)',
   shadowXl: 'var(--hd-shadow-xl)',
   shadowPanel: 'var(--hd-shadow-panel)',
+
+  /**
+   * Semantic colour.
+   *
+   * Colour carries meaning in this product: it marks a status family, a
+   * priority pressure or a data series — never decoration. Every family ships
+   * a solid foreground plus a soft tint for badges and chart fills, and is
+   * always paired with an icon or a text label so colour is never the only
+   * signal. See `--hd-info` … `--hd-danger` in `tokens.css`.
+   */
+  semantic: {
+    info: 'var(--hd-info)',
+    infoSoft: 'var(--hd-info-soft)',
+    infoBorder: 'var(--hd-info-border)',
+    success: 'var(--hd-success)',
+    successSoft: 'var(--hd-success-soft)',
+    successBorder: 'var(--hd-success-border)',
+    warning: 'var(--hd-warning)',
+    warningSoft: 'var(--hd-warning-soft)',
+    warningBorder: 'var(--hd-warning-border)',
+    danger: 'var(--hd-danger)',
+    dangerSoft: 'var(--hd-danger-soft)',
+    dangerBorder: 'var(--hd-danger-border)',
+  },
+
+  /** Chart series colours, in legend order. */
+  chart: [
+    'var(--hd-chart-1)',
+    'var(--hd-chart-2)',
+    'var(--hd-chart-3)',
+    'var(--hd-chart-4)',
+    'var(--hd-chart-5)',
+  ],
+  chartSoft: [
+    'var(--hd-chart-1-soft)',
+    'var(--hd-chart-2-soft)',
+    'var(--hd-chart-3-soft)',
+    'var(--hd-chart-4-soft)',
+    'var(--hd-chart-5-soft)',
+  ],
+  chartGrid: 'var(--hd-chart-grid)',
+  chartAxis: 'var(--hd-chart-axis)',
+
+  /** Motion tokens shared by CSS and inline transitions. */
+  motion: {
+    ease: 'var(--hd-ease)',
+    easeOut: 'var(--hd-ease-out)',
+    fast: 'var(--hd-dur-1)',
+    base: 'var(--hd-dur-2)',
+    slow: 'var(--hd-dur-3)',
+  },
 
   /**
    * Static neutral ramp. Deliberately identical in both themes so Chakra's own

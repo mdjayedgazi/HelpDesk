@@ -17,6 +17,15 @@ export interface TicketTableProps {
   renderActions?: (ticket: Ticket) => ReactNode
 }
 
+/**
+ * The operational ticket table.
+ *
+ * Hierarchy: the subject is the only medium-weight line; the ticket number is
+ * small metadata beside it; status and priority are toned pills so the eye can
+ * find open/urgent work without reading every row. On small screens the
+ * status/priority pills move under the subject instead of dropping out, so the
+ * row never loses the information needed to triage.
+ */
 export function TicketTable({
   tickets,
   userLabel,
@@ -24,67 +33,44 @@ export function TicketTable({
   showRequester = false,
   renderActions,
 }: TicketTableProps) {
+  const headerStyles = {
+    color: palette.textMuted,
+    fontSize: 'xs',
+    fontWeight: 'medium',
+    letterSpacing: '0.01em',
+  } as const
+
   return (
     <Table.ScrollArea borderWidth='0'>
       <Table.Root size='sm' variant='line' interactive>
         <Table.Header>
           <Table.Row bg={palette.surface}>
-            <Table.ColumnHeader color={palette.textMuted} fontSize='xs' fontWeight='medium'>
-              Ticket
-            </Table.ColumnHeader>
+            <Table.ColumnHeader {...headerStyles}>Ticket</Table.ColumnHeader>
             {showRequester ? (
-              <Table.ColumnHeader
-                color={palette.textMuted}
-                fontSize='xs'
-                fontWeight='medium'
-                display={{ base: 'none', lg: 'table-cell' }}
-              >
+              <Table.ColumnHeader {...headerStyles} display={{ base: 'none', lg: 'table-cell' }}>
                 Requester
               </Table.ColumnHeader>
             ) : null}
-            <Table.ColumnHeader
-              color={palette.textMuted}
-              fontSize='xs'
-              fontWeight='medium'
-              display={{ base: 'none', md: 'table-cell' }}
-            >
+            <Table.ColumnHeader {...headerStyles} display={{ base: 'none', md: 'table-cell' }}>
               Status
             </Table.ColumnHeader>
-            <Table.ColumnHeader
-              color={palette.textMuted}
-              fontSize='xs'
-              fontWeight='medium'
-              display={{ base: 'none', md: 'table-cell' }}
-            >
+            <Table.ColumnHeader {...headerStyles} display={{ base: 'none', md: 'table-cell' }}>
               Priority
             </Table.ColumnHeader>
             {showAssignee ? (
-              <Table.ColumnHeader
-                color={palette.textMuted}
-                fontSize='xs'
-                fontWeight='medium'
-                display={{ base: 'none', lg: 'table-cell' }}
-              >
+              <Table.ColumnHeader {...headerStyles} display={{ base: 'none', lg: 'table-cell' }}>
                 Assignee
               </Table.ColumnHeader>
             ) : null}
             <Table.ColumnHeader
-              color={palette.textMuted}
-              fontSize='xs'
-              fontWeight='medium'
+              {...headerStyles}
               textAlign='right'
               display={{ base: 'none', sm: 'table-cell' }}
             >
               Updated
             </Table.ColumnHeader>
             {renderActions ? (
-              <Table.ColumnHeader
-                color={palette.textMuted}
-                fontSize='xs'
-                fontWeight='medium'
-                textAlign='right'
-                width='1%'
-              >
+              <Table.ColumnHeader {...headerStyles} textAlign='right' width='1%'>
                 {' '}
               </Table.ColumnHeader>
             ) : null}
@@ -95,17 +81,18 @@ export function TicketTable({
             <Table.Row
               key={ticket.id}
               cursor='pointer'
-              transition='background 0.16s ease'
+              transition='background var(--hd-dur-1) var(--hd-ease)'
               _hover={{ bg: palette.hover }}
             >
               <Table.Cell py='3.5' maxW='0'>
-                <Flex direction='column' gap='1' minW='0'>
+                <Flex direction='column' gap='1.5' minW='0'>
                   <Flex align='center' gap='2' minW='0'>
                     <Text
-                      fontSize='xs'
-                      color={palette.textMuted}
+                      fontSize='2xs'
+                      color={palette.textFaint}
                       fontVariantNumeric='tabular-nums'
                       flexShrink={0}
+                      fontFamily='mono'
                     >
                       {ticketRef(ticket.ticket_number)}
                     </Text>
@@ -124,9 +111,17 @@ export function TicketTable({
                       </Text>
                     </Link>
                   </Flex>
-                  <Flex align='center' gap='1.5' display={{ base: 'flex', md: 'none' }} wrap='wrap'>
+                  <Flex
+                    align='center'
+                    gap='1.5'
+                    display={{ base: 'flex', md: 'none' }}
+                    wrap='wrap'
+                  >
                     <StatusBadge status={ticket.status} />
                     <PriorityBadge priority={ticket.priority} />
+                    <Text fontSize='2xs' color={palette.textFaint}>
+                      {formatRelative(ticket.updated_at)}
+                    </Text>
                   </Flex>
                 </Flex>
               </Table.Cell>
@@ -136,6 +131,8 @@ export function TicketTable({
                   fontSize='sm'
                   color={palette.textSecondary}
                   whiteSpace='nowrap'
+                  maxW='40'
+                  truncate
                 >
                   {userLabel(ticket.created_by_user_id)}
                 </Table.Cell>
@@ -152,6 +149,8 @@ export function TicketTable({
                   fontSize='sm'
                   color={ticket.assignee_user_id ? palette.textSecondary : palette.textMuted}
                   whiteSpace='nowrap'
+                  maxW='40'
+                  truncate
                 >
                   {ticket.assignee_user_id ? userLabel(ticket.assignee_user_id) : 'Unassigned'}
                 </Table.Cell>
@@ -159,7 +158,7 @@ export function TicketTable({
               <Table.Cell
                 display={{ base: 'none', sm: 'table-cell' }}
                 textAlign='right'
-                fontSize='xs'
+                fontSize='2xs'
                 color={palette.textMuted}
                 whiteSpace='nowrap'
               >

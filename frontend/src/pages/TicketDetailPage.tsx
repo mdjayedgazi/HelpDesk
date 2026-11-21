@@ -18,6 +18,7 @@ import {
   Hand,
   Inbox,
   Mail,
+  MessageSquare,
   Paperclip,
   Pencil,
   ShieldQuestion,
@@ -39,7 +40,7 @@ import {
   TextAreaInput,
   TextInput,
 } from '../components/FormField.tsx'
-import { PageHeader } from '../components/PageHeader.tsx'
+import { Breadcrumbs, PageHeader } from '../components/PageHeader.tsx'
 import { CategoryBadge, PriorityBadge, StatusBadge } from '../components/badges.tsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.tsx'
 import { Surface } from '../components/Surface.tsx'
@@ -229,24 +230,30 @@ export function TicketDetailPage() {
     <>
       <PageHeader
         breadcrumb={
-          <Link to='/tickets' style={{ textDecoration: 'none' }}>
-            <Text fontSize='sm' color={palette.textMuted}>
-              Tickets / {ticketRef(data.ticket_number)}
-            </Text>
-          </Link>
+          <Breadcrumbs
+            items={[
+              { label: 'Tickets', to: '/tickets' },
+              { label: ticketRef(data.ticket_number) },
+            ]}
+          />
         }
         title={
-          <Flex direction='column' gap='2'>
-            <Text
-              as='span'
-              fontSize='sm'
-              color={palette.textMuted}
-              fontVariantNumeric='tabular-nums'
-            >
-              {ticketRef(data.ticket_number)}
+          <Flex direction='column' gap='2.5'>
+            <Text as='span' textWrap='balance'>
+              {data.title}
             </Text>
-            <Text as='span'>{data.title}</Text>
+            <Flex gap='2' wrap='wrap'>
+              <StatusBadge status={data.status} />
+              <PriorityBadge priority={data.priority} />
+              <CategoryBadge category={data.category} />
+            </Flex>
           </Flex>
+        }
+        meta={
+          <Text fontSize='xs' color={palette.textMuted}>
+            {ticketRef(data.ticket_number)} · Opened {formatRelative(data.created_at)} · Updated{' '}
+            {formatRelative(data.updated_at)}
+          </Text>
         }
         actions={
           canEditText ? (
@@ -266,13 +273,14 @@ export function TicketDetailPage() {
       <SimpleGrid columns={{ base: 1, lg: 3 }} gap='6' alignItems='start'>
         <Stack gap='6' gridColumn={{ lg: 'span 2' }}>
           <Surface p={{ base: '5', md: '6' }}>
-            <Stack gap='5'>
-              <Flex gap='2' wrap='wrap'>
-                <StatusBadge status={data.status} />
-                <PriorityBadge priority={data.priority} />
-                <CategoryBadge category={data.category} />
+            <Stack gap='4'>
+              <Flex align='center' gap='2'>
+                <MessageSquare size={15} color={palette.textMuted} aria-hidden />
+                <Text fontSize='xs' fontWeight='semibold' color={palette.textMuted} letterSpacing='0.04em' textTransform='uppercase'>
+                  Request
+                </Text>
               </Flex>
-              <Text fontSize='sm' color={palette.text} whiteSpace='pre-wrap' lineHeight='1.7'>
+              <Text fontSize='sm' color={palette.text} whiteSpace='pre-wrap' lineHeight='1.75'>
                 {data.description}
               </Text>
             </Stack>
@@ -281,9 +289,16 @@ export function TicketDetailPage() {
           <Surface p={{ base: '5', md: '6' }}>
             <Stack gap='4'>
               <Flex align='baseline' justify='space-between' gap='4'>
-                <Text fontSize='md' fontWeight='medium' color={palette.text}>
-                  Conversation
-                </Text>
+                <Flex align='center' gap='2'>
+                  <Text fontSize='md' fontWeight='semibold' color={palette.text}>
+                    Conversation
+                  </Text>
+                  {staff ? (
+                    <Text fontSize='2xs' color={palette.textFaint}>
+                      customer and staff replies
+                    </Text>
+                  ) : null}
+                </Flex>
                 <Text fontSize='xs' color={palette.textMuted}>
                   {comments.data?.length ?? 0}{' '}
                   {(comments.data?.length ?? 0) === 1 ? 'message' : 'messages'}

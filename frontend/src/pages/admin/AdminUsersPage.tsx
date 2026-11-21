@@ -1,7 +1,7 @@
 import { Box, Flex, Input, InputGroup, NativeSelect, Table, Text } from '@chakra-ui/react'
 import { Search, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { PageHeader } from '../../components/PageHeader.tsx'
 import { Pagination } from '../../components/Pagination.tsx'
@@ -21,10 +21,37 @@ const PAGE_SIZE = 20
 
 export function AdminUsersPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialRole = searchParams.get('role') ?? ''
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [role, setRole] = useState<Role | ''>('')
-  const [active, setActive] = useState<'' | 'active' | 'inactive'>('')
+  const [role, setRole] = useState<Role | ''>(
+    ALL_ROLES.includes(initialRole as Role) ? (initialRole as Role) : '',
+  )
+  const [active, setActive] = useState<'' | 'active' | 'inactive'>(
+    searchParams.get('active') === 'inactive'
+      ? 'inactive'
+      : searchParams.get('active') === 'active'
+        ? 'active'
+        : '',
+  )
+
+  // Keep the URL in sync so the dashboard can deep-link to a filtered directory
+  // (for example `/admin/users?role=agent`) and the view can be shared. Only the
+  // params this page owns are touched, and nothing is written when unchanged.
+  useEffect(() => {
+    if ((searchParams.get('role') ?? '') === role && (searchParams.get('active') ?? '') === active) {
+      return
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (role) next.set('role', role)
+      else next.delete('role')
+      if (active) next.set('active', active)
+      else next.delete('active')
+      return next
+    }, { replace: true })
+  }, [role, active, searchParams, setSearchParams])
 
   const debouncedSearch = useDebounced(search)
 

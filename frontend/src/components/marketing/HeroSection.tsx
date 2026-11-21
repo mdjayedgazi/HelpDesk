@@ -1,6 +1,6 @@
 import { Box, Button, Flex, Heading, Stack, Text } from '@chakra-ui/react'
 import { useAuth } from '@clerk/react'
-import { ArrowRight, Compass } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Compass } from 'lucide-react'
 import { Link as RouterLink } from 'react-router-dom'
 
 import { site } from '../../lib/site.ts'
@@ -28,6 +28,12 @@ const secondaryButtonProps = {
   _hover: { bg: palette.hover, borderColor: palette.borderStrong },
 } as const
 
+const proofPoints = [
+  'Tickets, statuses and priorities',
+  'Assignment and shared queues',
+  'Internal notes kept internal',
+]
+
 export function HeroSection() {
   const { isLoaded, isSignedIn } = useAuth()
   const signedIn = isLoaded && isSignedIn
@@ -38,18 +44,24 @@ export function HeroSection() {
       aria-labelledby='hero-heading'
       position='relative'
       overflow='hidden'
-      pt={{ base: '14', md: '20', lg: '24' }}
+      pt={{ base: '12', md: '18', lg: '20' }}
       pb={{ base: '12', md: '16' }}
     >
-      <Box position='absolute' inset='0' className='hd-grid-bg hd-mask-fade' opacity={0.55} aria-hidden />
+      <Box
+        position='absolute'
+        inset='0'
+        className='hd-grid-bg hd-mask-fade'
+        opacity={0.55}
+        aria-hidden
+      />
 
       <Container size='wide' position='relative'>
         <Flex
           direction={{ base: 'column', lg: 'row' }}
           align={{ base: 'stretch', lg: 'center' }}
-          gap={{ base: '14', lg: '12' }}
+          gap={{ base: '12', lg: '14' }}
         >
-          <Reveal flex={{ lg: '1 1 0' }} maxW={{ lg: '600px' }}>
+          <Reveal flex={{ lg: '1 1 0' }} maxW={{ lg: '580px' }}>
             <Stack gap='6' align='flex-start'>
               <Eyebrow>Support workspace</Eyebrow>
 
@@ -59,7 +71,7 @@ export function HeroSection() {
                 fontSize={{ base: '4xl', sm: '5xl', lg: '6xl' }}
                 fontWeight='semibold'
                 letterSpacing='-0.035em'
-                lineHeight='1.05'
+                lineHeight='1.04'
                 color={palette.text}
                 textWrap='balance'
               >
@@ -72,8 +84,9 @@ export function HeroSection() {
                 lineHeight='1.7'
                 maxW='lg'
               >
-                Bring tickets, team collaboration and customer conversations into one organised
-                workspace. Give every request a clear next step.
+                One workspace for incoming tickets, the team working them, and the
+                conversations around them — so every customer request has a clear owner and
+                a visible next step.
               </Text>
 
               <Flex gap='3' wrap='wrap' pt='1'>
@@ -100,13 +113,18 @@ export function HeroSection() {
                 </Button>
               </Flex>
 
-              <Text fontSize='xs' color={palette.textMuted} letterSpacing='0.01em'>
-                Tickets · Team collaboration · Role-based access control
-              </Text>
+              <Stack gap='2' pt='2' as='ul' listStyleType='none' m='0' p='0'>
+                {proofPoints.map((point) => (
+                  <Flex as='li' key={point} align='center' gap='2' fontSize='sm' color={palette.textSecondary}>
+                    <CheckCircle2 size={14} strokeWidth={2} color={palette.textMuted} aria-hidden />
+                    {point}
+                  </Flex>
+                ))}
+              </Stack>
             </Stack>
           </Reveal>
 
-          <Reveal delay={140} flex={{ lg: '1 1 0' }} w='full' minW='0'>
+          <Reveal delay={120} flex={{ lg: '1 1 0' }} w='full' minW='0'>
             <ProductVisual />
           </Reveal>
         </Flex>
