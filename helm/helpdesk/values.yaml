@@ -160,16 +160,21 @@ frontend:
     timeoutSeconds: 5
     failureThreshold: 3
 
-  # Security context — nginx runs as non-root in the runtime stage
+  # Security context — the image runs Nginx as the unprivileged `nginx` user
+  # (uid/gid 101), so the matching numeric ids are pinned here for
+  # `runAsNonRoot` admission checks. readOnlyRootFilesystem is allowed because
+  # the writable paths are provided as emptyDir volumes below.
   securityContext:
+    runAsUser: 101
+    runAsGroup: 101
     runAsNonRoot: true
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
-    # Nginx needs /var/cache, /var/run, /etc/nginx/conf.d writable
-    # The docker-entrypoint.sh handles this; we add emptyDir volumes.
+    # Nginx writes its pid, cache and rendered config; the deployment mounts
+    # emptyDir volumes at /var/run, /var/cache/nginx and /etc/nginx/conf.d.
 
   # Environment variables for the Nginx runtime container.
   # VITE_* variables are build-time and must be baked into the image.
@@ -210,6 +215,17 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
+
+  # Optional separate public host for the API. The frontend bundle calls the
+  # API on an absolute origin (VITE_API_URL), so the API must be reachable at
+  # its own HTTPS host, not only inside the cluster. When set, this host is
+  # routed to the backend service. Leave empty if the API is exposed by another
+  # ingress or a cloud load balancer. `paths` defaults to `/` (Prefix).
+  apiHosts: []
+  # - host: api.helpdesk.example.com
+  #   paths:
+  #     - path: /
+  #       pathType: Prefix
 
   tls: []
   # - secretName: helpdesk-tls

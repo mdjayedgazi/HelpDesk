@@ -38,4 +38,22 @@ spec:
                   number: {{ $.Values.frontendService.port }}
           {{- end }}
     {{- end }}
+    {{- range .Values.ingress.apiHosts }}
+    {{- if .host }}
+    # The SPA calls the API on its own absolute origin (see VITE_API_URL), so
+    # the API needs a separate public host routed to the backend service.
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range (.paths | default (list (dict "path" "/" "pathType" "Prefix"))) }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "helpdesk.fullname" $ }}-backend
+                port:
+                  number: {{ $.Values.backendService.port }}
+          {{- end }}
+    {{- end }}
+    {{- end }}
 {{- end }}

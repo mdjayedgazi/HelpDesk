@@ -31,6 +31,17 @@ COPY nginx.conf.template /etc/nginx/nginx.conf.template
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Run Nginx as the unprivileged `nginx` user (uid 101) instead of root. The
+# entrypoint writes the rendered config and HSTS include into
+# /etc/nginx/conf.d and Nginx writes its pid/cache/logs, so those paths must be
+# owned by that user up front. Port 8080 is unprivileged, so no capability is
+# needed. This matches the Helm chart's `runAsNonRoot: true`.
+RUN chown -R nginx:nginx /etc/nginx/conf.d /var/cache/nginx /var/log/nginx \
+    && touch /run/nginx.pid \
+    && chown nginx:nginx /run/nginx.pid
+
+USER 101:101
+
 ENV HSTS_ENABLED=false \
     HSTS_MAX_AGE_SECONDS=31536000
 
