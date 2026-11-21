@@ -27,13 +27,17 @@ export function Sparkline({
   const max = Math.max(1, ...values)
   const min = Math.min(...values)
   const span = Math.max(1, max - min)
-  const stepX = width / (values.length - 1)
+  // Inset the plot so the end-cap dot is never clipped by the viewBox edge.
+  const inset = 3
+  const plotW = width - inset * 2
+  const plotH = height - inset * 2
+  const stepX = plotW / (values.length - 1)
   const points = values.map((value, index) => ({
-    x: index * stepX,
-    y: height - 2 - ((value - min) / span) * (height - 4),
+    x: inset + index * stepX,
+    y: inset + plotH - ((value - min) / span) * plotH,
   }))
   const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
-  const area = `${line} L${width},${height} L0,${height} Z`
+  const area = `${line} L${inset + plotW},${height} L${inset},${height} Z`
 
   return (
     <Box as='span' aria-hidden='true' title={label} display='inline-block' lineHeight='0'>
