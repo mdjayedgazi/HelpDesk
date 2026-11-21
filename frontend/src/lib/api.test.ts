@@ -145,3 +145,57 @@ describe('createApiClient request timeout', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('createApiClient response body handling', () => {
+  it('keeps the timeout active while the response body is still pending', async () => {
+    vi.useFakeTimers()
+    // Headers arrive immediately, but the body never completes. The timeout
+    // must still fire so a stalled body cannot hang the request forever.
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const body = new Promise<never>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      })
+      const response = {
+        status: 200,
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: () => body,
+        text: () => body,
+      }
+      return Promise.resolve(response as unknown as Response)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient(getToken)
+    const captured = client.request('/api/v1/users/me').then(
+      () => null,
+      (error: unknown) => error,
+    )
+
+    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS + 1)
+
+    const error = (await captured) as ApiError
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.message).toContain('took too long')
+  })
+
+  it('returns null for a malformed body but still reports the HTTP status', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response('not-json', {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient(getToken)
+    const error = (await client.request('/api/v1/users/me').catch((caught) => caught)) as ApiError
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(500)
+  })
+})

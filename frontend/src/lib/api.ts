@@ -255,7 +255,12 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
           }, effectiveTimeout)
         : undefined
 
+    // The timer and the caller's cancellation must stay active until the
+    // response *body* has been consumed. `fetch()` resolves as soon as headers
+    // arrive, so clearing them there would let a stalled body hang the request
+    // (and any `await response.json()`) forever.
     let response: Response
+    let parsed: unknown
     try {
       response = await fetch(url(`${path}${buildQuery(query)}`), {
         method,
@@ -264,6 +269,27 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
         signal: controller.signal,
         credentials: 'omit',
       })
+
+      if (response.status === 204) {
+        return undefined as T
+      }
+
+      const contentType = response.headers.get('content-type') ?? ''
+      const isJson = contentType.includes('application/json')
+      // A malformed body still resolves to null (the caller reports the HTTP
+      // status); a timeout or cancellation during the read must propagate.
+      const swallowParseError = (error: unknown) => {
+        if (
+          timedOut ||
+          (error instanceof DOMException && error.name === 'AbortError')
+        ) {
+          throw error
+        }
+        return null
+      }
+      parsed = isJson
+        ? await response.json().catch(swallowParseError)
+        : await response.text().catch(swallowParseError)
     } catch (error) {
       if (timedOut) {
         throw new ApiError(
@@ -279,16 +305,6 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
       if (timer !== undefined) clearTimeout(timer)
       if (signal) signal.removeEventListener('abort', onExternalAbort)
     }
-
-    if (response.status === 204) {
-      return undefined as T
-    }
-
-    const contentType = response.headers.get('content-type') ?? ''
-    const isJson = contentType.includes('application/json')
-    const parsed: unknown = isJson
-      ? await response.json().catch(() => null)
-      : await response.text().catch(() => null)
 
     if (!response.ok) {
       throw parseErrorBody(response.status, parsed)
