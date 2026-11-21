@@ -29,6 +29,53 @@ def _looks_like_placeholder(value: str) -> bool:
     return not lowered or any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
 
 
+def _normalize_origin(value: str) -> str:
+    """Return an exact ``scheme://host[:port]`` browser origin.
+
+    Browsers send the ``Origin`` header and Clerk's ``azp`` claim without a
+    trailing slash and without a redundant default port, but operators often
+    paste a URL copied from the address bar (``https://app.example.com/``).
+    Keeping that value verbatim makes every CORS preflight and Clerk
+    authorized-party comparison fail even though startup validation passed,
+    because ``"https://app.example.com/"`` is not equal to the browser's
+    ``"https://app.example.com"``.
+
+    Only a real origin is normalized. A value that carries a path, query, or
+    fragment is returned unchanged so the production validator can reject it
+    (normalizing it here would silently accept an unintended URL).
+    """
+    text = value.strip()
+    if not text:
+        return ""
+
+    parsed = urlsplit(text)
+    if not parsed.scheme or not parsed.netloc:
+        # Not an absolute URL (for example "*"): let the validator decide.
+        return text
+    if parsed.path.strip("/") or parsed.query or parsed.fragment:
+        return text
+
+    try:
+        port = parsed.port
+    except ValueError:
+        return text
+
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        return text
+    if ":" in hostname and not hostname.startswith("["):
+        # IPv6 literals keep their brackets in an origin.
+        hostname = f"[{hostname}]"
+
+    scheme = parsed.scheme.lower()
+    default_port = (scheme == "https" and port == 443) or (
+        scheme == "http" and port == 80
+    )
+    if port is not None and not default_port:
+        hostname = f"{hostname}:{port}"
+    return f"{scheme}://{hostname}"
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str
 
@@ -95,16 +142,19 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins(self) -> list[str]:
-        """FRONTEND_URL plus CORS_ORIGINS, de-duplicated, order preserved.
+        """FRONTEND_URL plus CORS_ORIGINS, normalized, de-duplicated.
 
         Used both for CORS and for Clerk's authorized-party (`azp`) check so a
         single environment allowlist covers every permitted browser origin.
+        Each value is reduced to an exact ``scheme://host[:port]`` origin (see
+        ``_normalize_origin``) so a trailing slash or a redundant default port
+        can never cause an origin mismatch.
         """
         origins: list[str] = []
         for origin in [self.FRONTEND_URL, *self.CORS_ORIGINS]:
-            origin = origin.strip()
-            if origin and origin not in origins:
-                origins.append(origin)
+            normalized = _normalize_origin(origin)
+            if normalized and normalized not in origins:
+                origins.append(normalized)
         return origins
 
     # One-time Owner bootstrap input. This is read *only* by the explicit
@@ -146,6 +196,16 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT_SECONDS: float = 30.0
     DB_POOL_RECYCLE_SECONDS: int = 1800
     DB_CONNECT_TIMEOUT_SECONDS: int = 10
+
+    # Per-connection query budgets applied to direct PostgreSQL endpoints.
+    # ``0`` disables a limit. A stuck query or lock wait can otherwise hold a
+    # pooled connection until the client disconnects; with a small pool that
+    # stalls unrelated requests. PgBouncer-style pooled endpoints (Neon
+    # ``-pooler``) do not reliably honour per-connection startup options, so
+    # these are applied only to direct endpoints; set the same limits on the
+    # database role for a pooled deployment (see docs/DEPLOYMENT.md).
+    DB_STATEMENT_TIMEOUT_MS: int = 15_000
+    DB_LOCK_TIMEOUT_MS: int = 5_000
 
     # Where uploaded attachment files are stored, and the maximum size.
     # UPLOAD_DIR must be on a persistent volume in production.
@@ -429,6 +489,11 @@ class Settings(BaseSettings):
             add("DB_POOL_RECYCLE_SECONDS must be zero or positive")
         if self.DB_CONNECT_TIMEOUT_SECONDS <= 0:
             add("DB_CONNECT_TIMEOUT_SECONDS must be positive")
+
+        if self.DB_STATEMENT_TIMEOUT_MS < 0:
+            add("DB_STATEMENT_TIMEOUT_MS must be zero or positive")
+        if self.DB_LOCK_TIMEOUT_MS < 0:
+            add("DB_LOCK_TIMEOUT_MS must be zero or positive")
 
         if self.MAX_UPLOAD_BYTES <= 0:
             add("MAX_UPLOAD_BYTES must be positive")

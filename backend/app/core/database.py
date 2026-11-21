@@ -48,6 +48,35 @@ def _is_pooled_postgres(url: str) -> bool:
     return "-pooler" in hostname
 
 
+def _postgres_connect_args(url: str) -> dict[str, object]:
+    """Connect arguments for a PostgreSQL URL.
+
+    Direct endpoints receive libpq ``options`` with explicit statement and lock
+    timeouts so one pathological query or lock wait cannot hold a pooled
+    connection forever. PgBouncer does not reliably honour per-connection
+    startup options, so a pooled endpoint keeps only the prepared-statement
+    fix; set the timeouts on the database role there (documented in
+    docs/DEPLOYMENT.md).
+    """
+    args: dict[str, object] = {
+        "connect_timeout": settings.DB_CONNECT_TIMEOUT_SECONDS,
+    }
+    if _is_pooled_postgres(url):
+        # PgBouncer (Neon pooled endpoint) is incompatible with psycopg's
+        # automatic named prepared statements in transaction pooling mode.
+        args["prepare_threshold"] = None
+        return args
+
+    options: list[str] = []
+    if settings.DB_STATEMENT_TIMEOUT_MS > 0:
+        options.append(f"-c statement_timeout={settings.DB_STATEMENT_TIMEOUT_MS}")
+    if settings.DB_LOCK_TIMEOUT_MS > 0:
+        options.append(f"-c lock_timeout={settings.DB_LOCK_TIMEOUT_MS}")
+    if options:
+        args["options"] = " ".join(options)
+    return args
+
+
 DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
 
 # SQLite (used by the tests) needs its own connection arguments and does not
@@ -58,11 +87,7 @@ _connect_args: dict[str, object] = {}
 if DATABASE_URL.startswith("sqlite"):
     _connect_args["check_same_thread"] = False
 else:
-    _connect_args["connect_timeout"] = settings.DB_CONNECT_TIMEOUT_SECONDS
-    if _is_pooled_postgres(DATABASE_URL):
-        # PgBouncer (Neon pooled endpoint) is incompatible with psycopg's
-        # automatic named prepared statements in transaction pooling mode.
-        _connect_args["prepare_threshold"] = None
+    _connect_args = _postgres_connect_args(DATABASE_URL)
     _engine_kwargs.update(
         pool_pre_ping=True,
         pool_size=settings.DB_POOL_SIZE,
