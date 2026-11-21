@@ -7,6 +7,12 @@ import { useEntrance } from '../../hooks/useEntrance.ts'
 import { AnimatedNumber } from './AnimatedNumber.tsx'
 
 /**
+ * Fallback denominator used only when the caller supplies an unusable maximum
+ * (0, negative, NaN or Infinity). Documented in the implementation report.
+ */
+const DEFAULT_MAX = 100
+
+/**
  * A progress meter that grows from zero to its real value.
  *
  * The fill is a full-width bar scaled with `transform: scaleX(ratio)`, so the
@@ -41,8 +47,25 @@ export function AnimatedProgress({
   ariaLabel?: string
 }) {
   const entered = useEntrance()
-  const safeMax = max > 0 ? max : 1
-  const ratio = Math.min(1, Math.max(0, value / safeMax))
+
+  // One normalization pass feeds the fill, the label and ARIA. Nothing below
+  // may read the raw inputs again, so the bar can never disagree with the
+  // number it announces.
+  //
+  // - a non-finite or non-positive maximum has no meaningful scale, so it falls
+  //   back to 100 (documented, and the only value that keeps a percentage
+  //   honest when the caller passes 0);
+  // - a non-finite current value is treated as 0 rather than NaN (which would
+  //   poison the ratio and the label);
+  // - the current value is clamped into [0, max] so ARIA and geometry agree even
+  //   when the caller overshoots.
+  const safeMax =
+    Number.isFinite(max) && max > 0 ? max : DEFAULT_MAX
+  const normalizedValue = Math.min(
+    Math.max(Number.isFinite(value) ? value : 0, 0),
+    safeMax,
+  )
+  const ratio = normalizedValue / safeMax
   const percent = Math.round(ratio * 100)
 
   // A progressbar must have an accessible name. Callers either pass an
@@ -83,7 +106,7 @@ export function AnimatedProgress({
         aria-label={accessibleName}
         aria-valuemin={accessibleName ? 0 : undefined}
         aria-valuemax={accessibleName ? safeMax : undefined}
-        aria-valuenow={accessibleName ? value : undefined}
+        aria-valuenow={accessibleName ? normalizedValue : undefined}
         aria-valuetext={accessibleName ? `${percent}%` : undefined}
         height={height}
         borderRadius='full'

@@ -91,7 +91,11 @@ function BarRow({
   valueSuffix?: string
 }) {
   const entered = useDelayedEntrance(stagger(index))
-  const widthPct = Math.max(item.value > 0 ? 4 : 0, Math.round((item.value / max) * 100))
+  // The bar is exactly `value / max`. There is deliberately no minimum visible
+  // width: a 1-in-100 count must render as 1% of the track, not as an arbitrary
+  // 4%. Small values stay legible through the exact count and share printed
+  // beside the row, never through falsified geometry.
+  const ratio = max > 0 ? Math.min(1, Math.max(0, item.value / max)) : 0
   const share = total > 0 ? Math.round((item.value / total) * 100) : 0
 
   const inner = (
@@ -147,7 +151,7 @@ function BarRow({
           bg={item.color}
           borderRadius='full'
           style={{
-            transform: `scaleX(${entered ? widthPct / 100 : 0})`,
+            transform: `scaleX(${entered ? ratio : 0})`,
             transformOrigin: 'left center',
             transition: `transform ${motionVars.chart} ${motionVars.easeOut}`,
           }}

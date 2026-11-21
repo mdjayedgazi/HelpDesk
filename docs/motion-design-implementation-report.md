@@ -424,3 +424,76 @@ https://github.com/mdjayedgazi/HelpDesk/pull/23
 - **The accent is new.** It is used narrowly and contrast-checked, but a design
   owner may still prefer the fully ink-based selection state; reverting is a
   one-line token change (`--hd-accent` → `--hd-ink`).
+
+---
+
+## 24. QA pass corrections (post-review)
+
+A dedicated QA pass inspected the merged implementation and corrected three
+genuine defects plus one merge-blocking documentation error. The full narrative
+and measurements are in `docs/motion-design-review.md` Part N; this section is
+the change log.
+
+### 24.1 `data.md` preserved (merge-blocking)
+
+`data.md` had been overwritten with the motion review, replacing the PR #19
+production-readiness review. Corrected by moving the motion review to
+`docs/motion-design-review.md` (verified against `HEAD:data.md` by SHA-256) and
+restoring `data.md` from `4ea4a2e`. `data.md` is now byte-identical to the base
+(`git diff 4ea4a2e -- data.md` is empty).
+
+### 24.2 Trend chart x-axis labels
+
+`TrendChart.tsx` gained `selectTrendLabelIndices`, which estimates label width
+(calibrated to a measured 9 px/char at 10 px), anchors the first and last dates,
+and only accepts a tick set where every box fits inside the plot with a ≥12 px
+gap. Verified in Chromium at 1440/1280/1024/768/390/360: first and last dates
+present, **0 collisions, 0 clipped labels** at every width. The plotted series
+and its accessible table are unchanged.
+
+New test file: `frontend/src/components/charts/trendLabels.test.tsx` (24 tests).
+
+### 24.3 Bar chart exact proportions
+
+Removed the `Math.max(4, …)` minimum-width floor. Bar geometry is now exactly
+`value / max`. Tests cover 1/100, 2/100, 30/100, 100/100, 1/99, zero, all-zero
+and empty datasets. Browser check: painted ratio equals the inline transform for
+every bar.
+
+### 24.4 Progress value normalization
+
+`AnimatedProgress.tsx` now normalizes once and uses the normalized value for the
+fill, the percentage label, `aria-valuenow` and `aria-valuetext`. Non-finite
+values become 0; a non-finite or non-positive maximum falls back to a documented
+`DEFAULT_MAX = 100`; the value is clamped into range. Tests cover 120→clamped,
+−10→0, 0/0, NaN and Infinity, and assert that ARIA never disagrees with the
+painted ratio.
+
+### 24.5 Mobile scroll verification
+
+The blank band in the committed 390 px screenshot was proven to be a capture
+artifact (the screenshot was taken at full page height without scrolling, while
+below-the-fold reveals were still transparent). A real progressive-scroll test at
+390 and 360 px confirms every section appears, nothing stays hidden after
+returning to the top, and there is no blank band in the new capture. No
+production code change was required, and reveal animations were **not** disabled.
+
+### 24.6 Test and build state after QA
+
+```
+tsc --noEmit                      clean
+vp lint (oxlint, type-aware)      clean
+vp test run                       16 files / 136 tests passing
+vp build (production env)         succeeds
+```
+
+Was 15 files / 96 tests before this pass; the 40 new tests cover trend-label
+geometry, exact bar ratios and progress normalization.
+
+### 24.7 PR state
+
+PR #23 had already been merged (`8e6868d`) before this QA pass began. The
+corrections were committed on the same `feat/helpdesk-motion-visual-polish`
+branch, as instructed. A merged pull request cannot accept new commits, so these
+changes require a small follow-up review PR against `main`. The QA commit hash
+and follow-up PR URL are recorded in the final hand-off.

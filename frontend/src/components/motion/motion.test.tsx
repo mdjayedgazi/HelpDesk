@@ -1,5 +1,5 @@
 import { ChakraProvider } from '@chakra-ui/react'
-import { act, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 
@@ -74,6 +74,14 @@ describe('AnimatedNumber', () => {
 })
 
 describe('AnimatedProgress', () => {
+  /** Read the rendered fill ratio from the inline transform. */
+  function fillRatio(name: RegExp | string): number {
+    const bar = screen.getByRole('progressbar', { name })
+    const fill = bar.firstElementChild as HTMLElement
+    const match = /scaleX\(([^)]+)\)/.exec(fill.style.transform)
+    return match ? Number(match[1]) : NaN
+  }
+
   it('reports the real value through progressbar semantics', () => {
     render(<AnimatedProgress value={30} max={100} label='Resolution rate' />)
     const bar = screen.getByRole('progressbar')
@@ -83,43 +91,83 @@ describe('AnimatedProgress', () => {
     expect(bar).toHaveAttribute('aria-valuetext', '30%')
   })
 
-  it('grows the fill to exactly value / max', async () => {
-    render(<AnimatedProgress value={30} max={100} label='Resolution rate' />)
+  it.each([
+    { value: 30, max: 100, now: '30', percent: '30%', ratio: 0.3 },
+    { value: 70, max: 100, now: '70', percent: '70%', ratio: 0.7 },
+    { value: 100, max: 100, now: '100', percent: '100%', ratio: 1 },
+    { value: 120, max: 100, now: '100', percent: '100%', ratio: 1 },
+    { value: -10, max: 100, now: '0', percent: '0%', ratio: 0 },
+    { value: 0, max: 100, now: '0', percent: '0%', ratio: 0 },
+  ])(
+    'normalizes value=$value max=$max to now=$now / $percent',
+    async ({ value, max, now, percent, ratio }) => {
+      render(<AnimatedProgress value={value} max={max} label='Metric' />)
+      const bar = screen.getByRole('progressbar')
+      expect(bar).toHaveAttribute('aria-valuenow', now)
+      expect(bar).toHaveAttribute('aria-valuemax', '100')
+      expect(bar).toHaveAttribute('aria-valuetext', percent)
+      await waitFor(() => {
+        expect(fillRatio('Metric')).toBeCloseTo(ratio, 6)
+      })
+      // The visible label and the announced text are derived from the same
+      // normalized ratio. (The digits animate inside an aria-hidden span and a
+      // visually hidden copy, so compare the assembled root text rather than a
+      // single text node.)
+      const root = bar.parentElement as HTMLElement
+      expect(root.textContent).toContain(percent)
+    },
+  )
+
+  it('falls back to a documented denominator when max is zero', async () => {
+    render(<AnimatedProgress value={0} max={0} label='Undefined scale' />)
     const bar = screen.getByRole('progressbar')
-    const fill = bar.firstElementChild as HTMLElement
+    // Documented behaviour: an unusable denominator falls back to 100, so the
+    // ARIA range stays valid and the value stays honest (0 of 100).
+    expect(bar).toHaveAttribute('aria-valuemax', '100')
+    expect(bar).toHaveAttribute('aria-valuenow', '0')
     await waitFor(() => {
-      expect(fill.style.transform).toBe('scaleX(0.3)')
+      expect(fillRatio('Undefined scale')).toBe(0)
+    })
+  })
+
+  it('treats a non-finite value as zero instead of NaN', async () => {
+    render(<AnimatedProgress value={Number.NaN} max={100} label='NaN value' />)
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '0')
+    expect(bar).toHaveAttribute('aria-valuetext', '0%')
+    await waitFor(() => {
+      expect(fillRatio('NaN value')).toBe(0)
+    })
+  })
+
+  it('clamps a non-finite maximum instead of producing NaN geometry', async () => {
+    render(<AnimatedProgress value={50} max={Number.POSITIVE_INFINITY} label='Inf max' />)
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuemax', '100')
+    expect(bar).toHaveAttribute('aria-valuenow', '50')
+    await waitFor(() => {
+      expect(fillRatio('Inf max')).toBeCloseTo(0.5, 6)
     })
   })
 
   it('handles a non-100 denominator without rescaling the datum', async () => {
     render(<AnimatedProgress value={3} max={4} label='Coverage' showValue={false} />)
     const bar = screen.getByRole('progressbar')
-    const fill = bar.firstElementChild as HTMLElement
     expect(bar).toHaveAttribute('aria-valuenow', '3')
     expect(bar).toHaveAttribute('aria-valuemax', '4')
     await waitFor(() => {
-      expect(fill.style.transform).toBe('scaleX(0.75)')
+      expect(fillRatio('Coverage')).toBeCloseTo(0.75, 6)
     })
   })
 
-  it('never exceeds full width when a value is out of range', async () => {
-    render(<AnimatedProgress value={140} max={100} label='Overflow' />)
-    const bar = screen.getByRole('progressbar')
-    const fill = bar.firstElementChild as HTMLElement
-    await waitFor(() => {
-      expect(fill.style.transform).toBe('scaleX(1)')
-    })
+  it('keeps a progressbar without a name out of the accessibility tree', () => {
+    render(<AnimatedProgress value={30} max={100} showValue={false} />)
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it('renders instantly at the real ratio under reduced motion', () => {
     stubReducedMotion(true)
     render(<AnimatedProgress value={30} max={100} label='Resolution rate' />)
-    const bar = screen.getByRole('progressbar')
-    const fill = bar.firstElementChild as HTMLElement
-    act(() => {
-      // No frame needed; the entrance flag starts true.
-    })
-    expect(fill.style.transform).toBe('scaleX(0.3)')
+    expect(fillRatio('Resolution rate')).toBeCloseTo(0.3, 6)
   })
 })

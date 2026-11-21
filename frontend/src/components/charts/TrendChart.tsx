@@ -48,6 +48,96 @@ const PAD_R = 8
 const PAD_T = 12
 const PAD_B = 26
 
+/** Axis label font size, in px. Mirrors the `fontSize` on the <text> nodes. */
+const LABEL_FONT_SIZE = 10
+/**
+ * Advance width of one character at 10px, in px.
+ *
+ * Measured in headless Chromium against this product's font stack (Inter, with
+ * a system fallback) at 10px: ~8.4–9.0 px per glyph for date labels such as
+ * "Nov 12". The value below is deliberately at the high end so the estimate
+ * never under-reports and lets two labels collide when a fallback font is
+ * wider than expected. A slightly conservative estimate costs one fewer tick;
+ * an optimistic one produces overlapping text.
+ */
+const LABEL_CHAR_WIDTH = 9
+/** Minimum clear gap between two adjacent label boxes, in px. */
+const LABEL_GAP = 12
+
+interface LabelBox {
+  index: number
+  /** Left edge of the painted text box. */
+  left: number
+  /** Right edge of the painted text box. */
+  right: number
+}
+
+/**
+ * Choose which x-axis labels to paint so they never collide or clip.
+ *
+ * The previous implementation used a fixed `ceil(n / 6)` interval and then
+ * always added the final date. For a 14-day series that placed the last two
+ * labels a few pixels apart. This version instead:
+ *
+ * 1. estimates each label's painted width from its character count;
+ * 2. tries the largest sensible number of labels first and walks down;
+ * 3. anchors the first label at the left edge and the last at the right edge
+ *    (matching their `text-anchor`), and centres the ones between them;
+ * 4. accepts a candidate only when every box is inside the plot and no two
+ *    boxes overlap.
+ *
+ * The first and last points are always preferred. If they cannot coexist the
+ * first wins, because an axis with no readable start is worse than one whose
+ * end is implied by the hover readout and the data table.
+ */
+export function selectTrendLabelIndices(
+  labels: string[],
+  x: (index: number) => number,
+  plotLeft: number,
+  plotRight: number,
+): LabelBox[] {
+  const n = labels.length
+  if (n === 0) return []
+
+  const widthOf = (text: string) =>
+    Math.max(LABEL_FONT_SIZE, text.length * LABEL_CHAR_WIDTH)
+
+  const boxFor = (index: number): LabelBox => {
+    const cx = x(index)
+    const w = widthOf(labels[index]!)
+    if (index === 0) return { index, left: cx, right: cx + w }
+    if (index === n - 1) return { index, left: cx - w, right: cx }
+    return { index, left: cx - w / 2, right: cx + w / 2 }
+  }
+
+  const fits = (indices: number[]): LabelBox[] | null => {
+    const boxes = indices.map(boxFor)
+    for (const box of boxes) {
+      if (box.left < plotLeft - 0.5 || box.right > plotRight + 0.5) return null
+    }
+    for (let i = 1; i < boxes.length; i++) {
+      if (boxes[i]!.left - boxes[i - 1]!.right < LABEL_GAP) return null
+    }
+    return boxes
+  }
+
+  // Prefer more labels; never request more than the data can support.
+  const maxCandidates = Math.min(n, 8)
+  for (let count = maxCandidates; count >= 2; count--) {
+    const indices = Array.from({ length: count }, (_, i) =>
+      Math.round((i * (n - 1)) / (count - 1)),
+    )
+    const unique = [...new Set(indices)]
+    if (unique.length < 2) continue
+    const boxes = fits(unique)
+    if (boxes) return boxes
+  }
+
+  // Two labels do not fit. Keep the first (its label is the readable anchor)
+  // and fall back to a single box rather than overlapping two.
+  return [boxFor(0)]
+}
+
 function niceScale(rawMax: number): { max: number; step: number } {
   if (rawMax <= 4) return { max: 4, step: 1 }
   const rough = rawMax / 4
@@ -109,9 +199,14 @@ export function TrendChart({
       return { value, y: PAD_T + plotH - (value / max) * plotH }
     })
 
-    const labelEvery = Math.max(1, Math.ceil(points.length / 6))
+    const labelBoxes = selectTrendLabelIndices(
+      points.map((point) => point.label),
+      x,
+      PAD_L,
+      W - PAD_R,
+    )
 
-    return { max, plotW, plotH, x, y, stepX, lines, ticks, labelEvery }
+    return { max, plotW, plotH, x, y, stepX, lines, ticks, labelBoxes }
   }, [points, series, height, W])
 
   if (points.length === 0) return null
@@ -285,20 +380,18 @@ export function TrendChart({
             )
           })}
 
-          {points.map((point, index) =>
-            index % geom.labelEvery === 0 || index === points.length - 1 ? (
-              <text
-                key={`label-${point.label}`}
-                x={geom.x(index)}
-                y={height - 8}
-                textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}
-                fontSize='10'
-                fill={palette.chartAxis}
-              >
-                {point.label}
-              </text>
-            ) : null,
-          )}
+          {geom.labelBoxes.map(({ index }) => (
+            <text
+              key={`label-${points[index]!.label}`}
+              x={geom.x(index)}
+              y={height - 8}
+              textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}
+              fontSize={LABEL_FONT_SIZE}
+              fill={palette.chartAxis}
+            >
+              {points[index]!.label}
+            </text>
+          ))}
         </svg>
         )}
       </Box>
