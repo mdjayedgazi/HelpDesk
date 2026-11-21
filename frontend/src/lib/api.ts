@@ -52,6 +52,17 @@ import type {
  */
 const API_BASE = resolveApiBase(import.meta.env.VITE_API_URL, import.meta.env.PROD)
 
+/**
+ * Default per-request timeout.
+ *
+ * A hung connection (dead tunnel, sleeping backend that never wakes) would
+ * otherwise leave a mutation pending forever and the UI stuck on a spinner.
+ * Uploads are exempt because a legitimate multi-megabyte transfer can take
+ * longer than a simple JSON call; callers can override either value.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 20_000
+export const DEFAULT_UPLOAD_TIMEOUT_MS = 120_000
+
 export type TokenGetter = () => Promise<string | null>
 
 export interface FieldError {
@@ -172,6 +183,17 @@ export interface RequestOptions {
   signal?: AbortSignal
   /** Raw multipart payload; takes precedence over `body`. */
   formData?: FormData
+  /**
+   * Extra request headers. Used for protocol headers such as
+   * `Idempotency-Key`; authorization and content type are always set here.
+   */
+  headers?: Record<string, string>
+  /**
+   * Per-request timeout in milliseconds. `0` disables the timeout. Defaults to
+   * `DEFAULT_UPLOAD_TIMEOUT_MS` for multipart uploads and
+   * `DEFAULT_REQUEST_TIMEOUT_MS` otherwise.
+   */
+  timeoutMs?: number
 }
 
 export interface ApiClient {
@@ -191,14 +213,14 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
   const url = (path: string) => `${API_BASE}${path}`
 
   async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const { method = 'GET', body, query, signal, formData } = options
+    const { method = 'GET', body, query, signal, formData, timeoutMs } = options
 
     const token = await getToken()
     if (!token) {
       throw new ApiError(401, defaultMessageForStatus(401))
     }
 
-    const headers = new Headers()
+    const headers = new Headers(options.headers)
     headers.set('Accept', 'application/json')
     headers.set('Authorization', `Bearer ${token}`)
 
@@ -210,20 +232,52 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
       payload = JSON.stringify(body)
     }
 
+    const effectiveTimeout =
+      timeoutMs ?? (formData ? DEFAULT_UPLOAD_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS)
+
+    // Combine the caller's signal (e.g. React Query cancellation) with our
+    // timeout so either one can abort the fetch, while still rejecting with a
+    // plain AbortError the caller can recognize.
+    const controller = new AbortController()
+    let timedOut = false
+    const onExternalAbort = () => controller.abort()
+
+    if (signal) {
+      if (signal.aborted) controller.abort()
+      else signal.addEventListener('abort', onExternalAbort, { once: true })
+    }
+
+    const timer =
+      effectiveTimeout > 0
+        ? setTimeout(() => {
+            timedOut = true
+            controller.abort()
+          }, effectiveTimeout)
+        : undefined
+
     let response: Response
     try {
       response = await fetch(url(`${path}${buildQuery(query)}`), {
         method,
         headers,
         body: payload,
-        signal,
+        signal: controller.signal,
         credentials: 'omit',
       })
     } catch (error) {
+      if (timedOut) {
+        throw new ApiError(
+          0,
+          'The HelpDesk server took too long to respond. Please try again.',
+        )
+      }
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw error
       }
       throw new ApiError(0, 'Could not reach the HelpDesk server. Check your connection.')
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onExternalAbort)
     }
 
     if (response.status === 204) {

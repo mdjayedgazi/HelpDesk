@@ -1,7 +1,7 @@
 import { Box, Button, Flex, SimpleGrid, Stack, Text } from '@chakra-ui/react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CheckCircle2, MessageSquare, Send } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -65,12 +65,29 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+/**
+ * A new idempotency key for one submission. The key is reused only for retries
+ * of the same submission, so the backend returns the original ticket instead of
+ * opening a duplicate. It is generated client-side and bounded to a safe,
+ * header-friendly alphabet (see the backend's `_IDEMPOTENCY_KEY_PATTERN`).
+ */
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+}
+
 export function NewTicketPage() {
   const me = useMe()
   const createTicket = useCreateTicket()
   // The saved ticket, once the backend has confirmed it. Switches the page to
   // the confirmation view with the ticket number and a link to the details.
   const [created, setCreated] = useState<Ticket | null>(null)
+  // The key is stable across retries of an unchanged submission (so a lost
+  // response cannot create a duplicate) and is discarded once the ticket
+  // exists or the user changes the payload.
+  const idempotencyRef = useRef<{ key: string; snapshot: string } | null>(null)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -85,13 +102,24 @@ export function NewTicketPage() {
 
   const onSubmit = form.handleSubmit(async (data) => {
     try {
-      const ticket = await createTicket.mutateAsync({
+      const payload = {
         title: data.title,
         description: data.description,
         category: data.category as TicketCategory,
         impact: data.impact as ImpactLevel,
         contact_phone: data.contact_phone ? data.contact_phone : undefined,
+      }
+      // Reuse the key only when the payload is identical to the one it was
+      // minted for; an edited form is a new intent, not a retry.
+      const snapshot = JSON.stringify(payload)
+      if (idempotencyRef.current?.snapshot !== snapshot) {
+        idempotencyRef.current = { key: newIdempotencyKey(), snapshot }
+      }
+      const ticket = await createTicket.mutateAsync({
+        ...payload,
+        idempotencyKey: idempotencyRef.current.key,
       })
+      idempotencyRef.current = null
       toaster.create({
         title: `Ticket #${ticket.ticket_number} created`,
         description: 'We will keep you posted as it progresses.',

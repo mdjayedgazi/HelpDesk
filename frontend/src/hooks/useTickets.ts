@@ -60,12 +60,21 @@ export function useTicketContact(ticketId: string | undefined, enabled: boolean)
   })
 }
 
+export type CreateTicketInput = TicketCreateInput & {
+  /** Optional idempotency key so a retried submit cannot open a duplicate. */
+  idempotencyKey?: string
+}
+
 export function useCreateTicket() {
   const api = useApi()
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: TicketCreateInput) =>
-      api.request<Ticket>(endpoints.tickets(), { method: 'POST', body: input }),
+    mutationFn: ({ idempotencyKey, ...input }: CreateTicketInput) =>
+      api.request<Ticket>(endpoints.tickets(), {
+        method: 'POST',
+        body: input,
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all })
     },

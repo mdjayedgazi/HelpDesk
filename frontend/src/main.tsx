@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 
 import { App } from './App.tsx'
+import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { Toaster } from './components/Toaster.tsx'
 import { queryClient } from './lib/queryClient.ts'
 import { ThemeProvider } from './theme/colorMode.tsx'
@@ -56,7 +57,9 @@ function Root() {
         <ChakraProvider value={system}>
           <ThemeProvider>
             <BrowserRouter>
-              <App />
+              <ErrorBoundary>
+                <App />
+              </ErrorBoundary>
               <Toaster />
             </BrowserRouter>
           </ThemeProvider>
