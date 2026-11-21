@@ -78,7 +78,17 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
+    # `Idempotency-Key` is sent by the frontend on ticket creation. Starlette
+    # answers a cross-origin preflight with 400 unless every requested request
+    # header is listed here, so omitting it breaks ticket creation whenever the
+    # web app and API are on different origins (the normal production layout).
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "X-Request-ID",
+        "Idempotency-Key",
+    ],
     expose_headers=[
         "X-Request-ID",
         "Retry-After",

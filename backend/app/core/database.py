@@ -67,13 +67,15 @@ def _postgres_connect_args(url: str) -> dict[str, object]:
         args["prepare_threshold"] = None
         return args
 
-    options: list[str] = []
-    if settings.DB_STATEMENT_TIMEOUT_MS > 0:
-        options.append(f"-c statement_timeout={settings.DB_STATEMENT_TIMEOUT_MS}")
-    if settings.DB_LOCK_TIMEOUT_MS > 0:
-        options.append(f"-c lock_timeout={settings.DB_LOCK_TIMEOUT_MS}")
-    if options:
-        args["options"] = " ".join(options)
+    # ``0`` means "no client-side limit", but it is still sent explicitly.
+    # PostgreSQL inherits a role/database ``statement_timeout`` or
+    # ``lock_timeout`` when the client does not override it, so omitting the
+    # option would not actually disable a server-side default.
+    options = [
+        f"-c statement_timeout={max(settings.DB_STATEMENT_TIMEOUT_MS, 0)}",
+        f"-c lock_timeout={max(settings.DB_LOCK_TIMEOUT_MS, 0)}",
+    ]
+    args["options"] = " ".join(options)
     return args
 
 

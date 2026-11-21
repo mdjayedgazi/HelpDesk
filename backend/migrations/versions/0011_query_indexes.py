@@ -21,12 +21,17 @@ duplicates an existing index:
   (they are not identical indexes).
 
 The indexes are not created concurrently: the tables are support-desk sized. On
-a very large table, create the equivalents with ``CREATE INDEX CONCURRENTLY``
-first. This revision must not be applied twice.
+a very large table an operator may create the equivalents with ``CREATE INDEX
+CONCURRENTLY`` (or under a different name) before running this revision, because
+``CONCURRENTLY`` cannot run inside Alembic's transaction. ``upgrade`` therefore
+checks the live catalog and skips a column set that is already indexed, so the
+in-place and the pre-created path both converge and neither fails on a
+duplicate name.
 """
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -45,8 +50,26 @@ _INDEXES: tuple[tuple[str, str, list[str]], ...] = (
 )
 
 
+def _indexed_columns(table: str) -> dict[tuple[str, ...], list[str]]:
+    """Map each existing index's column tuple to its index name(s)."""
+    existing: dict[tuple[str, ...], list[str]] = {}
+    inspector = sa.inspect(op.get_bind())
+    for index in inspector.get_indexes(table):
+        columns = tuple(index.get("column_names") or ())
+        if columns:
+            existing.setdefault(columns, []).append(index.get("name") or "")
+    return existing
+
+
 def upgrade() -> None:
     for name, table, columns in _INDEXES:
+        already_indexed = _indexed_columns(table)
+        if tuple(columns) in already_indexed:
+            # An equivalent index already exists (pre-created concurrently, or
+            # applied under another name by an operator). Do not create a
+            # duplicate: PostgreSQL would raise a duplicate-name error for the
+            # same name and a redundant index otherwise.
+            continue
         op.create_index(name, table, columns)
 
 

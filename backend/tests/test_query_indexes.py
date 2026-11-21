@@ -73,3 +73,42 @@ def test_no_duplicate_index_on_the_same_columns():
                 f"{model.__tablename__} has two indexes on {columns}"
             )
             seen.add(columns)
+
+
+def test_migration_0011_skips_an_already_indexed_column_set(monkeypatch):
+    """An operator may pre-create the index concurrently (or under another name).
+
+    ``CREATE INDEX CONCURRENTLY`` cannot run inside Alembic's transaction, so
+    the documented large-table path pre-creates it. ``upgrade`` must then not
+    attempt a duplicate create, which would fail on the existing name.
+    """
+    from importlib import import_module
+
+    migration = import_module("migrations.versions.0011_query_indexes")
+
+    created: list[tuple[str, str, list[str]]] = []
+
+    class _Inspector:
+        def get_indexes(self, _table):
+            return [{"name": "pre_created", "column_names": ["created_at"]}]
+
+    class _Bind:
+        pass
+
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: _Inspector())
+    monkeypatch.setattr(migration.op, "get_bind", lambda: _Bind())
+
+    def _record(name, table, columns, **_kwargs):
+        created.append((name, table, columns))
+
+    monkeypatch.setattr(migration.op, "create_index", _record)
+
+    migration.upgrade()
+
+    created_tables = {table for _name, table, _columns in created}
+    # ``tickets.created_at`` is already indexed, so it is skipped...
+    assert "tickets" not in created_tables
+    # ...while the still-missing notification index is created.
+    assert ("ix_notifications_recipient_created_at", "notifications") in {
+        (name, table) for name, table, _columns in created
+    }

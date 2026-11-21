@@ -28,7 +28,13 @@ def test_direct_endpoint_sets_statement_and_lock_timeouts(monkeypatch):
     assert "prepare_threshold" not in args
 
 
-def test_zero_disables_the_limit(monkeypatch):
+def test_zero_sends_explicit_zero_to_override_server_defaults(monkeypatch):
+    """``0`` must be sent, not omitted.
+
+    A database role with a server-side ``statement_timeout`` would otherwise
+    keep that limit because PostgreSQL only replaces it when the client sends
+    an explicit value.
+    """
     args = _connect_args(
         monkeypatch,
         "postgresql+psycopg://u:p@db.example.com:5432/helpdesk",
@@ -36,7 +42,7 @@ def test_zero_disables_the_limit(monkeypatch):
         DB_LOCK_TIMEOUT_MS=0,
     )
 
-    assert "options" not in args
+    assert args["options"] == "-c statement_timeout=0 -c lock_timeout=0"
     assert "connect_timeout" in args
 
 

@@ -113,3 +113,37 @@ def test_production_rejects_a_path_bearing_origin():
             MALWARE_SCAN_ENABLED=False,
             ATTACHMENTS_ENABLED=False,
         )
+
+
+def test_cors_preflight_allows_the_idempotency_key_header():
+    """Ticket creation sends ``Idempotency-Key``; the preflight must allow it.
+
+    Starlette answers a cross-origin preflight with 400 unless every requested
+    header is listed in ``allow_headers``. That regression made ticket creation
+    fail whenever the browser origin differed from the API origin, which is the
+    normal production topology.
+    """
+    from fastapi.middleware.cors import CORSMiddleware
+    from starlette.testclient import TestClient
+
+    from app.main import app
+
+    cors = next(
+        middleware
+        for middleware in app.user_middleware
+        if middleware.cls is CORSMiddleware
+    )
+    assert "Idempotency-Key" in cors.kwargs["allow_headers"]
+
+    client = TestClient(app)
+    response = client.options(
+        "/api/v1/tickets",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type,idempotency-key",
+        },
+    )
+    assert response.status_code == 200
+    allowed = response.headers["access-control-allow-headers"].lower()
+    assert "idempotency-key" in allowed
