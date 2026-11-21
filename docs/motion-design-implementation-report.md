@@ -394,13 +394,15 @@ screens could not be captured from the live app — see §23.
 
 ## 21. Commit hash
 
-Recorded in the pull request description (the hash cannot include itself).
+`ea5e2e8ab8d09e262e85de3deac43abb69bb16a2` (`ea5e2e8`)
+feat(frontend): add premium motion and animated data visualization
 
 ---
 
 ## 22. Pull request URL
 
-Recorded in the final hand-off message and in the PR itself.
+https://github.com/mdjayedgazi/HelpDesk/pull/23
+(`feat/helpdesk-motion-visual-polish` → `main`, open, mergeable, not merged)
 
 ---
 
