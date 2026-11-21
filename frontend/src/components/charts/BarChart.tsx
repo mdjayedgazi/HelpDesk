@@ -16,11 +16,11 @@ import { ChartDataTable } from './ChartCard.tsx'
  * are simple rectangles that reflow better in a responsive column.
  *
  * On first appearance each bar grows from zero to exactly `value / max` using
- * `transform: scaleX`, so the final geometry is the real proportion. A bar with
- * a non-zero value keeps a 4% minimum width so a count of 1 is still visible;
- * the exact number and share are always printed beside it, so that minimum can
- * never be mistaken for the datum. Rows are staggered by a few tens of
- * milliseconds and the animation never repeats.
+ * `transform: scaleX`, so the final geometry is the real proportion — with no
+ * minimum width. A 1-in-100 value is drawn as 1% of the track; it stays legible
+ * through the exact count and share printed beside the row, never through
+ * falsified geometry. Rows are staggered by a few tens of milliseconds and the
+ * animation never repeats.
  */
 
 export interface BarItem {

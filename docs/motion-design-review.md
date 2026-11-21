@@ -330,10 +330,11 @@ The fill colour never changes mid-animation, and the resting width is exactly
 ### I1. Bar chart
 
 Each bar grows from `scaleX(0)` to exactly `value / max`, with a per-row stagger.
-A non-zero count keeps a 4% minimum visible width, but the exact number and share
-are always printed beside the row, so the minimum can never be misread as the
-datum. Tests assert `scaleX(0.25)` and `scaleX(1)` for values `2` and `8` against
-max `8`, and that the printed shares are `20%` and `80%`.
+There is **no minimum width** (corrected in the QA pass, see N3): a 1-in-100
+value occupies 1% of the track, and legibility comes from the exact count and
+share printed beside the row. Tests assert the ratios directly — 1/100 → 0.01,
+2/100 → 0.02, 30/100 → 0.30, 100/100 → 1.00, 1/99 → 0.0101 — plus the printed
+`20%`/`80%` shares for a 2-and-8 split.
 
 ### I2. Donut chart
 
