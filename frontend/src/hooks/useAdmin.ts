@@ -6,6 +6,7 @@ import type {
   AdminDashboard,
   AdminUserUpdateInput,
   Role,
+  SupportAnalytics,
   User,
   UserListParams,
 } from '../lib/types.ts'
@@ -17,6 +18,24 @@ export function useAdminDashboard(enabled = true) {
     queryKey: queryKeys.admin.dashboard,
     queryFn: () => api.request<AdminDashboard>(endpoints.adminDashboard()),
     enabled,
+  })
+}
+
+/**
+ * Aggregated support analytics for the admin/owner dashboard.
+ *
+ * The payload is computed server-side from real ticket rows. A short stale time
+ * keeps the dashboard current without hammering the API; the query is only
+ * enabled for callers that pass `true` (the dashboard), so non-admin routes pay
+ * nothing.
+ */
+export function useSupportAnalytics(enabled = true) {
+  const api = useApi()
+  return useQuery({
+    queryKey: queryKeys.admin.analytics,
+    queryFn: () => api.request<SupportAnalytics>(endpoints.adminAnalytics()),
+    enabled,
+    staleTime: 60_000,
   })
 }
 

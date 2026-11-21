@@ -54,11 +54,63 @@
   --hd-shadow-xl: 0 40px 90px -40px rgba(17, 17, 17, 0.38);
   --hd-shadow-panel: 0 30px 70px -35px rgba(17, 17, 17, 0.32);
 
+  /* Semantic colour -------------------------------------------------------
+   * Colour is reserved for meaning: it never decorates a neutral surface.
+   * Each family carries a foreground (text/icon/line/segment) and a soft tint
+   * for badges and chart fills. Values are chosen to keep >= 4.5:1 contrast on
+   * the matching surface in both themes, and are always paired with an icon or
+   * a text label so colour is never the only signal.
+   * --------------------------------------------------------------------- */
+  --hd-info: #1d4ed8;
+  --hd-info-soft: #eef2ff;
+  --hd-info-border: #c7d2fe;
+
+  --hd-success: #15803d;
+  --hd-success-soft: #ecfdf3;
+  --hd-success-border: #bbf7d0;
+
+  --hd-warning: #a16207;
+  --hd-warning-soft: #fffbeb;
+  --hd-warning-border: #fde68a;
+
+  --hd-danger: #b91c1c;
+  --hd-danger-soft: #fef2f2;
+  --hd-danger-border: #fecaca;
+
+  /* Chart palette. Ordered by intent, not by hue: neutral first, then the
+   * semantic families so a legend reads like the rest of the product. */
+  --hd-chart-1: #111111;
+  --hd-chart-1-soft: rgba(17, 17, 17, 0.09);
+  --hd-chart-2: #1d4ed8;
+  --hd-chart-2-soft: rgba(29, 78, 216, 0.12);
+  --hd-chart-3: #0e7490;
+  --hd-chart-3-soft: rgba(14, 116, 144, 0.12);
+  --hd-chart-4: #a16207;
+  --hd-chart-4-soft: rgba(161, 98, 7, 0.14);
+  --hd-chart-5: #b91c1c;
+  --hd-chart-5-soft: rgba(185, 28, 28, 0.12);
+  --hd-chart-grid: rgba(17, 17, 17, 0.07);
+  --hd-chart-axis: #6b6b6b;
+
+  /* Motion ---------------------------------------------------------------
+   * One easing vocabulary and three durations. Micro interactions use
+   * --hd-dur-1, component transitions --hd-dur-2, layout transitions
+   * --hd-dur-3. `prefers-reduced-motion` zeroes all of them globally.
+   * --------------------------------------------------------------------- */
+  --hd-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --hd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --hd-dur-1: 140ms;
+  --hd-dur-2: 200ms;
+  --hd-dur-3: 320ms;
+
   /* Layout --------------------------------------------------------------- */
   --hd-nav-height: 64px;
   --hd-content-max: 1200px;
   --hd-wide-max: 1440px;
   --hd-reading-max: 720px;
+
+  /* The logo plate tone. Themed below so it flips with the rest of the UI. */
+  --hd-logo-plate: rgba(11, 11, 13, 0.74);
 }
 
 html.dark {
@@ -103,6 +155,40 @@ html.dark {
   --hd-shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.75);
   --hd-shadow-xl: 0 40px 90px -40px rgba(0, 0, 0, 0.8);
   --hd-shadow-panel: 0 30px 70px -35px rgba(0, 0, 0, 0.8);
+
+  /* Semantic colour — lifted for dark surfaces, same meaning. ------------ */
+  --hd-info: #93b4ff;
+  --hd-info-soft: rgba(29, 78, 216, 0.18);
+  --hd-info-border: rgba(147, 180, 255, 0.32);
+
+  --hd-success: #4ade80;
+  --hd-success-soft: rgba(21, 128, 61, 0.18);
+  --hd-success-border: rgba(74, 222, 128, 0.3);
+
+  --hd-warning: #fbbf24;
+  --hd-warning-soft: rgba(161, 98, 7, 0.2);
+  --hd-warning-border: rgba(251, 191, 36, 0.3);
+
+  --hd-danger: #f87171;
+  --hd-danger-soft: rgba(185, 28, 28, 0.2);
+  --hd-danger-border: rgba(248, 113, 113, 0.32);
+
+  /* Chart palette — brighter series so they read on #0b0b0d. */
+  --hd-chart-1: #e6e6e8;
+  --hd-chart-1-soft: rgba(230, 230, 232, 0.1);
+  --hd-chart-2: #93b4ff;
+  --hd-chart-2-soft: rgba(147, 180, 255, 0.14);
+  --hd-chart-3: #67e8f9;
+  --hd-chart-3-soft: rgba(103, 232, 249, 0.14);
+  --hd-chart-4: #fbbf24;
+  --hd-chart-4-soft: rgba(251, 191, 36, 0.14);
+  --hd-chart-5: #f87171;
+  --hd-chart-5-soft: rgba(248, 113, 113, 0.14);
+  --hd-chart-grid: rgba(245, 245, 245, 0.08);
+  --hd-chart-axis: #94949a;
+
+  /* The logo plate lifts slightly above the page in dark mode. */
+  --hd-logo-plate: rgba(245, 245, 245, 0.14);
 }
 
 /*
@@ -197,11 +283,11 @@ html {
 }
 
 .hd-fade-up {
-  animation: hd-fade-up 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation: hd-fade-up var(--hd-dur-3) var(--hd-ease);
 }
 
 .hd-menu-in {
-  animation: hd-menu-in 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation: hd-menu-in var(--hd-dur-2) var(--hd-ease);
 }
 
 .hd-float {
@@ -216,12 +302,33 @@ html {
   animation: hd-pulse 2.4s ease-in-out infinite;
 }
 
+/* Chart polish ------------------------------------------------------------
+ * Charts fade in once on mount and grow their geometry from the baseline.
+ * Both are pure CSS so disabling them cannot leave the chart invisible.
+ * ---------------------------------------------------------------------- */
+@keyframes hd-chart-draw {
+  from {
+    opacity: 0;
+    transform: scaleY(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hd-chart-enter {
+  animation: hd-chart-draw var(--hd-dur-3) var(--hd-ease-out);
+  transform-origin: bottom;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hd-float,
   .hd-float-slow,
   .hd-pulse,
   .hd-fade-up,
-  .hd-menu-in {
+  .hd-menu-in,
+  .hd-chart-enter {
     animation: none !important;
   }
 }

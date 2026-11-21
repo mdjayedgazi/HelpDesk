@@ -12,16 +12,18 @@ import {
 import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 import { Reveal } from '../Reveal.tsx'
-import { StatusDot, Eyebrow, Panel, SectionLead, SectionTitle } from './primitives.tsx'
+import { Eyebrow, Panel, SectionLead, SectionTitle } from './primitives.tsx'
+import { tones } from '../../theme/statusTone.ts'
 
 /* -------------------------------------------------------------------------- */
 /* Illustrative mini-visuals                                                  */
 /* -------------------------------------------------------------------------- */
 
 const sampleQueue = [
-  { ref: 'HD-1042', subject: 'Refund missing from last invoice', status: 'In progress', filled: true },
-  { ref: 'HD-1039', subject: 'Reset password link has expired', status: 'Open', filled: true },
-  { ref: 'HD-1031', subject: 'Dashboard slow after CSV export', status: 'Waiting on customer', filled: false },
+  { ref: 'HD-1042', subject: 'Refund missing from last invoice', status: 'In progress', tone: 'info' as const },
+  { ref: 'HD-1039', subject: 'Reset password link has expired', status: 'Open', tone: 'info' as const },
+  { ref: 'HD-1031', subject: 'Dashboard slow after CSV export', status: 'Waiting on customer', tone: 'warning' as const },
+  { ref: 'HD-1027', subject: 'Add three seats for design team', status: 'Resolved', tone: 'success' as const },
 ]
 
 function TicketQueueVisual() {
@@ -38,7 +40,7 @@ function TicketQueueVisual() {
           borderColor={palette.borderSubtle}
           bg={index === 0 ? palette.surfaceMuted : 'transparent'}
         >
-          <StatusDot filled={row.filled} />
+          <Box boxSize='1.5' borderRadius='full' bg={tones[row.tone].solid} flexShrink={0} aria-hidden />
           <Box minW='0' flex='1'>
             <Text fontSize='xs' color={palette.text} truncate>
               {row.subject}

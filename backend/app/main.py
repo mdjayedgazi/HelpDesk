@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import (
     account_requests,
     admin,
+    analytics,
     attachments,
     comments,
     internal_messages,
@@ -106,6 +107,7 @@ app.include_router(ticket_history.router)
 app.include_router(ticket_feedback.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)
+app.include_router(analytics.router)
 app.include_router(staff_messages.router)
 app.include_router(account_requests.router)
 app.include_router(internal_messages.router)

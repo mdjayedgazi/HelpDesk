@@ -10,6 +10,15 @@ function isInternal(comment: Comment | StaffComment): comment is StaffComment {
   return 'is_internal' in comment && comment.is_internal
 }
 
+/**
+ * The ticket conversation.
+ *
+ * Public replies and internal notes must never be confused at a glance, so an
+ * internal note gets three independent signals: a lock icon, an explicit
+ * "Internal note" label and a tinted, inset surface. The customer thread never
+ * receives internal notes from the API, so this styling is staff-only in
+ * practice but safe either way.
+ */
 export function CommentThread({
   comments,
   viewerId,
@@ -36,8 +45,14 @@ export function CommentThread({
             key={comment.id}
             gap='3.5'
             py='5'
+            px={internal ? '3.5' : '0'}
+            my={internal ? '1' : '0'}
             borderTopWidth={index === 0 ? '0' : '1px'}
-            borderColor={palette.borderSubtle}
+            borderTopColor={internal ? 'transparent' : palette.borderSubtle}
+            bg={internal ? palette.surfaceMuted : 'transparent'}
+            borderLeftWidth={internal ? '2px' : '0'}
+            borderLeftColor={palette.borderStrong}
+            borderRadius={internal ? 'l2' : '0'}
           >
             <UserAvatar
               name={authorName}
@@ -46,12 +61,12 @@ export function CommentThread({
             />
             <Box flex='1' minW='0'>
               <Flex align='center' gap='2' wrap='wrap'>
-                <Text fontSize='sm' fontWeight='medium' color={palette.text}>
+                <Text fontSize='sm' fontWeight='semibold' color={palette.text}>
                   {authorName}
                 </Text>
                 {isOwn ? (
                   <Text fontSize='2xs' color={palette.textFaint}>
-                    author
+                    you
                   </Text>
                 ) : null}
                 <Text fontSize='xs' color={palette.textFaint}>
@@ -64,13 +79,14 @@ export function CommentThread({
                     px='1.5'
                     py='0.5'
                     borderRadius='full'
+                    bg={palette.surface}
                     borderWidth='1px'
                     borderColor={palette.borderStrong}
-                    borderStyle='dashed'
                     color={palette.textSecondary}
+                    title='Only the support team can see this note'
                   >
                     <Lock size={10} aria-hidden />
-                    <Text fontSize='2xs' fontWeight='medium'>
+                    <Text fontSize='2xs' fontWeight='semibold' letterSpacing='0.02em'>
                       Internal note
                     </Text>
                   </Flex>
@@ -82,7 +98,7 @@ export function CommentThread({
                 color={palette.text}
                 whiteSpace='pre-wrap'
                 wordBreak='break-word'
-                lineHeight='1.6'
+                lineHeight='1.65'
               >
                 {comment.body}
               </Text>

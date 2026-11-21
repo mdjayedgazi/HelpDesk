@@ -392,6 +392,64 @@ export interface AdminDashboard {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Support analytics (admin/owner dashboard)                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface AnalyticsTotals {
+  total_tickets: number
+  /** OPEN + IN_PROGRESS — the live, unaddressed workload. */
+  open_tickets: number
+  unassigned_tickets: number
+  resolved_tickets: number
+  closed_tickets: number
+  /** URGENT tickets that are still OPEN or IN_PROGRESS. */
+  urgent_open_tickets: number
+  total_users: number
+  active_agents: number
+  active_admins: number
+}
+
+export interface DailyTicketPoint {
+  /** ISO calendar date, `YYYY-MM-DD`. */
+  day: string
+  created: number
+  resolved: number
+}
+
+export interface AgentWorkload {
+  user_id: string
+  full_name: string
+  image_url: string | null
+  active_tickets: number
+  urgent_tickets: number
+  resolved_tickets: number
+}
+
+/**
+ * Aggregated support analytics, computed server-side from real ticket rows.
+ *
+ * Every field is a real aggregate; nothing is estimated. Metrics the backend
+ * cannot compute (for example SLA compliance) are absent rather than faked.
+ */
+export interface SupportAnalytics {
+  generated_at: string
+  window_days: number
+  totals: AnalyticsTotals
+  tickets_by_status: Record<TicketStatus, number>
+  tickets_by_priority: Record<TicketPriority, number>
+  tickets_by_category: Record<TicketCategory, number>
+  daily: DailyTicketPoint[]
+  /** Active tickets whose last update is older than seven days. */
+  aging_over_7_days: number
+  /** Unassigned active tickets older than 24 hours. */
+  unassigned_over_24h: number
+  /** Active tickets blocked on the customer (WAITING_ON_CUSTOMER). */
+  answered_without_resolution: number
+  agent_workload: AgentWorkload[]
+}
+
+
+/* -------------------------------------------------------------------------- */
 /* Request payloads                                                           */
 /* -------------------------------------------------------------------------- */
 

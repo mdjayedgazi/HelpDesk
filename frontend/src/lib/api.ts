@@ -30,6 +30,7 @@ import type {
   StaffConversationDetail,
   StaffConversationListParams,
   StaffMessage,
+  SupportAnalytics,
   Ticket,
   TicketContact,
   TicketCreateInput,
@@ -364,6 +365,7 @@ export const endpoints = {
   accountRequestStatus: (id: string) => `${P}/account-requests/${id}/status`,
 
   adminDashboard: () => `${P}/admin/dashboard`,
+  adminAnalytics: () => `${P}/admin/analytics`,
   adminAgents: () => `${P}/admin/agents`,
 } as const
 
@@ -435,6 +437,7 @@ export interface HelpDeskApi {
   ) => Promise<AccountRequest>
 
   getAdminDashboard: () => Promise<AdminDashboard>
+  getSupportAnalytics: () => Promise<SupportAnalytics>
   listAgents: () => Promise<User[]>
   listUsers: (params?: UserListParams) => Promise<User[]>
   getUser: (id: string) => Promise<User>

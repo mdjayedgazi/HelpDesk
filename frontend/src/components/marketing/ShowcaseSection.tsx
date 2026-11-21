@@ -16,6 +16,7 @@ import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 import { Container } from '../Container.tsx'
 import { Eyebrow, Panel, SectionLead, SectionTitle } from './primitives.tsx'
+import { tones } from '../../theme/statusTone.ts'
 
 /* -------------------------------------------------------------------------- */
 /* Illustrative visuals                                                       */
@@ -25,15 +26,18 @@ const board = [
   {
     title: 'Open',
     cards: [
-      { ref: 'HD-1039', subject: 'Reset password link expired', tone: 'High' },
-      { ref: 'HD-1036', subject: 'Cannot connect the mobile app', tone: 'Normal' },
+      { ref: 'HD-1039', subject: 'Reset password link expired', tone: 'warning' as const, toneLabel: 'High' },
+      { ref: 'HD-1036', subject: 'Cannot connect the mobile app', tone: 'neutral' as const, toneLabel: 'Normal' },
     ],
   },
   {
     title: 'In progress',
-    cards: [{ ref: 'HD-1042', subject: 'Refund missing from invoice', tone: 'High' }],
+    cards: [{ ref: 'HD-1042', subject: 'Refund missing from invoice', tone: 'warning' as const, toneLabel: 'High' }],
   },
-  { title: 'Resolved', cards: [{ ref: 'HD-1027', subject: 'Add three seats', tone: 'Low' }] },
+  {
+    title: 'Resolved',
+    cards: [{ ref: 'HD-1027', subject: 'Add three seats', tone: 'success' as const, toneLabel: 'Low' }],
+  },
 ]
 
 function TicketsVisual() {
@@ -66,6 +70,8 @@ function TicketsVisual() {
                 borderRadius='l2'
                 p='2.5'
                 boxShadow={palette.shadowSm}
+                borderLeftWidth='2px'
+                borderLeftColor={tones[card.tone].solid}
               >
                 <Text fontSize='2xs' color={palette.textFaint}>
                   {card.ref}
@@ -73,9 +79,9 @@ function TicketsVisual() {
                 <Text fontSize='xs' color={palette.text} mt='1' lineHeight='1.4'>
                   {card.subject}
                 </Text>
-                <Flex align='center' gap='1.5' mt='2' color={palette.textMuted} fontSize='2xs'>
-                  <ArrowUp size={11} strokeWidth={2.2} aria-hidden />
-                  {card.tone} priority
+                <Flex align='center' gap='1.5' mt='2' fontSize='2xs' color={palette.textMuted}>
+                  <ArrowUp size={11} strokeWidth={2.2} color={tones[card.tone].solid} aria-hidden />
+                  {card.toneLabel} priority
                 </Flex>
               </Box>
             ))}

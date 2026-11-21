@@ -32,6 +32,33 @@ describe('role navigation', () => {
     expect(labels).toContain('My tickets')
   })
 
+  it('gives admins a single dashboard destination (no duplicate admin overview)', () => {
+    for (const role of ['admin', 'owner'] as const) {
+      const targets = navSectionsForRole(role).flatMap((section) =>
+        section.items.map((item) => item.to),
+      )
+      expect(targets.filter((target) => target === '/dashboard')).toHaveLength(1)
+      expect(targets).not.toContain('/admin')
+    }
+  })
+
+  it('keeps the same destinations for admins that existed before the nav consolidation', () => {
+    const targets = navSectionsForRole('admin').flatMap((section) =>
+      section.items.map((item) => item.to),
+    )
+    expect(targets).toEqual(
+      expect.arrayContaining([
+        '/dashboard',
+        '/tickets',
+        '/account-requests',
+        '/admin/users',
+        '/messages',
+        '/notifications',
+        '/profile',
+      ]),
+    )
+  })
+
   it('gives admins the user-management destination and owner inbox label', () => {
     const ownerLabels = navSectionsForRole('owner').flatMap((section) =>
       section.items.map((item) => item.label),

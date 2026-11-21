@@ -5,12 +5,22 @@ import { palette } from '../theme/palette.ts'
 import type { NavSection } from './nav.ts'
 import { Logo } from './Logo.tsx'
 
+/**
+ * Sidebar navigation.
+ *
+ * Structure is intentional: sections are labelled, items carry a small icon and
+ * the active item is marked by a vertical accent plus an ink-on-surface fill —
+ * three independent signals so it survives grayscale and low contrast. Items
+ * use a real `NavLink` so the browser exposes the current page correctly.
+ */
 export function SidebarNav({
   sections,
   onNavigate,
+  footer,
 }: {
   sections: NavSection[]
   onNavigate?: () => void
+  footer?: React.ReactNode
 }) {
   return (
     <Flex direction='column' height='100%' minH='0'>
@@ -28,7 +38,7 @@ export function SidebarNav({
       <Box flex='1' overflowY='auto' py='4' px='3'>
         <Stack gap='6'>
           {sections.map((section) => (
-            <Stack key={section.label} gap='1'>
+            <Stack key={section.label} gap='0.5'>
               <Text
                 px='3'
                 pb='1'
@@ -50,19 +60,43 @@ export function SidebarNav({
                 >
                   {({ isActive }) => (
                     <Flex
+                      position='relative'
                       align='center'
-                      gap='3'
+                      gap='2.5'
                       px='3'
                       py='2'
                       borderRadius='l2'
                       color={isActive ? palette.text : palette.textSecondary}
-                      bg={isActive ? palette.hover : 'transparent'}
-                      fontWeight={isActive ? 'medium' : 'regular'}
-                      transition='background 0.16s ease, color 0.16s ease'
+                      bg={isActive ? palette.surfaceMuted : 'transparent'}
+                      fontWeight={isActive ? 'semibold' : 'regular'}
+                      transition='background var(--hd-dur-1) var(--hd-ease), color var(--hd-dur-1) var(--hd-ease)'
                       _hover={{ bg: palette.hover, color: palette.text }}
+                      _focusVisible={{
+                        outline: '2px solid',
+                        outlineColor: palette.focus,
+                        outlineOffset: '2px',
+                      }}
                     >
-                      <item.icon size={16} strokeWidth={1.9} aria-hidden />
-                      <Text fontSize='sm'>{item.label}</Text>
+                      <Box
+                        aria-hidden
+                        position='absolute'
+                        left='0'
+                        top='50%'
+                        transform='translateY(-50%)'
+                        width='2px'
+                        height={isActive ? '16px' : '0'}
+                        borderRadius='full'
+                        bg={palette.ink}
+                        transition='height var(--hd-dur-1) var(--hd-ease)'
+                      />
+                      <item.icon
+                        size={16}
+                        strokeWidth={isActive ? 2.1 : 1.9}
+                        aria-hidden
+                      />
+                      <Text fontSize='sm' truncate>
+                        {item.label}
+                      </Text>
                     </Flex>
                   )}
                 </NavLink>
@@ -72,11 +106,17 @@ export function SidebarNav({
         </Stack>
       </Box>
 
-      <Box px='5' py='4' borderTopWidth='1px' borderColor={palette.borderSubtle}>
-        <Text fontSize='2xs' color={palette.textFaint} letterSpacing='0.02em'>
-          HelpDesk · Support workspace
-        </Text>
-      </Box>
+      {footer ? (
+        <Box px='5' py='4' borderTopWidth='1px' borderColor={palette.borderSubtle}>
+          {footer}
+        </Box>
+      ) : (
+        <Box px='5' py='4' borderTopWidth='1px' borderColor={palette.borderSubtle}>
+          <Text fontSize='2xs' color={palette.textFaint} letterSpacing='0.02em'>
+            HelpDesk · Support workspace
+          </Text>
+        </Box>
+      )}
     </Flex>
   )
 }
