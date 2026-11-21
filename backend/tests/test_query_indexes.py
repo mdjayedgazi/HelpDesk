@@ -95,8 +95,12 @@ def test_migration_0011_skips_an_already_indexed_column_set(monkeypatch):
     class _Bind:
         pass
 
+    class _Context:
+        as_sql = False
+
     monkeypatch.setattr(migration.sa, "inspect", lambda _bind: _Inspector())
     monkeypatch.setattr(migration.op, "get_bind", lambda: _Bind())
+    monkeypatch.setattr(migration.op, "get_context", lambda: _Context())
 
     def _record(name, table, columns, **_kwargs):
         created.append((name, table, columns))
@@ -112,3 +116,33 @@ def test_migration_0011_skips_an_already_indexed_column_set(monkeypatch):
     assert ("ix_notifications_recipient_created_at", "notifications") in {
         (name, table) for name, table, _columns in created
     }
+
+
+def test_migration_0011_renders_all_indexes_in_offline_mode(monkeypatch):
+    """``alembic upgrade --sql`` must still emit every index statement.
+
+    Offline mode has no connection, so the catalog inspection must be skipped
+    rather than attempted (which would raise and break SQL generation).
+    """
+    from importlib import import_module
+
+    migration = import_module("migrations.versions.0011_query_indexes")
+
+    created: list[str] = []
+
+    class _Context:
+        as_sql = True
+
+    monkeypatch.setattr(migration.op, "get_context", lambda: _Context())
+    monkeypatch.setattr(
+        migration.op,
+        "create_index",
+        lambda name, _table, _columns, **_kwargs: created.append(name),
+    )
+
+    migration.upgrade()
+
+    assert created == [
+        "ix_tickets_created_at",
+        "ix_notifications_recipient_created_at",
+    ]

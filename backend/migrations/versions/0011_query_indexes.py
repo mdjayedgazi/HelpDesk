@@ -51,7 +51,15 @@ _INDEXES: tuple[tuple[str, str, list[str]], ...] = (
 
 
 def _indexed_columns(table: str) -> dict[tuple[str, ...], list[str]]:
-    """Map each existing index's column tuple to its index name(s)."""
+    """Map each existing index's column tuple to its index name(s).
+
+    Offline mode (``alembic upgrade --sql``) renders statements without a
+    connection, so there is no catalog to inspect. In that mode every index is
+    emitted, which is the documented, reviewable SQL for a fresh database.
+    """
+    if op.get_context().as_sql:
+        return {}
+
     existing: dict[tuple[str, ...], list[str]] = {}
     inspector = sa.inspect(op.get_bind())
     for index in inspector.get_indexes(table):
