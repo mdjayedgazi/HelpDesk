@@ -4,6 +4,7 @@ import { Headset, ShieldCheck, Users, type LucideIcon } from 'lucide-react'
 import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 import { Reveal } from '../Reveal.tsx'
+import { stagger } from '../../theme/motion.ts'
 import { Eyebrow, Panel, SectionLead, SectionTitle } from './primitives.tsx'
 
 interface Layer {
@@ -41,7 +42,7 @@ export function SecuritySection() {
       borderColor={palette.border}
     >
       <Grid templateColumns={{ base: '1fr', lg: 'minmax(0, 0.9fr) minmax(0, 1.1fr)' }} gap={{ base: '10', lg: '16' }} alignItems='center'>
-        <Reveal>
+        <Reveal y={16}>
           <Stack gap='4' maxW='xl'>
             <Eyebrow>Security &amp; access control</Eyebrow>
             <SectionTitle>Separated by design, not by convention.</SectionTitle>
@@ -57,10 +58,10 @@ export function SecuritySection() {
           </Stack>
         </Reveal>
 
-        <Reveal delay={120}>
-          <Stack gap='3'>
-            {layers.map((layer, index) => (
-              <Panel key={layer.label} p={{ base: '4', md: '5' }}>
+        <Stack gap='3'>
+          {layers.map((layer, index) => (
+            <Reveal key={layer.label} delay={stagger(index)} y={14}>
+              <Panel p={{ base: '4', md: '5' }}>
                 <Flex align='center' gap='3.5'>
                   <Flex
                     boxSize='9'
@@ -95,9 +96,9 @@ export function SecuritySection() {
                   </Text>
                 </Flex>
               </Panel>
-            ))}
-          </Stack>
-        </Reveal>
+            </Reveal>
+          ))}
+        </Stack>
       </Grid>
     </Box>
   )

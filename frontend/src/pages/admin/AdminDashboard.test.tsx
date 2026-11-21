@@ -176,4 +176,48 @@ describe('AdminDashboard', () => {
     expect(screen.getByText('Could not load dashboard')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
+
+  it('draws progress from the real totals, never a rounded or invented value', () => {
+    useSupportAnalyticsMock.mockReturnValue({
+      isPending: false,
+      isError: false,
+      error: null,
+      data: buildAnalytics(),
+      refetch: vi.fn(),
+    })
+
+    renderPage(<AdminDashboard />)
+
+    // Resolution share = resolved / (resolved + closed) = 21 / 30 = 70%.
+    const resolution = screen.getByRole('progressbar', {
+      name: /share of finished tickets/i,
+    })
+    expect(resolution).toHaveAttribute('aria-valuenow', '70')
+    expect(resolution).toHaveAttribute('aria-valuemax', '100')
+
+    // Assignment coverage = (open + waiting - unassigned) / (open + waiting)
+    // = (12 + 3 - 3) / 15 = 80%.
+    const coverage = screen.getByRole('progressbar', {
+      name: /share of active tickets that have an assignee/i,
+    })
+    expect(coverage).toHaveAttribute('aria-valuenow', '80')
+  })
+
+  it('keeps every workload bar tied to a real active ticket count', () => {
+    useSupportAnalyticsMock.mockReturnValue({
+      isPending: false,
+      isError: false,
+      error: null,
+      data: buildAnalytics(),
+      refetch: vi.fn(),
+    })
+
+    renderPage(<AdminDashboard />)
+
+    // The single agent has 4 active tickets, so their bar is the full scale
+    // (value === max) rather than an arbitrary width.
+    const bar = screen.getByRole('progressbar', { name: /Avery Bennett/i })
+    expect(bar).toHaveAttribute('aria-valuenow', '4')
+    expect(bar).toHaveAttribute('aria-valuemax', '4')
+  })
 })

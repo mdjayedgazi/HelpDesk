@@ -2,7 +2,9 @@ import { Box, Flex, Heading, Stack, Text } from '@chakra-ui/react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
+import { stagger } from '../theme/motion.ts'
 import { palette } from '../theme/palette.ts'
+import { Reveal } from './Reveal.tsx'
 
 export function PageHeader({
   title,
@@ -20,7 +22,11 @@ export function PageHeader({
 }) {
   return (
     <Stack gap='4' borderBottomWidth='1px' borderColor={palette.border} pb='6' mb='6'>
-      {breadcrumb ? <Box>{breadcrumb}</Box> : null}
+      {breadcrumb ? (
+        <Reveal y={8} delay={0}>
+          <Box>{breadcrumb}</Box>
+        </Reveal>
+      ) : null}
       <Flex
         align={{ base: 'flex-start', md: 'center' }}
         justify='space-between'
@@ -28,27 +34,37 @@ export function PageHeader({
         flexDirection={{ base: 'column', md: 'row' }}
       >
         <Stack gap='1.5' minW='0'>
-          <Heading
-            as='h1'
-            fontSize={{ base: 'xl', md: '2xl' }}
-            fontWeight='semibold'
-            letterSpacing='-0.025em'
-            lineHeight='1.2'
-            color={palette.text}
-          >
-            {title}
-          </Heading>
+          <Reveal y={12} delay={stagger(0)}>
+            <Heading
+              as='h1'
+              fontSize={{ base: 'xl', md: '2xl' }}
+              fontWeight='semibold'
+              letterSpacing='-0.025em'
+              lineHeight='1.2'
+              color={palette.text}
+            >
+              {title}
+            </Heading>
+          </Reveal>
           {description ? (
-            <Text fontSize='sm' color={palette.textSecondary} maxW='2xl' lineHeight='1.6'>
-              {description}
-            </Text>
+            <Reveal y={12} delay={stagger(1)}>
+              <Text fontSize='sm' color={palette.textSecondary} maxW='2xl' lineHeight='1.6'>
+                {description}
+              </Text>
+            </Reveal>
           ) : null}
-          {meta ? <Box pt='1'>{meta}</Box> : null}
+          {meta ? (
+            <Reveal y={12} delay={stagger(2)}>
+              <Box pt='1'>{meta}</Box>
+            </Reveal>
+          ) : null}
         </Stack>
         {actions ? (
-          <Flex gap='2' flexWrap='wrap' flexShrink={0}>
-            {actions}
-          </Flex>
+          <Reveal y={12} delay={stagger(2)}>
+            <Flex gap='2' flexWrap='wrap' flexShrink={0}>
+              {actions}
+            </Flex>
+          </Reveal>
         ) : null}
       </Flex>
     </Stack>

@@ -4,6 +4,7 @@ import { CheckCircle2, Inbox, MessageSquare, UserCog, type LucideIcon } from 'lu
 import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 import { Reveal } from '../Reveal.tsx'
+import { stagger } from '../../theme/motion.ts'
 import { Eyebrow, SectionLead, SectionTitle } from './primitives.tsx'
 
 interface Step {
@@ -39,12 +40,18 @@ export function WorkflowSection() {
   return (
     <Box as='section' id='how-it-works' className='hd-anchor' py={sectionY}>
       <Stack gap='4' maxW='2xl' mb={{ base: '10', md: '14' }}>
-        <Eyebrow>How it works</Eyebrow>
-        <SectionTitle>From first message to resolution.</SectionTitle>
-        <SectionLead>
-          Four familiar steps, made visible — so customers know what is happening and the team knows
-          what to do next.
-        </SectionLead>
+        <Reveal y={10} delay={0}>
+          <Eyebrow>How it works</Eyebrow>
+        </Reveal>
+        <Reveal y={16} delay={stagger(1)}>
+          <SectionTitle>From first message to resolution.</SectionTitle>
+        </Reveal>
+        <Reveal y={14} delay={stagger(2)}>
+          <SectionLead>
+            Four familiar steps, made visible — so customers know what is happening and the team
+            knows what to do next.
+          </SectionLead>
+        </Reveal>
       </Stack>
 
       <Grid
@@ -52,7 +59,7 @@ export function WorkflowSection() {
         gap={{ base: '8', md: '6', lg: '5' }}
       >
         {steps.map((step, index) => (
-          <Reveal key={step.title} delay={index * 90} minW='0'>
+          <Reveal key={step.title} delay={stagger(index + 1)} minW='0' y={16}>
             <Stack gap='4'>
               <Flex align='center' gap='3'>
                 <Flex

@@ -77,6 +77,17 @@
   --hd-danger-soft: #fef2f2;
   --hd-danger-border: #fecaca;
 
+  /* Controlled cobalt accent.
+   * The only non-semantic colour in the product. Reserved for selected and
+   * active interaction states (current nav item, chosen tab, non-semantic
+   * progress). It is never used to decorate a surface. The value is a shade
+   * darker than the brief's #5278C7 so 14 px text can sit on it at >= 4.5:1
+   * (5.04:1 on white, 4.82:1 on the page). */
+  --hd-accent: #4a6db8;
+  --hd-accent-soft: #eef2fb;
+  --hd-accent-border: #c9d5ee;
+  --hd-accent-contrast: #ffffff;
+
   /* Chart palette. Ordered by intent, not by hue: neutral first, then the
    * semantic families so a legend reads like the rest of the product. */
   --hd-chart-1: #111111;
@@ -99,9 +110,17 @@
    * --------------------------------------------------------------------- */
   --hd-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   --hd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --hd-ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
   --hd-dur-1: 140ms;
   --hd-dur-2: 200ms;
   --hd-dur-3: 320ms;
+  /* Longer steps used only for entrances and data reveals. */
+  --hd-dur-4: 420ms;
+  --hd-dur-5: 560ms;
+  --hd-dur-6: 800ms;
+  --hd-dur-chart: 900ms;
+  --hd-dur-ambient: 7.5s;
+  --hd-float-dist: 6px;
 
   /* Layout --------------------------------------------------------------- */
   --hd-nav-height: 64px;
@@ -173,6 +192,12 @@ html.dark {
   --hd-danger-soft: rgba(185, 28, 28, 0.2);
   --hd-danger-border: rgba(248, 113, 113, 0.32);
 
+  /* Accent — lifted so it reads on the dark page (9.56:1). */
+  --hd-accent: #93b4ff;
+  --hd-accent-soft: rgba(74, 109, 184, 0.18);
+  --hd-accent-border: rgba(147, 180, 255, 0.3);
+  --hd-accent-contrast: #0b0b0d;
+
   /* Chart palette — brighter series so they read on #0b0b0d. */
   --hd-chart-1: #e6e6e8;
   --hd-chart-1-soft: rgba(230, 230, 232, 0.1);
@@ -220,13 +245,18 @@ html {
 
 /* Motion ----------------------------------------------------------------- */
 
+/*
+ * Ambient float. The travel distance and duration are per-instance so no two
+ * floating layers sync up (which reads as mechanical). Consumers set
+ * `--hd-float-dist` / `--hd-float-dur` / `--hd-float-delay`.
+ */
 @keyframes hd-float {
   0%,
   100% {
     transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translate3d(0, -10px, 0);
+    transform: translate3d(0, calc(var(--hd-float-dist, 6px) * -1), 0);
   }
 }
 
@@ -282,6 +312,30 @@ html {
   }
 }
 
+/* Workspace route transition. Short and shallow so navigation still feels
+ * immediate: a 6px rise reads as arrival, not as a wait. */
+@keyframes hd-page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Chart geometry growth. `transform-origin` is the baseline so bars grow up
+ * from the axis rather than out of thin air. */
+@keyframes hd-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .hd-fade-up {
   animation: hd-fade-up var(--hd-dur-3) var(--hd-ease);
 }
@@ -290,36 +344,36 @@ html {
   animation: hd-menu-in var(--hd-dur-2) var(--hd-ease);
 }
 
+.hd-page-enter {
+  /* Deliberately shorter than a section reveal: a route change should read as
+   * "arrived", not "loading". */
+  animation: hd-page-enter var(--hd-dur-3) var(--hd-ease-out) both;
+}
+
 .hd-float {
-  animation: hd-float 7s ease-in-out infinite;
+  animation: hd-float var(--hd-float-dur, var(--hd-dur-ambient)) var(--hd-ease-in-out, ease-in-out)
+    var(--hd-float-delay, 0ms) infinite;
+  will-change: transform;
 }
 
 .hd-float-slow {
-  animation: hd-float 10s ease-in-out infinite;
+  animation: hd-float var(--hd-float-dur, 9.5s) var(--hd-ease-in-out, ease-in-out)
+    var(--hd-float-delay, 0ms) infinite;
+  will-change: transform;
 }
 
 .hd-pulse {
   animation: hd-pulse 2.4s ease-in-out infinite;
 }
 
-/* Chart polish ------------------------------------------------------------
- * Charts fade in once on mount and grow their geometry from the baseline.
- * Both are pure CSS so disabling them cannot leave the chart invisible.
- * ---------------------------------------------------------------------- */
-@keyframes hd-chart-draw {
-  from {
-    opacity: 0;
-    transform: scaleY(0.96);
+/* Continuous ambient drift is a desktop affordance. On phones the same subtle
+ * movement costs more attention and battery than it returns, so floating
+ * elements simply hold their resting position below the tablet breakpoint. */
+@media (max-width: 1023px) {
+  .hd-float,
+  .hd-float-slow {
+    animation: none !important;
   }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.hd-chart-enter {
-  animation: hd-chart-draw var(--hd-dur-3) var(--hd-ease-out);
-  transform-origin: bottom;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -328,7 +382,7 @@ html {
   .hd-pulse,
   .hd-fade-up,
   .hd-menu-in,
-  .hd-chart-enter {
+  .hd-page-enter {
     animation: none !important;
   }
 }

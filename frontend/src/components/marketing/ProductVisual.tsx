@@ -13,6 +13,8 @@ import {
 
 import { palette } from '../../theme/palette.ts'
 import { tones } from '../../theme/statusTone.ts'
+import { FloatingElement } from '../motion/FloatingElement.tsx'
+import { TiltSurface } from '../motion/TiltSurface.tsx'
 
 /**
  * Illustrative product visual for the hero.
@@ -261,7 +263,12 @@ function Queue() {
 
 export function ProductVisual() {
   return (
-    <Box position='relative' w='full' maxW={{ base: 'full', lg: '640px' }} mx='auto'>
+    <Box
+      position='relative'
+      w='full'
+      maxW={{ base: 'full', lg: '640px' }}
+      mx='auto'
+    >
       <Box
         position='absolute'
         inset='-8%'
@@ -270,99 +277,246 @@ export function ProductVisual() {
         aria-hidden
       />
 
-      <Box
-        position='relative'
-        bg={palette.surface}
-        borderWidth='1px'
-        borderColor={palette.border}
-        borderRadius='l4'
-        boxShadow={palette.shadowPanel}
-        overflow='hidden'
-      >
-        <WindowChrome />
-        <Flex align='stretch'>
-          <Rail />
-          <Box flex='1' minW='0' p={{ base: '3', md: '4' }}>
-            <Flex align='center' justify='space-between' gap='2' mb='3'>
-              <Box minW='0'>
-                <Text fontSize='2xs' color={palette.textFaint}>
-                  Dashboard · sample
-                </Text>
-                <Text fontSize='xs' fontWeight='semibold' color={palette.text} letterSpacing='-0.01em'>
-                  Support operations
-                </Text>
-              </Box>
-              <Flex
-                align='center'
-                gap='1.5'
-                px='2'
-                py='1'
-                borderWidth='1px'
-                borderColor={palette.border}
-                borderRadius='full'
-                flexShrink={0}
-              >
-                <CheckCircle2 size={10} strokeWidth={2.4} color={tones.success.solid} aria-hidden />
-                <Text fontSize='2xs' color={palette.textMuted}>
-                  Healthy
-                </Text>
-              </Flex>
-            </Flex>
-
-            <Metrics />
-
-            <Flex
-              display={{ base: 'none', sm: 'grid' }}
-              gridTemplateColumns='minmax(0, 1.2fr) minmax(0, 1fr)'
-              gap='2'
-              mt='2'
+      <Box position='relative' style={{ perspective: '1400px' }}>
+        <TiltSurface>
+          <FloatingElement distance={7} duration={7800} delay={0}>
+            <Box
+              position='relative'
+              bg={palette.surface}
+              borderWidth='1px'
+              borderColor={palette.border}
+              borderRadius='l4'
+              boxShadow={palette.shadowPanel}
+              overflow='hidden'
             >
-              <Box borderWidth='1px' borderColor={palette.border} borderRadius='l2' p='2.5' minW='0'>
-                <Flex align='center' justify='space-between' gap='2' mb='1.5'>
-                  <Text fontSize='2xs' color={palette.textMuted}>
-                    Ticket volume · 14 days
-                  </Text>
-                  <Flex align='center' gap='1'>
-                    <Clock size={10} color={palette.textFaint} aria-hidden />
-                    <Text fontSize='2xs' color={palette.textFaint}>
-                      Daily
-                    </Text>
+              <WindowChrome />
+              <Flex align='stretch'>
+                <Rail />
+                <Box flex='1' minW='0' p={{ base: '3', md: '4' }}>
+                  <Flex align='center' justify='space-between' gap='2' mb='3'>
+                    <Box minW='0'>
+                      <Text fontSize='2xs' color={palette.textFaint}>
+                        Dashboard · sample
+                      </Text>
+                      <Text
+                        fontSize='xs'
+                        fontWeight='semibold'
+                        color={palette.text}
+                        letterSpacing='-0.01em'
+                      >
+                        Support operations
+                      </Text>
+                    </Box>
+                    <Flex
+                      align='center'
+                      gap='1.5'
+                      px='2'
+                      py='1'
+                      borderWidth='1px'
+                      borderColor={palette.border}
+                      borderRadius='full'
+                      flexShrink={0}
+                    >
+                      <CheckCircle2
+                        size={10}
+                        strokeWidth={2.4}
+                        color={tones.success.solid}
+                        aria-hidden
+                      />
+                      <Text fontSize='2xs' color={palette.textMuted}>
+                        Healthy
+                      </Text>
+                    </Flex>
                   </Flex>
-                </Flex>
-                <TrendSpark />
-              </Box>
-              <Box borderWidth='1px' borderColor={palette.border} borderRadius='l2' p='2.5' minW='0'>
-                <StatusSplit />
-              </Box>
-            </Flex>
 
-            <Box mt='2'>
-              <Queue />
+                  <Metrics />
+
+                  <Flex
+                    display={{ base: 'none', sm: 'grid' }}
+                    gridTemplateColumns='minmax(0, 1.2fr) minmax(0, 1fr)'
+                    gap='2'
+                    mt='2'
+                  >
+                    <Box
+                      borderWidth='1px'
+                      borderColor={palette.border}
+                      borderRadius='l2'
+                      p='2.5'
+                      minW='0'
+                    >
+                      <Flex align='center' justify='space-between' gap='2' mb='1.5'>
+                        <Text fontSize='2xs' color={palette.textMuted}>
+                          Ticket volume · 14 days
+                        </Text>
+                        <Flex align='center' gap='1'>
+                          <Clock size={10} color={palette.textFaint} aria-hidden />
+                          <Text fontSize='2xs' color={palette.textFaint}>
+                            Daily
+                          </Text>
+                        </Flex>
+                      </Flex>
+                      <TrendSpark />
+                    </Box>
+                    <Box
+                      borderWidth='1px'
+                      borderColor={palette.border}
+                      borderRadius='l2'
+                      p='2.5'
+                      minW='0'
+                    >
+                      <StatusSplit />
+                    </Box>
+                  </Flex>
+
+                  <Box mt='2'>
+                    <Queue />
+                  </Box>
+                </Box>
+              </Flex>
+            </Box>
+          </FloatingElement>
+        </TiltSurface>
+
+        {/* Layered satellite panels.
+            They hang below the dashboard's bottom edge in a staggered shelf, so
+            the composition reads as three planes at different depths while no
+            label, number or sample-data marker inside the dashboard is ever
+            covered. Each drifts on its own slower cycle, which is what makes
+            the depth legible. Hidden below `xl`, where there is no room for a
+            shelf without overlapping content. */}
+        <FloatingElement
+          display={{ base: 'none', xl: 'block' }}
+          position='absolute'
+          bottom='-104px'
+          left='0'
+          distance={5}
+          duration={8600}
+          delay={900}
+          aria-hidden
+        >
+          <Box
+            bg={palette.surface}
+            borderWidth='1px'
+            borderColor={palette.border}
+            borderRadius='l3'
+            boxShadow={palette.shadowLg}
+            px='3'
+            py='2.5'
+            width='164px'
+          >
+            <Flex align='center' justify='space-between' gap='2'>
+              <Text fontSize='2xs' color={palette.textFaint}>
+                Resolved today
+              </Text>
+              <Text
+                fontSize='2xs'
+                color={palette.textFaint}
+                letterSpacing='0.04em'
+              >
+                SAMPLE
+              </Text>
+            </Flex>
+            <Text
+              fontSize='lg'
+              fontWeight='semibold'
+              color={palette.text}
+              letterSpacing='-0.02em'
+              fontVariantNumeric='tabular-nums'
+              mt='1'
+            >
+              38
+            </Text>
+            <Flex align='center' gap='1.5' mt='1.5'>
+              <Box boxSize='1.5' borderRadius='full' bg={tones.success.solid} aria-hidden />
+              <Text fontSize='2xs' color={palette.textMuted}>
+                Trending up
+              </Text>
+            </Flex>
+          </Box>
+        </FloatingElement>
+
+        <FloatingElement
+          display={{ base: 'none', xl: 'block' }}
+          position='absolute'
+          bottom='-78px'
+          right='0'
+          distance={6}
+          duration={7200}
+          delay={1600}
+          aria-hidden
+        >
+          <Box
+            bg={palette.surface}
+            borderWidth='1px'
+            borderColor={palette.border}
+            borderRadius='l3'
+            boxShadow={palette.shadowLg}
+            px='3'
+            py='2.5'
+            width='178px'
+          >
+            <Flex align='center' justify='space-between' gap='2' mb='2'>
+              <Text fontSize='2xs' color={palette.textFaint}>
+                First response
+              </Text>
+              <Text fontSize='2xs' color={palette.textFaint} letterSpacing='0.04em'>
+                SAMPLE
+              </Text>
+            </Flex>
+            <Flex align='baseline' gap='1'>
+              <Text
+                fontSize='lg'
+                fontWeight='semibold'
+                color={palette.text}
+                letterSpacing='-0.02em'
+                fontVariantNumeric='tabular-nums'
+              >
+                92
+              </Text>
+              <Text fontSize='2xs' color={palette.textMuted}>
+                % within target
+              </Text>
+            </Flex>
+            <Box height='1.5' borderRadius='full' bg={palette.inset} overflow='hidden' mt='2'>
+              <Box
+                height='100%'
+                width='92%'
+                borderRadius='full'
+                bg={palette.accent}
+                aria-hidden
+              />
             </Box>
           </Box>
-        </Flex>
-      </Box>
+        </FloatingElement>
 
-      <Flex
-        display={{ base: 'none', lg: 'flex' }}
-        position='absolute'
-        bottom='-4'
-        right='-4'
-        align='center'
-        gap='2'
-        px='2.5'
-        py='1.5'
-        bg={palette.surface}
-        borderWidth='1px'
-        borderColor={palette.border}
-        borderRadius='l3'
-        boxShadow={palette.shadowMd}
-      >
-        <Inbox size={12} color={palette.textMuted} aria-hidden />
-        <Text fontSize='2xs' color={palette.textSecondary}>
-          Sample workspace preview
-        </Text>
-      </Flex>
+        <FloatingElement
+          display={{ base: 'none', lg: 'block' }}
+          position='absolute'
+          bottom='-152px'
+          left='34%'
+          distance={4}
+          duration={6400}
+          delay={400}
+          aria-hidden
+        >
+          <Flex
+            align='center'
+            gap='2'
+            px='2.5'
+            py='1.5'
+            bg={palette.surface}
+            borderWidth='1px'
+            borderColor={palette.border}
+            borderRadius='l3'
+            boxShadow={palette.shadowMd}
+          >
+            <Inbox size={12} color={palette.textMuted} aria-hidden />
+            <Text fontSize='2xs' color={palette.textSecondary}>
+              Sample workspace preview
+            </Text>
+          </Flex>
+        </FloatingElement>
+      </Box>
     </Box>
   )
 }

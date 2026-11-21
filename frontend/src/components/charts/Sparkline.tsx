@@ -1,12 +1,18 @@
 import { Box } from '@chakra-ui/react'
 import { useId } from 'react'
 
+import { useEntrance } from '../../hooks/useEntrance.ts'
+import { motionVars } from '../../theme/motion.ts'
+
 /**
  * A tiny inline trend line for metric cards.
  *
  * Purely decorative support for the headline number (the card's value is the
  * accessible datum), so it is marked `aria-hidden`. It shares the same aspect
  * ratio as the full trend chart so the two never disagree about direction.
+ *
+ * The line draws itself once on mount using a normalised `pathLength`, and the
+ * end-cap dot appears only after the stroke has arrived.
  */
 export function Sparkline({
   values,
@@ -22,6 +28,7 @@ export function Sparkline({
   label?: string
 }) {
   const gradientId = useId().replace(/[:]/g, '')
+  const entered = useEntrance()
   if (values.length < 2) return null
 
   const max = Math.max(1, ...values)
@@ -53,7 +60,14 @@ export function Sparkline({
             <stop offset='100%' stopColor={color} stopOpacity='0' />
           </linearGradient>
         </defs>
-        <path d={area} fill={`url(#${gradientId})`} />
+        <path
+          d={area}
+          fill={`url(#${gradientId})`}
+          style={{
+            opacity: entered ? 1 : 0,
+            transition: `opacity ${motionVars.slow} ${motionVars.ease} ${motionVars.slow}`,
+          }}
+        />
         <path
           d={line}
           fill='none'
@@ -62,8 +76,23 @@ export function Sparkline({
           strokeLinejoin='round'
           strokeLinecap='round'
           vectorEffect='non-scaling-stroke'
+          pathLength={1}
+          style={{
+            strokeDasharray: 1,
+            strokeDashoffset: entered ? 0 : 1,
+            transition: `stroke-dashoffset ${motionVars.chart} ${motionVars.easeOut}`,
+          }}
         />
-        <circle cx={points[points.length - 1]!.x} cy={points[points.length - 1]!.y} r='2' fill={color} />
+        <circle
+          cx={points[points.length - 1]!.x}
+          cy={points[points.length - 1]!.y}
+          r='2'
+          fill={color}
+          style={{
+            opacity: entered ? 1 : 0,
+            transition: `opacity ${motionVars.base} ${motionVars.ease} ${motionVars.chart}`,
+          }}
+        />
       </svg>
     </Box>
   )

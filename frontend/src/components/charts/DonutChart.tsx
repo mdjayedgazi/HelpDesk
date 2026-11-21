@@ -1,7 +1,10 @@
 import { Box, Flex, Stack, Text } from '@chakra-ui/react'
 import { useMemo, useState } from 'react'
 
+import { useEntrance } from '../../hooks/useEntrance.ts'
+import { motionVars, stagger } from '../../theme/motion.ts'
 import { palette } from '../../theme/palette.ts'
+import { AnimatedNumber } from '../motion/AnimatedNumber.tsx'
 import { ChartDataTable } from './ChartCard.tsx'
 
 /**
@@ -11,6 +14,12 @@ import { ChartDataTable } from './ChartCard.tsx'
  * total sits in the middle. Hovering or focusing a legend row highlights the
  * matching segment and swaps the centre label to that slice, which keeps the
  * chart readable at small sizes where segment labels would not fit.
+ *
+ * On first appearance each arc grows from zero length to exactly its real
+ * share of the circle via an animated `stroke-dasharray`, and the arcs are
+ * staggered so the composition assembles itself clockwise. The centre number
+ * and every percentage count up from zero to the same real values used by the
+ * legend, so the visual and the numbers can never disagree.
  *
  * The SVG is decorative; the legend plus `ChartDataTable` carry the meaning.
  */
@@ -40,6 +49,7 @@ export function DonutChart({
   onSelect?: (slice: DonutSlice) => void
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null)
+  const entered = useEntrance()
 
   const total = useMemo(() => slices.reduce((sum, slice) => sum + slice.value, 0), [slices])
   const active = slices.find((slice) => slice.key === activeKey) ?? null
@@ -63,7 +73,6 @@ export function DonutChart({
   const centerText = active ? active.label : centerLabel
   const centerPercent = active ? Math.round((active.value / total) * 100) : null
 
-
   return (
     <Flex
       direction={{ base: 'column', sm: 'row' }}
@@ -79,7 +88,6 @@ export function DonutChart({
             height={SIZE}
             role='presentation'
             aria-hidden='true'
-            className='hd-chart-enter'
           >
             <circle
               cx={SIZE / 2}
@@ -90,9 +98,12 @@ export function DonutChart({
               strokeWidth={STROKE}
             />
             <g transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}>
-              {segments.map((segment) => {
+              {segments.map((segment, index) => {
                 const isActive = activeKey === segment.slice.key
                 const dimmed = activeKey !== null && !isActive
+                // Before entrance the arc has zero dash length, so it grows out
+                // of the 12 o'clock start point instead of appearing whole.
+                const dash = entered ? segment.length : 0
                 return (
                   <circle
                     key={segment.slice.key}
@@ -102,12 +113,16 @@ export function DonutChart({
                     fill='none'
                     stroke={segment.slice.color}
                     strokeWidth={isActive ? STROKE + 4 : STROKE}
-                    strokeDasharray={`${segment.length} ${CIRCUMFERENCE - segment.length}`}
+                    strokeDasharray={`${dash} ${CIRCUMFERENCE - dash}`}
                     strokeDashoffset={-segment.offset}
                     strokeLinecap='butt'
                     opacity={dimmed ? 0.35 : 1}
                     style={{
-                      transition: `stroke-width var(--hd-dur-1) var(--hd-ease), opacity var(--hd-dur-1) var(--hd-ease)`,
+                      transition: `stroke-dasharray ${motionVars.chart} ${motionVars.easeOut} ${
+                        stagger(index)
+                      }ms, stroke-width ${motionVars.fast} ${motionVars.ease}, opacity ${
+                        motionVars.fast
+                      } ${motionVars.ease}`,
                     }}
                   />
                 )
@@ -133,7 +148,7 @@ export function DonutChart({
               fontVariantNumeric='tabular-nums'
               lineHeight='1'
             >
-              {centerValue}
+              <AnimatedNumber value={centerValue} duration={640} />
             </Text>
             <Text fontSize='2xs' color={palette.textMuted} mt='1' lineClamp={2}>
               {centerPercent !== null ? `${centerPercent}% · ${centerText}` : centerText}
@@ -171,7 +186,7 @@ export function DonutChart({
                 fontWeight='medium'
                 fontVariantNumeric='tabular-nums'
               >
-                {slice.value}
+                <AnimatedNumber value={slice.value} duration={640} />
               </Text>
               <Text
                 fontSize='2xs'

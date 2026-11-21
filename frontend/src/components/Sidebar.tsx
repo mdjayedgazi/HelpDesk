@@ -86,8 +86,8 @@ export function SidebarNav({
                         width='2px'
                         height={isActive ? '16px' : '0'}
                         borderRadius='full'
-                        bg={palette.ink}
-                        transition='height var(--hd-dur-1) var(--hd-ease)'
+                        bg={palette.accent}
+                        transition='height var(--hd-dur-2) var(--hd-ease-out)'
                       />
                       <item.icon
                         size={16}

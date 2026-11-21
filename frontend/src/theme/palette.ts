@@ -52,6 +52,19 @@ export const palette = {
   /** Focus ring. */
   focus: 'var(--hd-focus)',
 
+  /**
+   * Controlled cobalt accent.
+   *
+   * The one non-semantic colour in the product. It marks selected/active
+   * interaction (current nav item, chosen tab, non-semantic progress) and is
+   * never used to decorate a surface. It is a shade darker than the brief's
+   * `#5278C7` so small text keeps >= 4.5:1 contrast on white.
+   */
+  accent: 'var(--hd-accent)',
+  accentSoft: 'var(--hd-accent-soft)',
+  accentBorder: 'var(--hd-accent-border)',
+  accentContrast: 'var(--hd-accent-contrast)',
+
   /** Translucent overlay for dialogs, drawers and lightboxes. */
   overlay: 'var(--hd-overlay)',
   /** Translucent chrome for sticky headers. */
@@ -112,9 +125,14 @@ export const palette = {
   motion: {
     ease: 'var(--hd-ease)',
     easeOut: 'var(--hd-ease-out)',
+    easeInOut: 'var(--hd-ease-in-out)',
     fast: 'var(--hd-dur-1)',
     base: 'var(--hd-dur-2)',
     slow: 'var(--hd-dur-3)',
+    reveal: 'var(--hd-dur-4)',
+    entrance: 'var(--hd-dur-5)',
+    count: 'var(--hd-dur-6)',
+    chart: 'var(--hd-dur-chart)',
   },
 
   /**

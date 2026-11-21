@@ -12,6 +12,7 @@ import {
 import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 import { Reveal } from '../Reveal.tsx'
+import { stagger } from '../../theme/motion.ts'
 import { Eyebrow, Panel, SectionLead, SectionTitle } from './primitives.tsx'
 import { tones } from '../../theme/statusTone.ts'
 
@@ -161,10 +162,21 @@ function FeatureCard({
   description,
   gridColumn,
   visual,
-}: Feature & { gridColumn?: Record<string, string>; visual?: React.ReactNode }) {
+  delay = 0,
+}: Feature & {
+  gridColumn?: Record<string, string>
+  visual?: React.ReactNode
+  delay?: number
+}) {
   return (
-    <Reveal gridColumn={gridColumn} minW='0'>
-      <Panel p={{ base: '5', md: '6' }} height='full' display='flex' flexDirection='column'>
+    <Reveal gridColumn={gridColumn} minW='0' delay={delay} y={16}>
+      <Panel
+        p={{ base: '5', md: '6' }}
+        height='full'
+        display='flex'
+        flexDirection='column'
+        _hover={{ transform: 'translateY(-3px)', boxShadow: palette.shadowMd, borderColor: palette.borderStrong }}
+      >
         <Flex
           boxSize='9'
           align='center'
@@ -194,12 +206,18 @@ export function FeatureSection() {
   return (
     <Box as='section' id='features' className='hd-anchor' py={sectionY}>
       <Stack gap='4' maxW='2xl' mb={{ base: '10', md: '14' }}>
-        <Eyebrow>Features</Eyebrow>
-        <SectionTitle>Everything a support team needs, in one place.</SectionTitle>
-        <SectionLead>
-          HelpDesk keeps customer requests, the people working on them and the conversations around
-          them together — without the sprawl of disconnected tools.
-        </SectionLead>
+        <Reveal y={10} delay={0}>
+          <Eyebrow>Features</Eyebrow>
+        </Reveal>
+        <Reveal y={16} delay={stagger(1)}>
+          <SectionTitle>Everything a support team needs, in one place.</SectionTitle>
+        </Reveal>
+        <Reveal y={14} delay={stagger(2)}>
+          <SectionLead>
+            HelpDesk keeps customer requests, the people working on them and the conversations
+            around them together — without the sprawl of disconnected tools.
+          </SectionLead>
+        </Reveal>
       </Stack>
 
       <Grid
@@ -207,6 +225,7 @@ export function FeatureSection() {
         gap={{ base: '4', md: '5' }}
       >
         <FeatureCard
+          delay={0}
           icon={Ticket}
           title='Ticket management'
           description='Organise incoming requests with clear statuses, priorities and categories, and see exactly what still needs attention.'
@@ -214,6 +233,7 @@ export function FeatureSection() {
           visual={<TicketQueueVisual />}
         />
         <FeatureCard
+          delay={stagger(1)}
           icon={UserCog}
           title='Intelligent assignment'
           description='Claim work from the queue or hand a ticket to an eligible support agent.'
@@ -221,6 +241,7 @@ export function FeatureSection() {
           visual={<AssignmentVisual />}
         />
         <FeatureCard
+          delay={stagger(2)}
           icon={MessageSquare}
           title='Team collaboration'
           description='Internal comments, private staff messages and a complete history on every ticket.'
@@ -228,6 +249,7 @@ export function FeatureSection() {
           visual={<CollaborationVisual />}
         />
         <FeatureCard
+          delay={stagger(3)}
           icon={ShieldCheck}
           title='Role-based access'
           description='Customers, agents, administrators and the Owner each see exactly what their role allows.'
@@ -235,12 +257,14 @@ export function FeatureSection() {
           visual={<AccessVisual />}
         />
         <FeatureCard
+          delay={stagger(4)}
           icon={ClipboardList}
           title='Customer context'
           description='Ticket details, contact information and attachments in a single, readable view.'
           gridColumn={{ lg: 'span 3' }}
         />
         <FeatureCard
+          delay={stagger(5)}
           icon={Gauge}
           title='Operational visibility'
           description='Dashboards and queues that show where the workload sits and what to do next.'

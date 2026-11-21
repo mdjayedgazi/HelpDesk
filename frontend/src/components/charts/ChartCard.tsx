@@ -1,8 +1,10 @@
 import { Box, Flex, Stack, Text } from '@chakra-ui/react'
 import type { ReactNode } from 'react'
 
+import { transitions } from '../../theme/motion.ts'
 import { palette } from '../../theme/palette.ts'
 import { type Tone, tones } from '../../theme/statusTone.ts'
+import { Reveal } from '../Reveal.tsx'
 import { Surface } from '../Surface.tsx'
 
 /**
@@ -22,6 +24,7 @@ export function ChartCard({
   legend,
   children,
   minH,
+  delay = 0,
 }: {
   title: string
   /** The operational question this chart answers, shown under the title. */
@@ -30,29 +33,39 @@ export function ChartCard({
   legend?: ReactNode
   children: ReactNode
   minH?: string
+  /** Entrance delay, in milliseconds, for staggering a grid of charts. */
+  delay?: number
 }) {
   return (
-    <Surface p={{ base: '4', md: '5' }} minW='0'>
-      <Stack gap='4' minW='0'>
-        <Flex align='flex-start' justify='space-between' gap='3' wrap='wrap'>
-          <Stack gap='0.5' minW='0'>
-            <Text fontSize='sm' fontWeight='semibold' color={palette.text} letterSpacing='-0.01em'>
-              {title}
-            </Text>
-            {question ? (
-              <Text fontSize='xs' color={palette.textMuted}>
-                {question}
+    <Reveal delay={delay} y={14} height='full'>
+      <Surface
+        p={{ base: '4', md: '5' }}
+        minW='0'
+        height='full'
+        transition={transitions.colors}
+        _hover={{ borderColor: palette.borderStrong }}
+      >
+        <Stack gap='4' minW='0'>
+          <Flex align='flex-start' justify='space-between' gap='3' wrap='wrap'>
+            <Stack gap='0.5' minW='0'>
+              <Text fontSize='sm' fontWeight='semibold' color={palette.text} letterSpacing='-0.01em'>
+                {title}
               </Text>
-            ) : null}
-          </Stack>
-          {action}
-        </Flex>
-        <Box minW='0' minH={minH}>
-          {children}
-        </Box>
-        {legend ? legend : null}
-      </Stack>
-    </Surface>
+              {question ? (
+                <Text fontSize='xs' color={palette.textMuted}>
+                  {question}
+                </Text>
+              ) : null}
+            </Stack>
+            {action}
+          </Flex>
+          <Box minW='0' minH={minH}>
+            {children}
+          </Box>
+          {legend ? legend : null}
+        </Stack>
+      </Surface>
+    </Reveal>
   )
 }
 

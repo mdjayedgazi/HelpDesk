@@ -67,7 +67,12 @@ export function AppShell({ me }: { me: User }) {
         <TopBar onOpenNav={() => setNavOpen(true)} role={me.role} />
         <Box as='main' flex='1' minW='0'>
           <Container size='content' py={{ base: '6', md: '8' }}>
-            <Outlet />
+            {/* Keyed on the pathname so each workspace view enters with a short
+                fade-and-rise. Navigation stays immediate: the route renders on
+                the same tick and the animation only decorates the arrival. */}
+            <Box key={location.pathname} className='hd-page-enter'>
+              <Outlet />
+            </Box>
           </Container>
         </Box>
       </Flex>

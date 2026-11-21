@@ -1,20 +1,28 @@
 import { Box, Flex, Stack, Text } from '@chakra-ui/react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
+import { transitions } from '../theme/motion.ts'
 import { palette } from '../theme/palette.ts'
 import { type Tone, tones } from '../theme/statusTone.ts'
+import { AnimatedNumber } from './motion/AnimatedNumber.tsx'
+import { Reveal } from './Reveal.tsx'
 import { Surface } from './Surface.tsx'
 
 /**
  * A dashboard metric card.
  *
  * Hierarchy is: label → value → context. The value is the only large type on
- * the card. `hint` carries a comparison or a qualifier and is only passed when
- * the number is trustworthy (for example a same-window delta computed from real
+ * the card. Numeric values count up to their real number (see
+ * `AnimatedNumber`); strings such as the `—` loading placeholder are rendered
+ * as-is. `hint` carries a comparison or a qualifier and is only passed when the
+ * number is trustworthy (for example a same-window delta computed from real
  * daily counts). When a `to` is given the whole card links to the filtered list
  * that explains the number.
+ *
+ * The card enters with a small rise and lifts 2 px on hover/focus. Motion is
+ * limited to `transform` and `box-shadow`, so it never reflows the grid.
  */
 export function MetricCard({
   label,
@@ -25,6 +33,7 @@ export function MetricCard({
   footer,
   to,
   ariaLabel,
+  delay = 0,
 }: {
   label: string
   value: number | string
@@ -34,8 +43,15 @@ export function MetricCard({
   footer?: ReactNode
   to?: string
   ariaLabel?: string
+  /** Stagger delay for the card's entrance, in milliseconds. */
+  delay?: number
 }) {
   const paletteTone = tones[tone]
+  const interactive = Boolean(to)
+  // Scope the remembered value to the current workspace page. A single account
+  // has exactly one role, so this cannot mix one role's number with another's;
+  // it only stops a revisit of the same page from counting up from zero again.
+  const { pathname } = useLocation()
 
   const body = (
     <Surface
@@ -43,8 +59,25 @@ export function MetricCard({
       p='4'
       height='full'
       position='relative'
-      transition='border-color var(--hd-dur-2) var(--hd-ease), background var(--hd-dur-2) var(--hd-ease)'
-      _hover={to ? { borderColor: palette.borderStrong, bg: palette.surface } : undefined}
+      transition={transitions.lift}
+      _hover={
+        interactive
+          ? {
+              borderColor: palette.borderStrong,
+              bg: palette.surface,
+              transform: 'translateY(-2px)',
+              boxShadow: palette.shadowMd,
+            }
+          : undefined
+      }
+      _focusWithin={
+        interactive
+          ? {
+              borderColor: palette.accentBorder,
+              boxShadow: `0 0 0 1px ${palette.accentBorder}`,
+            }
+          : undefined
+      }
     >
       <Stack gap='3' height='full' justify='space-between'>
         <Flex align='flex-start' justify='space-between' gap='2'>
@@ -81,7 +114,7 @@ export function MetricCard({
             color={palette.text}
             fontVariantNumeric='tabular-nums'
           >
-            {value}
+            <AnimatedNumber value={value} cacheKey={`${pathname}:${to ?? ''}:${label}`} />
           </Text>
           {hint ? (
             <Text fontSize='2xs' color={palette.textMuted} mt='2' lineClamp={2}>
@@ -95,9 +128,7 @@ export function MetricCard({
     </Surface>
   )
 
-  if (!to) return body
-
-  return (
+  const content = to ? (
     <Box
       asChild
       display='block'
@@ -109,5 +140,13 @@ export function MetricCard({
         {body}
       </Link>
     </Box>
+  ) : (
+    body
+  )
+
+  return (
+    <Reveal delay={delay} y={12} height='full'>
+      {content}
+    </Reveal>
   )
 }

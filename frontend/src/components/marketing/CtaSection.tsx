@@ -5,6 +5,8 @@ import { Link as RouterLink } from 'react-router-dom'
 
 import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
+import { Reveal } from '../Reveal.tsx'
+import { stagger } from '../../theme/motion.ts'
 import { Panel } from './primitives.tsx'
 
 export function CtaSection() {
@@ -23,6 +25,7 @@ export function CtaSection() {
         <Box position='absolute' inset='0' className='hd-grid-bg' opacity={0.5} aria-hidden />
 
         <Stack position='relative' gap='5' align='center' textAlign='center' maxW='xl' mx='auto'>
+          <Reveal y={12} delay={stagger(1)}>
           <Heading
             as='h2'
             fontSize={{ base: '2xl', md: '4xl' }}
@@ -34,11 +37,15 @@ export function CtaSection() {
           >
             Give every request a clear next step.
           </Heading>
+          </Reveal>
+          <Reveal y={12} delay={stagger(2)}>
           <Text fontSize={{ base: 'sm', md: 'md' }} color={palette.textSecondary} lineHeight='1.7'>
             Keep requests, replies and internal notes together, so nothing slips between a
             customer's first message and a resolved ticket.
           </Text>
+          </Reveal>
 
+          <Reveal y={12} delay={stagger(3)}>
           <Flex gap='3' wrap='wrap' justify='center' pt='1'>
             {signedIn ? (
               <Button
@@ -47,7 +54,9 @@ export function CtaSection() {
                 color={palette.textOnInk}
                 height='11'
                 px='5'
+                transition='background var(--hd-dur-1) var(--hd-ease), transform var(--hd-dur-1) var(--hd-ease)'
                 _hover={{ bg: palette.inkHover }}
+                _active={{ transform: 'translateY(1px)' }}
               >
                 <RouterLink to='/dashboard'>
                   Open workspace
@@ -77,13 +86,16 @@ export function CtaSection() {
                   bg={palette.surface}
                   height='11'
                   px='5'
+                  transition='background var(--hd-dur-1) var(--hd-ease), border-color var(--hd-dur-1) var(--hd-ease), transform var(--hd-dur-1) var(--hd-ease)'
                   _hover={{ bg: palette.hover, borderColor: palette.borderStrong }}
+                  _active={{ transform: 'translateY(1px)' }}
                 >
                   <RouterLink to='/sign-in'>Sign in</RouterLink>
                 </Button>
               </>
             )}
           </Flex>
+          </Reveal>
         </Stack>
       </Panel>
     </Box>

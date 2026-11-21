@@ -23,6 +23,8 @@ import { DonutChart } from '../../components/charts/DonutChart.tsx'
 import { Sparkline } from '../../components/charts/Sparkline.tsx'
 import { TrendChart } from '../../components/charts/TrendChart.tsx'
 import { MetricCard } from '../../components/MetricCard.tsx'
+import { AnimatedProgress } from '../../components/motion/AnimatedProgress.tsx'
+import { Reveal } from '../../components/Reveal.tsx'
 import { Surface } from '../../components/Surface.tsx'
 import { ErrorState, LoadingState } from '../../components/StateViews.tsx'
 import { useSupportAnalytics } from '../../hooks/useAdmin.ts'
@@ -174,6 +176,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
       {/* Headline metrics ------------------------------------------------- */}
       <SimpleGrid columns={{ base: 2, lg: 5 }} gap='3' mb='6'>
         <MetricCard
+          delay={0}
           label='Total tickets'
           value={totals.total_tickets}
           icon={TicketIcon}
@@ -183,6 +186,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           to='/tickets'
         />
         <MetricCard
+          delay={70}
           label='Open & in progress'
           value={totals.open_tickets}
           icon={Inbox}
@@ -195,6 +199,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           ariaLabel={`Open and in progress: ${totals.open_tickets}`}
         />
         <MetricCard
+          delay={140}
           label='Waiting on customer'
           value={data.waiting_on_customer}
           icon={Clock}
@@ -203,6 +208,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           to='/tickets?status=WAITING_ON_CUSTOMER'
         />
         <MetricCard
+          delay={210}
           label='Resolved'
           value={totals.resolved_tickets}
           icon={Layers}
@@ -215,6 +221,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           to='/tickets?status=RESOLVED'
         />
         <MetricCard
+          delay={280}
           label='Unassigned'
           value={totals.unassigned_tickets}
           icon={Users}
@@ -234,6 +241,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
       <SimpleGrid columns={{ base: 1, xl: 3 }} gap='4' mb='4' alignItems='start'>
         <Box gridColumn={{ xl: 'span 2' }} minW='0'>
           <ChartCard
+            delay={0}
             title='Ticket volume'
             question={`Created vs resolved over the last ${data.window_days} days`}
             legend={
@@ -271,12 +279,14 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           <AttentionList items={attention} />
           <SimpleGrid columns={2} gap='3'>
             <MetricCard
+              delay={0}
               label='Aging tickets'
               value={data.aging_over_7_days}
               tone={data.aging_over_7_days > 0 ? 'warning' : 'neutral'}
               hint='No update for 7+ days'
             />
             <MetricCard
+              delay={70}
               label='Active agents'
               value={totals.active_agents}
               icon={UserCheck}
@@ -289,6 +299,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
       {/* Composition ------------------------------------------------------ */}
       <SimpleGrid columns={{ base: 1, lg: 3 }} gap='4' mb='4' alignItems='start'>
         <ChartCard
+          delay={0}
           title='Status composition'
           question='Where every ticket currently sits'
           legend={
@@ -314,7 +325,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           />
         </ChartCard>
 
-        <ChartCard title='Priority mix' question='How urgent the open workload is'>
+        <ChartCard delay={70} title='Priority mix' question='How urgent the open workload is'>
           <BarChart
             items={priorityBars}
             ariaLabel='Tickets by priority'
@@ -322,7 +333,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
           />
         </ChartCard>
 
-        <ChartCard title='Where requests come from' question='Ticket categories by volume'>
+        <ChartCard delay={140} title='Where requests come from' question='Ticket categories by volume'>
           {categoryBars.length > 0 ? (
             <BarChart
               items={categoryBars}
@@ -336,7 +347,8 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
 
       {/* Team -------------------------------------------------------------- */}
       <SimpleGrid columns={{ base: 1, lg: 2 }} gap='4' alignItems='start'>
-        <Surface p={{ base: '4', md: '5' }}>
+        <Reveal y={14}>
+        <Surface p={{ base: '4', md: '5' }} height='full'>
           <Stack gap='4'>
             <Flex align='flex-start' justify='space-between' gap='3' wrap='wrap'>
               <Box>
@@ -358,8 +370,10 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
             </Text>
           </Stack>
         </Surface>
+        </Reveal>
 
-        <Surface p={{ base: '4', md: '5' }}>
+        <Reveal y={14} delay={70}>
+        <Surface p={{ base: '4', md: '5' }} height='full'>
           <Stack gap='4'>
             <Box>
               <Text fontSize='sm' fontWeight='semibold' color={palette.text}>
@@ -407,12 +421,35 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
                 to='/tickets?priority=URGENT'
               />
             </SimpleGrid>
+            <Box pt='1' borderTopWidth='1px' borderColor={palette.borderSubtle}>
+              <Stack gap='3' pt='3'>
+                {derived.resolutionShare !== null ? (
+                  <AnimatedProgress
+                    value={derived.resolutionShare}
+                    ariaLabel='Share of finished tickets that were resolved rather than closed'
+                    label='Resolved of finished tickets'
+                    color={palette.semantic.success}
+                    hint='Resolved ÷ (resolved + closed), from live ticket counts.'
+                  />
+                ) : null}
+                {derived.coverage !== null ? (
+                  <AnimatedProgress
+                    value={derived.coverage}
+                    ariaLabel='Share of active tickets that have an assignee'
+                    label='Active work assigned'
+                    color={palette.accent}
+                    hint='Assigned ÷ active tickets. Unassigned work is the remainder.'
+                  />
+                ) : null}
+              </Stack>
+            </Box>
             <Text fontSize='2xs' color={palette.textFaint}>
               Updates when a ticket changes status. Metrics are computed from live
               ticket rows — no SLA targets are configured, so none are shown.
             </Text>
           </Stack>
         </Surface>
+        </Reveal>
       </SimpleGrid>
     </>
   )

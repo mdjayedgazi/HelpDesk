@@ -79,6 +79,7 @@ export function CustomerDashboard({ me }: { me: User }) {
 
       <SimpleGrid columns={{ base: 2, lg: 4 }} gap='3' mb='6'>
         <MetricCard
+          delay={0}
           label='Total tickets'
           value={loading ? '—' : items.length}
           icon={TicketIcon}
@@ -86,6 +87,7 @@ export function CustomerDashboard({ me }: { me: User }) {
           to='/tickets'
         />
         <MetricCard
+          delay={70}
           label='Open & in progress'
           value={loading ? '—' : counts.open + counts.inProgress}
           icon={Inbox}
@@ -95,6 +97,7 @@ export function CustomerDashboard({ me }: { me: User }) {
           ariaLabel={`Open and in progress: ${counts.open + counts.inProgress}`}
         />
         <MetricCard
+          delay={140}
           label='Waiting on you'
           value={loading ? '—' : counts.waiting}
           icon={MessageSquare}
@@ -103,6 +106,7 @@ export function CustomerDashboard({ me }: { me: User }) {
           to='/tickets?status=WAITING_ON_CUSTOMER'
         />
         <MetricCard
+          delay={210}
           label='Resolved'
           value={loading ? '—' : counts.resolved}
           icon={CheckCircle2}
@@ -141,7 +145,7 @@ export function CustomerDashboard({ me }: { me: User }) {
         </Stack>
 
         <Stack gap='4' minW='0'>
-          <ChartCard title='Where your requests stand' question='A breakdown of your own tickets'>
+          <ChartCard delay={0} title='Where your requests stand' question='A breakdown of your own tickets'>
             {statusSlices.length > 0 ? (
               <DonutChart
                 slices={statusSlices}
@@ -196,6 +200,7 @@ export function CustomerDashboard({ me }: { me: User }) {
 
           {items.length > 0 ? (
             <ChartCard
+              delay={70}
               title='Tickets by status'
               question='Counts across all of your requests'
             >
