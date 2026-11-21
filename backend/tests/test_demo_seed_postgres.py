@@ -18,6 +18,7 @@ It runs the real seed module twice, so it also proves idempotency.
 
 import os
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -150,7 +151,7 @@ def test_guard_refuses_production_environment():
 def test_specs_meet_the_required_targets():
     users = sd.demo_users()
     tickets = sd.ticket_specs(users)
-    assert len(users) == 99
+    assert len(users) == sd.plan_for(100).demo_users
     assert len(tickets) == sd.N_TICKETS >= 100
     assert len(sd.comment_specs(users, tickets)) >= 200
     assert len(sd.history_specs(users, tickets)) >= 300
@@ -159,6 +160,155 @@ def test_specs_meet_the_required_targets():
     assert len(sd.staff_conversation_specs(users)) >= 10
     assert len(sd.staff_message_specs(sd.staff_conversation_specs(users))) >= 30
     assert len(sd.account_request_specs(users)) >= 10
+
+
+# --------------------------------------------------------------------------- #
+# Plan and sizing (no database needed)
+# --------------------------------------------------------------------------- #
+
+
+def test_plan_supports_only_documented_sizes():
+    assert sd.plan_for(100).users_total == 100
+    assert sd.plan_for(50).users_total == 50
+    with pytest.raises(sd.SeedRefused):
+        sd.plan_for(42)
+
+
+def test_plan_role_split_respects_the_single_owner_rule():
+    # The schema enforces exactly one OWNER (partial unique index), so no plan
+    # may include a second. See docs/demo-data-audit.md §3.1.
+    for size in (50, 100):
+        plan = sd.plan_for(size)
+        assert plan.users_total - plan.demo_users == 1  # exactly the Owner
+        assert (plan.admins, plan.agents, plan.customers) == (sd._ROLE_SPLITS[size])
+
+
+@pytest.mark.parametrize("size", [50, 100])
+def test_dry_run_report_is_consistent_and_writes_nothing(size):
+    plan = sd.use_plan(sd.plan_for(size))
+    report = sd.dry_run_report(plan)
+    expected = report["expected"]
+    assert expected["size"] == size
+    assert expected["users_total"] == size
+    assert expected["owners"] == 1
+    assert (
+        expected["users_total"]
+        == 1 + expected["admins"] + expected["agents"] + expected["customers"]
+    )
+    assert expected["tickets"] == (300 if size == 100 else 150)
+    # Status and priority breakdowns must sum to the ticket total.
+    assert sum(expected["tickets_by_status"].values()) == expected["tickets"]
+    assert sum(expected["tickets_by_priority"].values()) == expected["tickets"]
+    # Unassigned active work sits in the requested 15-20% band.
+    derived = report["derived"]
+    assert 12 <= derived["unassigned_active_pct"] <= 22
+    # Notifications land inside the requested 300-500 band for 100 users.
+    if size == 100:
+        assert 300 <= expected["notifications"] <= 560
+        assert derived["aging_over_7_days"] > 0
+        assert derived["unassigned_over_24h"] > 0
+        assert derived["created_in_last_14_days"] > 0
+
+
+def test_dry_run_does_not_import_or_open_the_database(monkeypatch):
+    # The planner is pure; it must never touch async_session. Fail loudly if it
+    # tries.
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("dry-run must not open a database session")
+
+    monkeypatch.setattr(sd, "async_session", _boom)
+    sd.use_plan(sd.plan_for(100))
+    report = sd.dry_run_report(sd.active_plan())
+    assert report["dry_run"] is True
+
+
+def test_ticket_timeline_is_anchored_to_now_not_a_fixed_date():
+    plan = sd.use_plan(sd.plan_for(100))
+    tickets = sd.ticket_specs(sd.demo_users())
+    # The anchor must be the run time (within a day of now), which is what keeps
+    # the 14-day analytics window populated.
+    delta = abs((plan.anchor - datetime.now(UTC)).total_seconds())
+    assert delta < 86_400
+    # A meaningful number of tickets fall inside the analytics window.
+    recent = [t for t in tickets if t["created_at"] >= -14 * sd.MINUTES_PER_DAY]
+    assert len(recent) >= 60
+    # At least some tickets were created within the last two days.
+    todayish = [t for t in tickets if t["created_at"] >= -2 * sd.MINUTES_PER_DAY]
+    assert todayish
+
+
+def test_ticket_lifecycle_timestamps_are_causal():
+    sd.use_plan(sd.plan_for(100))
+    tickets = sd.ticket_specs(sd.demo_users())
+    for t in tickets:
+        if t["resolved_offset"] is not None:
+            assert t["resolved_offset"] > 0
+            # Never resolved before it was created, and never after the anchor.
+            assert t["created_at"] + t["resolved_offset"] <= 0
+        # An update can never be before creation or in the future.
+        assert t["updated_at"] >= t["created_at"]
+        assert t["updated_at"] <= 0
+
+
+def test_active_work_is_never_assigned_to_an_inactive_agent():
+    sd.use_plan(sd.plan_for(100))
+    users = sd.demo_users()
+    inactive = {u.key for u in users if not u.is_active}
+    tickets = sd.ticket_specs(users)
+    # Inactive agents may own historical resolved/closed work, but no active
+    # ticket may be assigned to them.
+    for t in tickets:
+        if t["status"] in (
+            TicketStatus.OPEN,
+            TicketStatus.IN_PROGRESS,
+            TicketStatus.WAITING_ON_CUSTOMER,
+        ):
+            assert t["agent_key"] not in inactive
+
+
+def test_a_fraction_of_old_active_tickets_is_aging():
+    sd.use_plan(sd.plan_for(100))
+    tickets = sd.ticket_specs(sd.demo_users())
+    active = [
+        t
+        for t in tickets
+        if t["status"]
+        in (
+            TicketStatus.OPEN,
+            TicketStatus.IN_PROGRESS,
+            TicketStatus.WAITING_ON_CUSTOMER,
+        )
+    ]
+    aging = [t for t in active if t["updated_at"] <= -7 * sd.MINUTES_PER_DAY]
+    unassigned_over_24h = [
+        t
+        for t in active
+        if t["agent_key"] is None and t["created_at"] <= -sd.MINUTES_PER_DAY
+    ]
+    assert 0 < len(aging) < len(active) / 2
+    assert unassigned_over_24h
+
+
+def test_comments_never_precede_their_ticket():
+    sd.use_plan(sd.plan_for(100))
+    users = sd.demo_users()
+    by_key = {t["key"]: t for t in sd.ticket_specs(users)}
+    for c in sd.comment_specs(users, sd.ticket_specs(users)):
+        assert c["at"] >= by_key[c["ticket_key"]]["created_at"]
+
+
+def test_urgent_tickets_are_not_all_resolved():
+    sd.use_plan(sd.plan_for(100))
+    tickets = sd.ticket_specs(sd.demo_users())
+    urgent = [t for t in tickets if t["priority"] == TicketPriority.URGENT]
+    urgent_active = [
+        t
+        for t in urgent
+        if t["status"] in (TicketStatus.OPEN, TicketStatus.IN_PROGRESS)
+    ]
+    assert urgent
+    assert urgent_active
+    assert len(urgent_active) < len(urgent)  # a mix, not all one state
 
 
 def test_spec_emails_and_usernames_are_unique_and_reserved():
@@ -203,10 +353,12 @@ async def test_seed_exact_user_composition(seeded, factory):
             )
         ).all()
         by_role = dict(role_rows)
+    plan = sd.plan_for(100)
     assert by_role[Role.OWNER] == 1
-    assert by_role[Role.ADMIN] == 5
-    assert by_role[Role.AGENT] == 15
-    assert by_role[Role.CUSTOMER] == 79
+    assert by_role[Role.ADMIN] == plan.admins
+    assert by_role[Role.AGENT] == plan.agents
+    assert by_role[Role.CUSTOMER] == plan.customers
+    assert sum(by_role.values()) == plan.users_total == 100
 
 
 async def test_seed_preserves_single_owner(seeded, factory):
