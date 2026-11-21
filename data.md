@@ -1,3 +1,174 @@
+# HelpDesk — Live Neon Database Population
+
+**Date:** 2026-11-21
+**Branch:** `feat/populate-neon-demo-data`
+**Target:** live Railway `helpdesk-api` → Neon `neondb`
+**Full report:** [`docs/neon-demo-data-population-report.md`](docs/neon-demo-data-population-report.md)
+**Verdict:** **SUCCESSFULLY SEEDED AND DATABASE VERIFIED** — the real Neon
+database now holds 100 users, 300 tickets and every supported associated entity.
+The frontend was verified only at the API/HTTP level (see Part F).
+
+> **Document preservation.** The owner-identity review and, beneath it, the demo
+> dataset and PR #19 reviews follow verbatim. This review is prepended.
+
+---
+
+## Part A — Repository and remote state
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD at start | `88fd2eb` — merge of PR #26 (owner identity) |
+| PR #26 | **MERGED** 2026-11-21T20:35:16Z |
+| Open PRs | none |
+| `data.md` | found emptied locally; restored from `HEAD` before extending it |
+| New branch | `feat/populate-neon-demo-data` |
+
+PR #25 (demo seeding) and PR #26 (owner identity) are both merged, so their code
+is on `main` and in the deployed backend.
+
+---
+
+## Part B — Prerequisite check: was the Owner implementation actually live?
+
+The previous report said `OWNER_EMAIL` was *staged, not deployed*. That is **no
+longer true**, verified rather than assumed:
+
+| Evidence | Result |
+| --- | --- |
+| Railway deployment list | `d588d335` **SUCCESS** at `2026-11-21T20:35:18Z` |
+| PR #26 merge time | `2026-11-21T20:35:16Z` (2 s earlier) |
+| `/health/ready` | 200 — `database: ok, schema: ok, redis: ok` |
+
+The deployed build is the merged `main` commit, which reads `OWNER_EMAIL`.
+
+---
+
+## Part C — Real Owner verification
+
+Read-only inspection of the **only** existing user:
+
+| Property | Value |
+| --- | --- |
+| Users in database | **1** |
+| Role | `OWNER` |
+| Active | `true` |
+| Has real Clerk ID | `true` |
+| Stored email matches configured `OWNER_EMAIL` | **yes** (compared privately) |
+
+No identity was fabricated; the existing account already satisfied the
+requirement, so no reconciliation change was needed. Exactly one real Owner.
+
+---
+
+## Part D — Actual database facts
+
+| Property | Value |
+| --- | --- |
+| PostgreSQL | **18.7** (`server_version_num` 180007) — verified live, not assumed |
+| Database / schema | `neondb` / `public` |
+| Host (sanitized) | `ep-prou***.c-7.us-east-2.aws.neon.tech` (pooled) |
+| Alembic revision | `0011_query_indexes` = repository head (no pending migration) |
+| Extensions | `plpgsql` |
+| Railway | project `helpdesk-college-demo`, env `production`, services `helpdesk-api` / `helpdesk-web` |
+
+Starting state: all 15 application tables present; every table empty **except
+`users`, which held the single real Owner**. So the database was not assumed
+empty — it was measured.
+
+**Recovery:** no Neon API key/CLI is available to this session, so no branch was
+created. Judged safe because there was no application data to lose and the seeder
+is INSERT-only in one transaction. No `DROP`/`TRUNCATE`/`DELETE` was run.
+
+---
+
+## Part E — Execution and results
+
+Dry-run first (no writes), then a **single** production run through the verified
+Railway service:
+
+```
+railway run --service helpdesk-api --environment production \
+  sh -c 'python -m app.commands.seed_demo_data --size 100'
+```
+
+Actual inserted rows (one transaction):
+
+| Entity | Inserted |
+| --- | ---: |
+| users (synthetic) | 99 (→ **100 total** with the Owner) |
+| tickets | 300 |
+| comments | 789 (100 internal) |
+| ticket history | 974 |
+| notifications | 525 (587 including admin alerts) |
+| staff conversations / messages | 12 / 36 |
+| internal messages / recipients | 6 / 62 |
+| account requests / comments / events | 12 / 21 / 21 |
+| ticket feedback | 34 |
+| attachments | 12 |
+
+Distributions matched exactly:
+
+- Roles: `owner 1, admin 8, agent 20, customer 71`.
+- Status: `OPEN 60, IN_PROGRESS 60, WAITING 60, RESOLVED 90, CLOSED 30`.
+- Priority: `LOW 45, NORMAL 135, HIGH 90, URGENT 30`.
+- Assigned 269 / unassigned 31.
+
+`Owner unchanged during seed: True`.
+
+---
+
+## Part F — Verification (all from the live database)
+
+**Analytics vs direct SQL:** identical — 300 tickets, 100 users, 120 open, 90
+resolved, 30 closed, 31 unassigned, 29 unassigned >24 h, 24 aging, 20 urgent open,
+60 waiting, 18 active agents. 14-day window: **108 created / 49 resolved**, with
+activity on **13 of 14** days.
+
+**Integrity (all zero):** non-AGENT assignees, resolved-before-created,
+future created, future updated, comment-before-ticket, customer internal notes,
+notifications with missing recipients, duplicate emails, duplicate usernames.
+
+**Notifications:** 587 total, 157 unread (26.7%).
+
+**Idempotency:** a second full run inserted **0** rows and reused every entity.
+
+**Frontend / API:** frontend HTTP 200; `/health/live` and `/health/ready` 200;
+anonymous `/api/v1/admin/analytics` and `/api/v1/users/me` both **401**, so
+authorization is intact.
+
+**Not verified:** signed-in browsing of the Owner dashboard and each workspace
+page. That requires a real Clerk Owner session, which this environment cannot
+create without fabricating authentication. Those pages are **manual verification**
+items; the data and API are confirmed.
+
+---
+
+## Part G — Security compliance
+
+- No `.env` contents, passwords, connection strings, Neon secrets or Clerk keys
+  were printed. The database host is shown sanitized only.
+- No Clerk identity, `clerk_id`, or Owner account was fabricated.
+- No authentication/authorization weakened; anonymous API calls still return 401.
+- No database constraints disabled; no destructive SQL.
+- No unrelated Railway variables changed and no unrelated deployment triggered.
+- No existing application data deleted; the real Owner is preserved.
+
+---
+
+## Part H — Verdict
+
+**SUCCESSFULLY SEEDED AND DATABASE VERIFIED.**
+
+The real Neon database now contains the complete demo dataset, all aggregates are
+consistent with direct SQL, every integrity check is clean, exactly one real Owner
+exists, and the operation is repeat-safe.
+
+---
+
+## Part Z — Preserved prior reviews
+
+The owner-identity review (PR #26) and, beneath it, the demo-dataset review
+(PR #25) and the PR #19 production-readiness review follow verbatim.
 # HelpDesk — Configurable Owner Identity & Automatic Ownership Transfer
 
 **Review date:** 2026-11-21
