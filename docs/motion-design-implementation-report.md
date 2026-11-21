@@ -494,6 +494,8 @@ geometry, exact bar ratios and progress normalization.
 
 PR #23 had already been merged (`8e6868d`) before this QA pass began. The
 corrections were committed on the same `feat/helpdesk-motion-visual-polish`
-branch, as instructed. A merged pull request cannot accept new commits, so these
-changes require a small follow-up review PR against `main`. The QA commit hash
-and follow-up PR URL are recorded in the final hand-off.
+branch as instructed — QA commit `fd6dcae`
+(`fd6dcae77f32b48f7446fbc134b2f51cd498833b`) — and pushed. A merged pull request
+cannot accept new commits, so these corrections are **not** in `main` yet and
+require a small follow-up review PR, which was explicitly out of scope for this
+pass ("do not create another branch or PR").

@@ -498,7 +498,7 @@ layout shifts.
 
 - Motion implementation: `ea5e2e8`
 - Documentation follow-up: `3835b1d`
-- QA corrections commit: recorded in Part N (see the final report for the hash)
+- QA corrections commit: `fd6dcae` (`fd6dcae77f32b48f7446fbc134b2f51cd498833b`)
 - Pull request: https://github.com/mdjayedgazi/HelpDesk/pull/23
 
 ### PR state observed during QA
@@ -506,9 +506,11 @@ layout shifts.
 When the QA pass started, PR #23 had **already been merged** (merge commit
 `8e6868d`, 2026-11-21T16:04:20Z) and `main` was at that merge. The QA changes
 were therefore committed on the same `feat/helpdesk-motion-visual-polish`
-branch as instructed, and a separate follow-up review PR is required to bring
-them into `main` (a merged PR cannot accept new commits). This is stated in
-Part N and in the final hand-off rather than glossed over.
+branch (`fd6dcae`) and pushed, as instructed. A merged pull request cannot
+accept new commits, so these corrections are **not** in `main` yet; they need a
+small follow-up review PR. Creating one was explicitly out of scope for this
+pass ("do not create another branch or PR"), so it was left to the requester.
+This is stated plainly rather than claimed as delivered.
 
 ---
 
