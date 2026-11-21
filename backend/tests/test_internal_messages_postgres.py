@@ -32,11 +32,11 @@ from app.enums.enums import InternalAudience, Role
 from app.main import app
 from app.models.internal_message import InternalMessage, InternalMessageRecipient
 from app.models.user import User
+from tests._disposable_db_guard import is_disposable
 
 _PG_URL = os.environ.get("HD_TEST_POSTGRES_URL")
-_SAFE = bool(_PG_URL) and any(
-    marker in _PG_URL.lower() for marker in ("test", "verify", "ci")
-)
+
+_SAFE = is_disposable(_PG_URL)
 
 pytestmark = pytest.mark.skipif(
     not _SAFE,

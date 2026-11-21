@@ -45,13 +45,15 @@ from app.models import (  # noqa: F401  (registers every table on metadata)
     TicketHistory,
     User,
 )
+from tests._disposable_db_guard import is_disposable
 
 _PG_URL = os.environ.get("HD_TEST_POSTGRES_URL")
 
-# Refuse to run against anything that does not look like a disposable DB.
-_SAFE = bool(_PG_URL) and any(
-    marker in _PG_URL.lower() for marker in ("test", "verify", "ci")
-)
+# Refuse to run against anything that does not look like a disposable DB. The
+# check inspects the database *name*, never the whole URL: a production URL can
+# contain "ci" in a username/password/host.
+
+_SAFE = is_disposable(_PG_URL)
 
 pytestmark = pytest.mark.skipif(
     not _SAFE,

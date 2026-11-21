@@ -50,11 +50,11 @@ from app.models import (
     TicketHistory,
     User,
 )
+from tests._disposable_db_guard import is_disposable
 
 _PG_URL = os.environ.get("HD_DEMO_SEED_POSTGRES_URL")
-_SAFE = bool(_PG_URL) and any(
-    marker in _PG_URL.lower() for marker in ("verify", "demo", "test", "ci")
-)
+
+_SAFE = is_disposable(_PG_URL)
 
 pytestmark = pytest.mark.skipif(
     not _SAFE,

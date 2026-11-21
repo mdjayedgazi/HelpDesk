@@ -28,11 +28,11 @@ from app.commands.seed_qa_data import (
 from app.core.database import _normalize_database_url
 from app.enums.enums import Role, TicketPriority, TicketStatus
 from app.models import Attachment, Comment, Notification, Ticket, TicketHistory, User
+from tests._disposable_db_guard import is_disposable
 
 _PG_URL = os.environ.get("HD_TEST_POSTGRES_URL")
-_SAFE = bool(_PG_URL) and any(
-    marker in _PG_URL.lower() for marker in ("test", "verify", "ci")
-)
+
+_SAFE = is_disposable(_PG_URL)
 
 pytestmark = pytest.mark.skipif(
     not _SAFE,

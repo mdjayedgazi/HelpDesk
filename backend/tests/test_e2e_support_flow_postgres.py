@@ -30,11 +30,13 @@ from app.core.database import _normalize_database_url, get_db
 from app.enums.enums import Role
 from app.main import app
 from app.models import Ticket, User  # noqa: F401  (register every table)
+from tests._disposable_db_guard import is_disposable
 
 _PG_URL = __import__("os").environ.get("HD_TEST_POSTGRES_URL")
-_SAFE = bool(_PG_URL) and any(
-    marker in _PG_URL.lower() for marker in ("test", "verify", "ci")
-)
+# The safety check inspects the database *name*, never the whole URL: a
+# production URL can contain "ci" in a username/password/host.
+
+_SAFE = is_disposable(_PG_URL)
 
 pytestmark = pytest.mark.skipif(
     not _SAFE,
