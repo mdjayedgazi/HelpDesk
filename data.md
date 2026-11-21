@@ -1,354 +1,59 @@
-# HelpDesk — production readiness remediation review
+# HelpDesk — full production readiness review (finalization pass)
 
 **Review date:** 2026-11-21
 **Repository:** `mdjayedgazi/HelpDesk`
 **Base branch:** `main` @ `4c1bd00`
 **Remediation branch:** `fix/production-readiness`
-**Branch URL:** https://github.com/mdjayedgazi/HelpDesk/tree/fix/production-readiness
-**Pull request (not opened automatically):** https://github.com/mdjayedgazi/HelpDesk/pull/new/fix/production-readiness
-**Status:** **PARTIALLY READY — EXTERNAL CONFIGURATION REQUIRED.**
+**Pull request:** [#19](https://github.com/mdjayedgazi/HelpDesk/pull/19)
+**Final branch commit:** `cf19630` (15 commits ahead of `main`, 0 behind)
+**Verdict:** **CONDITIONALLY READY** — college-demo only. Not production-ready
+for real customers until the external items in Part L are closed.
 
-The repository-side fixes for every confirmed HIGH and MEDIUM issue are
-implemented, tested, and pushed as a reviewable branch. Several items remain
-that require Neon, Clerk, Upstash, Railway, or object-storage account access;
-those are documented, not claimed as done.
+The companion engineering report with the same conclusions is
+[`docs/FINAL_PRODUCTION_READINESS_REPORT.md`](docs/FINAL_PRODUCTION_READINESS_REPORT.md).
+This file is the complete review, including the investigation, every defect
+reproduced and fixed in this pass, and the exact evidence.
 
-> The prior audit from 2026-11-19 is preserved verbatim at the end of this file
-> under **Appendix A — Previous audit (2026-11-19)**.
-
----
-
-## 0. How this work was performed (safety first)
-
-The working tree was reviewed **before any edit**. It was found on a local
-branch `fix/production-readiness` that had no commits of its own, with
-uncommitted changes and untracked files that already matched this remediation
-scope (idempotency, indexes, readiness, CORS normalization, health).
-
-Per the task's safety rules, that pre-existing work was **not** discarded,
-stashed, overwritten, or committed blindly:
-
-- It was committed as-is to a local-only backup branch
-  `wip/production-readiness-backup-20261121` (`cf3f268`). This branch was **not
-  pushed**.
-- The remediation was then rebuilt from a clean `origin/main` baseline,
-  re-verifying each finding against the current code rather than trusting the
-  prior work.
-- Two defects in the prior work were found and corrected:
-  1. Its `_postgres_connect_args` helper was written but **never wired into the
-     engine**, so statement timeouts would not have applied.
-  2. Its index migration added partly redundant indexes that duplicated
-     existing single-column indexes.
-- No `git reset --hard`, `git clean -fd`, force push, database reset, migration
-  deletion, `.env` overwrite, volume removal, or destructive production
-  operation was performed.
-
-`origin` was verified as `https://github.com/mdjayedgazi/HelpDesk.git`, and the
-remote default branch is `main` (not `master`). The new branch was created from
-the latest `origin/main` and pushed only as a branch; `main` was never modified.
+All numbers below were produced in this session. Nothing from a prior run is
+presented as a current result.
 
 ---
 
-## 1. Baseline (historical results reproduced first)
+## 0. How this pass was performed
 
-Before editing, the audit's historical baseline was reproduced locally so any
-later regression could be attributed correctly:
+1. **Inspect first, edit later.** Working directory, git root, remote, branch,
+   ahead/behind, staged/unstaged/untracked state, local/remote commits, PRs,
+   GitHub auth, and Railway linkage were all read before touching anything.
+2. **Preserve existing work.** The working tree had one change: `data.md` had
+   been emptied. Nothing was discarded. See Part B.
+3. **Verify, don't trust.** Every claim in the previous remediation (Trivy
+   version, SARIF behavior, migration history, Railway settings, production DB
+   revision) was re-checked against the real repository, the real CI logs, the
+   real images, and the real (read-only) production services.
+4. **Fix only confirmed defects.** Each new defect below was reproduced before
+   the change and re-tested after it.
+5. **Stop at production-data operations.** The merge (which triggers the
+   pre-deploy migration against Neon) was left to the owner. Everything needed
+   to make that merge safe was implemented and proven.
 
-| Check | Baseline result |
-| --- | --- |
-| Backend `pytest` (SQLite, Clerk stubbed) | 404 passed, 45 skipped |
-| Frontend `npm test` | 42 passed |
-| Backend Ruff lint + format | pass |
-| Backend type check (pyrefly) | 0 errors |
-| Frontend typecheck + lint | pass |
-| `npm audit --omit=dev --audit-level=high` | 0 vulnerabilities |
-| Frontend production build | 1 JS chunk, 1,227.97 kB (341.78 kB gzip) |
-
-These matched the historical audit, so the baseline was intact.
-
----
-
-## 2. Confirmed issues and fixes
-
-Each item below was verified against the current code before changing it. The
-fix is minimal and targeted; working features and API contracts were preserved.
-
-### 2.1 HIGH — `/health/ready` checked only `SELECT 1`
-
-- **Files:** `backend/app/core/health.py`, `backend/alembic.ini`,
-  `backend/tests/test_readiness_schema.py`
-- **Why it was a problem:** `SELECT 1` proves connectivity but says nothing
-  about whether the expected schema exists or whether migrations have been
-  applied. A half-migrated or empty database would report "ready".
-- **Fix:** added a read-only `schema` check that (a) reads the single Alembic
-  head shipped in the image, (b) verifies the required core tables exist, and
-  (c) compares them with the live `alembic_version`. Non-`ok` is fatal (`503`)
-  only when `ENVIRONMENT=production`; in development/test (where tables may come
-  from `AUTO_CREATE_TABLES`) it is reported but not fatal. Output stays coarse
-  (`ok` / `outdated` / `incomplete` / `unknown`) — no connection string, host,
-  or exception text is exposed. The head is read once and cached.
-- **Also:** set `alembic.ini` `path_separator = os` to silence the deprecation
-  warning the probe would otherwise emit.
-- **Preserved:** `/health/live` behavior is unchanged (pure liveness).
-
-### 2.2 HIGH — `FRONTEND_URL` / CORS trailing-slash origin mismatch
-
-- **Files:** `backend/app/core/config.py`,
-  `backend/tests/test_origin_normalization.py`
-- **Why it was a problem:** browsers send `Origin` and Clerk sends `azp`
-  **without** a trailing slash or a redundant default port. An operator-pasted
-  value like `https://app.example.com/` passed startup validation but never
-  matched, silently breaking CORS preflight and Clerk verification.
-- **Fix:** `allowed_origins` now normalizes each origin to
-  `scheme://host[:port]` (strip trailing slash; drop `:443`/`:80`). It is used
-  for both CORS and the `azp` check, so one allowlist governs both. A value that
-  carries a path/query/fragment is **not** normalized — the production validator
-  still rejects it, so an unintended URL is never silently accepted. Exact
-  origin semantics for CORS are preserved.
-- **Tests:** trailing slash/es/whitespace, default-port equivalence,
-  path/wildcard left untouched, de-duplication, and production acceptance of a
-  trailing slash plus rejection of a path-bearing origin.
-
-### 2.3 HIGH — ticket creation could duplicate on retry
-
-- **Files:** `backend/app/api/routers/tickets.py`,
-  `backend/app/models/ticket.py`,
-  `backend/migrations/versions/0010_ticket_idempotency.py`,
-  `backend/tests/test_ticket_idempotency.py`
-- **Why it was a problem:** a retried `POST /api/v1/tickets` (lost response,
-  double click, network retry) created a second ticket; only the ticket
-  *number* was protected against collision.
-- **Fix:** an optional `Idempotency-Key` header. A nullable
-  `tickets.client_request_id` column plus a **partial unique index**
-  `(created_by_user_id, client_request_id) WHERE client_request_id IS NOT NULL`
-  guarantees one ticket per creator/key. A repeated request returns the original
-  ticket. A concurrent duplicate that wins the insert is resolved by re-reading
-  the winning row; the conflict test mirrors the existing ticket-number
-  handling (SQLSTATE + constraint name, with a SQLite message fallback).
-- **Backward compatible:** no header ⇒ behavior is exactly as before; existing
-  rows keep `NULL` and are excluded from the partial index; the column is never
-  exposed in `TicketRead`.
-- **Tests:** repeat, distinct, absent, blank, invalid, cross-creator, simulated
-  lost-race, DB uniqueness, and many-`NULL` rows.
-
-### 2.4 MEDIUM — no PostgreSQL statement/lock timeout
-
-- **Files:** `backend/app/core/database.py`, `backend/app/core/config.py`,
-  `backend/.env.example`, `backend/tests/test_db_timeouts.py`
-- **Why it was a problem:** one pathological query or lock wait could pin a
-  pooled connection until the client disconnected; with a small pool that stalls
-  unrelated requests.
-- **Fix:** `DB_STATEMENT_TIMEOUT_MS` (default 15000) and `DB_LOCK_TIMEOUT_MS`
-  (default 5000), applied as libpq `options` on **direct** PostgreSQL endpoints.
-  PgBouncer-style pooled endpoints (Neon `-pooler`) keep only the
-  prepared-statement fix, because they do not reliably honour per-connection
-  startup options; the docs say to set the same limits on the database role
-  there. `0` disables a limit.
-- **Verified live** against disposable PostgreSQL: `SHOW statement_timeout`
-  returned `250ms` and a `pg_sleep(1)` was interrupted (`OperationalError`)
-  when configured to 250ms.
-
-### 2.5 MEDIUM — missing, justified query indexes
-
-- **Files:** `backend/app/models/notification.py`,
-  `backend/app/models/ticket.py`,
-  `backend/migrations/versions/0011_query_indexes.py`,
-  `backend/tests/test_query_indexes.py`
-- **Why it was a problem:** every ticket list orders by `created_at DESC` with
-  `LIMIT/OFFSET`, and the notification panel lists one recipient newest-first;
-  neither ordering was indexed.
-- **Justification:** the indexes were chosen from the actual queries, not
-  speculatively. Added `tickets.created_at` and
-  `notifications(recipient_user_id, created_at)`. The notification index's
-  leading column still serves plain recipient lookups, so no duplicate index was
-  added. The prior WIP's broader set was deliberately **not** copied because
-  parts duplicated existing single-column indexes.
-- **Tests:** declared metadata, column order, and a duplicate-multi-column guard.
-
-### 2.6 MEDIUM — missing frontend request timeout
-
-- **Files:** `frontend/src/lib/api.ts`, `frontend/src/lib/api.test.ts`
-- **Why it was a problem:** a hung connection left a mutation pending forever
-  and the UI stuck on a spinner.
-- **Fix:** an internal `AbortController` with a default 20 s request timeout and
-  a 120 s upload timeout, combined with the caller's `AbortSignal` (e.g. React
-  Query cancellation). A timeout surfaces a clear message; a genuine
-  cancellation still rejects with `AbortError`. Timers are always cleared.
-
-### 2.7 MEDIUM — missing React ErrorBoundary
-
-- **Files:** `frontend/src/components/ErrorBoundary.tsx` (+ test),
-  `frontend/src/main.tsx`
-- **Fix:** an application-level error boundary around `<App/>` with a
-  recoverable fallback (Try again / Reload). It logs the error to the console
-  only; no user data is shown.
-
-### 2.8 MEDIUM — large single JS bundle (~1.23 MB)
-
-- **Files:** `frontend/src/App.tsx`
-- **Fix:** route-level `React.lazy` + `Suspense`. Routing, guards, and API
-  contracts are unchanged; only load timing differs. The single chunk became a
-  **453.54 kB (122.08 kB gzip)** entry plus per-route chunks, all under the
-  500 kB warning threshold.
-
-### 2.9 MEDIUM — Helm nginx user/`runAsNonRoot` mismatch; API not routable
-
-- **Files:** `frontend/Dockerfile`,
-  `helm/helpdesk/{values.yaml,templates/frontend-deployment.yaml,templates/ingress.yaml}`
-- **Why it was a problem:** the chart declared `runAsNonRoot: true` and
-  `readOnlyRootFilesystem: true` for the frontend, but the official
-  `nginx:1.29-alpine` image started as **root** (verified) — so the pod would
-  fail to start under those constraints. Separately, the Ingress exposed only
-  the web service, while the SPA calls the API on an absolute origin.
-- **Fix:** the image now chowns the writable config/cache/log paths and the pid
-  file to the `nginx` user and switches to `USER 101:101`. The chart pins the
-  matching numeric ids and adds pod-level `fsGroup: 101` so the emptyDir mounts
-  are writable on a read-only root. Added an **opt-in** `ingress.apiHosts` block
-  (default empty ⇒ rendered output unchanged) that routes a separate API host to
-  the backend service.
-- **Verified:** built the image, ran it as uid 101, confirmed `/healthz` `200`,
-  SPA fallback `200`, missing asset `404`, and full security headers. `helm
-  lint` and `helm template` (default and ingress variants) pass.
-
-### 2.10 MEDIUM — CI/CD hardening
-
-- **Files:** `.github/workflows/ci.yml`, `.gitleaks.toml`,
-  `backend/tests/test_e2e_support_flow_postgres.py`
-- **Fixes:**
-  - Every action pinned to a **verified full commit SHA**: checkout `v4.2.2`,
-    setup-node `v4.4.0`, setup-uv `v6.6.1`, codeql-action `v3.30.0`,
-    trivy-action `v0.33.1`, gitleaks-action `v2.3.9`, setup-helm `v4.3.1`,
-    upload-sarif `v3.30.0`. Each SHA was resolved from the real tag via
-    `git ls-remote`; none were invented.
-  - Backend job now also runs `pyrefly check`; the migrations job runs
-    `alembic check`.
-  - New `docker-build` job builds both images, asserts the frontend image runs
-    as uid `101` and serves `/healthz`, and uploads Trivy **SARIF** to the
-    Security tab. Gating is intentionally left non-blocking (`exit-code: "0"`)
-    because unfixed base-image CVEs must not red every PR; the doc explains how
-    to turn it on after reviewing the baseline.
-  - New `helm` job lints and renders the chart.
-  - New `security` job runs a gitleaks secret scan and CodeQL (free for this
-    public repository).
-  - **E2E:** a new isolated PostgreSQL test covers authentication → ticket
-    creation → automatic assignment, plus the agent claim flow. It runs only
-    against a disposable database (guarded by the existing
-    `test|verify|ci` name check) and adds no deploy/production steps.
-- **Preserved:** the existing Railway deployment behavior is untouched; no
-  workflow step modifies production infrastructure on a pull request.
-
-### 2.11 Documentation
-
-- **Files:** `docs/DATABASE_BACKUP_RESTORE.md` (new),
-  `docs/PRODUCTION_READINESS.md` (new), `docs/DEPLOYMENT.md`,
-  `docs/RAILWAY_COLLEGE_DEMO.md`, `backend/migrations/README.md`, `README.md`
-- Added a backup/restore runbook with a **disposable-only restore guard** and
-  restore verification; an external-configuration guide covering Clerk
-  production, Upstash ownership/durability, and the object-storage decision; the
-  new DB timeout settings; and corrections to stale notes (single-chunk bundle,
-  trailing-slash behavior). The migrations README documents `0010`/`0011`.
+No destructive command was used: no `reset --hard`, `clean -fd`, `checkout -- .`,
+force-push, rebase of a published branch, branch switch on a dirty tree, Redis
+flush, production write, production restore, or container/service recreation.
 
 ---
 
-## 3. Deliberately NOT changed
+## 1. Repository and history (as found)
 
-- **Authentication / authorization architecture** — Clerk verification, role
-  authority, customer-only provisioning, and all permissions preserved.
-- **Upload security** — magic-byte validation, ClamAV fail-closed scanning,
-  quarantine → publish, path containment, and authorization preserved. No
-  asynchronous/queue upload pipeline was introduced (no proven need, and it
-  would be a larger correctness risk).
-- **Synchronous ClamAV scanning** — reviewed; the architecture has no worker,
-  and fail-closed synchronous scanning is correct as-is. Left unchanged.
-- **Object storage (S3/R2)** — not implemented. No provider access, and a
-  half-built backend would be riskier than the current single-replica volume.
-  Multi-replica deployment remains explicitly forbidden until a migration is
-  verified; `replicaCount` stays `1`.
-- **Redis eviction/persistence** — not changed; requires verifying the actual
-  Upstash account. No `FLUSHALL`/`FLUSHDB` was run and `REDIS_URL` was never
-  printed.
-- **Foreign-key deletion behavior / cascades** — not added.
-- **HSTS** — remains opt-in and unchanged (documented decision).
-- **Docker base-image digest pinning** — reviewed; left on tags as before (out
-  of scope, and not a confirmed defect).
-- **Existing tests** — none removed or weakened.
+```
+Repository root : /home/jayed/Projects/HelpDesk
+Remote          : https://github.com/mdjayedgazi/HelpDesk.git
+Default branch  : main
+Branch          : fix/production-readiness  (tracking origin, clean after backup)
+origin/main     : 4c1bd00  docs: record production connectivity audit and port alignment fix
+origin/fix/...  : e910fd4  docs: record full production-readiness remediation review in data.md
+```
 
----
-
-## 4. Validation (final, on the committed tree)
-
-| Check | Result |
-| --- | --- |
-| Backend `pytest` (SQLite) | **448 passed, 47 skipped** |
-| Backend Ruff lint | pass |
-| Backend Ruff format | 111 files formatted |
-| Backend type check (pyrefly) | **0 errors** |
-| Frontend typecheck | pass |
-| Frontend lint | pass (0 warnings) |
-| Frontend tests | **50 passed** |
-| `npm audit --omit=dev --audit-level=high` | **0 vulnerabilities** |
-| Frontend production build | entry **453.54 kB / 122.08 kB gzip**, route chunks |
-| Docker backend build | ok; container starts, `/health/live` `200` |
-| Docker frontend build | ok; runs as uid `101`, `/healthz` `200`, SPA `200`, missing asset `404` |
-| Helm lint / template (default + ingress) | pass |
-| Alembic on disposable PostgreSQL | `upgrade head` ok, `alembic check` **“No new upgrade operations detected.”**, `0011→0010→0009 → head` re-upgrade ok |
-| PostgreSQL integration + E2E | **26 passed** (incl. auth→create→assignment and claim) |
-| `git diff --check` | clean |
-| Secret scan of committed diff | no real secrets (only `.env.example` placeholders) |
-
-**Disposable-PostgreSQL-only.** Every database check ran against throwaway
-Docker containers (`POSTGRES_DB` names containing `verify`/`hdverify`), never a
-real database. The E2E and integration modules refuse any URL that does not look
-disposable.
-
-**Regression accounting:** the 44 new backend tests and 8 new frontend tests are
-additive; no baseline test was modified to pass. No pre-existing failure was
-hidden.
-
-**CI execution status:** the workflow triggers on `pull_request` and pushes to
-`main`, so it has **not run yet** — no PR was opened (per instructions, the
-branch is published for review, not merged). All workflow commands were
-exercised locally first.
-
----
-
-## 5. Remaining external / manual items (not completed here)
-
-These require account access this environment does not have. Each is documented
-in `docs/PRODUCTION_READINESS.md` or `docs/DATABASE_BACKUP_RESTORE.md` with the
-exact dashboard location, the environment variable **names** (never values), and
-how to verify success.
-
-1. **Neon backups / PITR / restore drill** — confirm plan, PITR window,
-   retention, and perform a restore **into an isolated branch**. No backup or
-   restore is claimed to have succeeded.
-2. **Clerk production instance** — create/own it, configure allowed origins,
-   set `sk_live_`/`pk_live_` and `CLERK_FAPI_ORIGIN`, then rotate live Railway
-   credentials with owner authorization. Code already fails closed on a
-   non-`sk_live_` key outside the explicit college-demo profile.
-3. **Upstash ownership/durability** — claim the database before it expires and
-   confirm plan/eviction/persistence in the console. No settings were changed.
-4. **Object storage (S3/R2)** — decide and provision; keep one replica until the
-   migration is verified.
-5. **Railway dashboard** — no production variables/ports/volumes/deploys were
-   changed. Confirm the web service still passes its healthcheck now that the
-   image runs as uid 101.
-6. **Monitoring/alerting** — wire `/health/ready`, DB connection saturation, and
-   backup-status alerts in Neon/Railway or your monitoring provider.
-
----
-
-## 6. Git
-
-| Item | Value |
-| --- | --- |
-| Repository | `https://github.com/mdjayedgazi/HelpDesk` |
-| Default branch | `main` (untouched at `4c1bd00`, verified via `ls-remote`) |
-| New branch | `fix/production-readiness` (local-only backup of prior WIP: `wip/production-readiness-backup-20261121`, not pushed) |
-| Push result | new branch pushed; `origin/main` unchanged |
-| Branch URL | https://github.com/mdjayedgazi/HelpDesk/tree/fix/production-readiness |
-
-Commits (oldest → newest):
+The nine historical commits were present and unchanged:
 
 ```
 1ee60b3 fix(config): normalize browser origins and add DB query timeouts
@@ -359,299 +64,654 @@ e517783 feat(tickets): make ticket creation idempotent
 f1e71b9 fix(helm): run nginx unprivileged and route the API ingress
 10566fb ci: pin actions, add type check, docker/E2E/security jobs
 23dadd9 docs: add backup/restore and production-readiness runbooks
+e910fd4 docs: record full production-readiness remediation review in data.md
 ```
 
----
+Branch relationship to `origin/main`:
 
-## 7. Final assessment
+- Merge base: `4c1bd00`
+- Ahead: 9 (then 15 after this pass)
+- Behind: **0** — no synchronization/merge was needed, so no conflict resolution
+  was required and no rebase was performed.
 
-**PARTIALLY READY — EXTERNAL CONFIGURATION REQUIRED.**
+### Existing pull requests
 
-Automated tests pass and the repository-side remediation is complete and
-reviewable, but production readiness is not declared from test results alone.
-The remaining blockers are operational and external: verified Neon
-backup/PITR + a real restore drill, a Clerk production instance with rotated
-credentials, confirmed Upstash ownership/durability, and the object-storage
-decision before any horizontal scaling.
+PR [#19](https://github.com/mdjayedgazi/HelpDesk/pull/19) is open,
+`fix/production-readiness → main`, non-draft. PR #18 (`deploy/railway-college-demo`)
+and earlier PRs are already merged or closed. No duplicate PR was created.
 
----
+### GitHub authentication
 
-# Appendix A — Previous audit (2026-11-19)
-
-The following is the prior audit, preserved verbatim for history. Some statements
-below were superseded by this remediation (for example the single-chunk bundle
-size and the trailing-slash behavior), as detailed in sections 2.2 and 2.8 above.
-
-## HelpDesk — production connectivity audit and Railway verification
-
-**Review date:** 2026-11-19
-**Repository:** `mdjayedgazi/HelpDesk`
-**Branch:** `main`
-**Commit under test:** `169f76e645550e97e2f616ac9677018dc174777f` (PR #18 merge)
-**Railway project:** `helpdesk-college-demo`, environment `production`, region `ams`
-**Services:** `helpdesk-api`, `helpdesk-web`
-**Status:** **API and frontend are live and reachable. Redis and PostgreSQL are healthy. Interactive Clerk sign-in and the authenticated dashboard remain unverified because no test credentials exist.**
+`gh auth status`: logged in as `mdjayedgazi` with `repo` and `workflow` scopes.
+Full access to runs, logs, PR metadata, and review comments. `main` has **no
+branch protection** (`Branch not protected`), so no required-review/bypass
+mechanics apply; the checks are advisory-but-green.
 
 ---
 
-### A. Root causes
+## 2. Preservation of prior work
 
-#### A1. Dashboard failure (fixed this pass) — Railway domain target port did not match the container port
+The only working-tree change was `data.md` emptied (657 lines deleted, 0 bytes).
 
-The API deployment had already reached `SUCCESS` and Uvicorn was listening on
-`http://0.0.0.0:8080`, but every request to the public API origin timed out with
-no HTTP response, or returned `502` at the Railway edge.
-
-| Evidence | Value |
+| Action | Result |
 | --- | --- |
-| Service domain | `helpdesk-api-production-1dc9dd39.up.railway.app` |
-| Domain target port before the fix | **`8000`** |
-| Container port from startup log | **`8080`** (`Uvicorn running on http://0.0.0.0:8080`) |
-| Source of `8080` | Railway injects `PORT=8080` at runtime; the image default is `PORT=8000` |
-| Public `GET /health/live` before the fix | `000` (connection opened, no bytes) / intermittent `502` |
-| Deployment status at the same time | `SUCCESS`, container healthy |
-| Container-side healthcheck | Passed (Railway's own probe reached the container) |
+| Uncommitted diff saved outside the repo | `/tmp/opencode/helpdesk-safety/uncommitted-data-md-20261121.patch` |
+| Committed `data.md` saved outside the repo | `/tmp/opencode/helpdesk-safety/data.md.head-e910fd4` |
+| Safety snapshot of branch HEAD | branch `backup/production-readiness-pre-finalization-20261121` @ `e910fd4` |
+| Prior WIP backup preserved | `wip/production-readiness-backup-20261121` @ `cf3f268` — untouched |
 
-The API image sets `PORT=8000`, but Railway's runtime `PORT` overrides it to
-`8080`. The public domain still targeted `8000`, so the edge had no listener to
-route to. The container was healthy, which is why the deployment gate passed and
-why this looked like a frontend or database problem rather than routing.
-
-That failure surfaces in the browser exactly as reported: `fetch` rejects
-(`ApiError(0)`), and the UI shows **"Could not reach the HelpDesk server. Check
-your connection."** The profile request never reaches FastAPI, so
-`/api/v1/users/me` never appears in the API logs.
-
-**Fix:** set the API service domain target port to `8080`, matching the running
-container. No application code change was required.
-
-#### A2. Earlier startup failure (fixed previously) — missing `RATE_LIMIT_REDIS_URL`
-
-The first API deployment (`0964f512-468b-4edd-a5e2-d32be2ad04c2`) crashed during
-`Settings._validate_production_configuration()`:
-
-```text
-RuntimeError: Invalid production configuration:
-RATE_LIMIT_REDIS_URL must be a redis:// or rediss:// URL
-```
-
-`ENVIRONMENT=production` + `RATE_LIMIT_ENABLED=true` require a TLS Redis URL.
-The variable was absent. A real Upstash `rediss://` database was provisioned,
-verified over TLS (`PING`, `SET`, `GET`, `DEL`), and configured through secure
-stdin. The API then started and passed `/health/live`.
-
-#### A3. Operational risk — the first Redis database was temporary
-
-The first database came from Upstash's no-signup agent endpoint. Those databases
-live for three days unless claimed, and the claim/console link was not retained
-by the first provisioning script. A **fresh, retry-safe database** was created
-with a saved claim link and Railway was switched to it (verified by host hash).
-It still expires in three days unless claimed. See section E.
-
-#### A4. Configuration observation — Clerk development instance
-
-The frontend build uses `VITE_CLERK_PUBLISHABLE_KEY` starting with `pk_test_`,
-i.e. a Clerk **development** instance (`social-ferret-6540.clerk.accounts.dev`).
-Clerk works and the FAPI host matches the CSP exactly, but a development
-instance is not appropriate for a long-lived production site. This is not the
-cause of the dashboard failure.
+The two backup refs were **not pushed**. The safety snapshot name did not exist
+before this pass, so no existing ref was moved. `data.md` was then rewritten
+with this review; the original 657-line text remains recoverable from the patch
+and from `e910fd4`.
 
 ---
 
-### B. Component status
+## 3. CI failure investigation (root cause, not the symptom)
 
-| Component | Status | Evidence |
+### 3.1 What the screenshot showed
+
+```
+Trivy image scan (backend)  Process completed with exit code 1
+Upload backend scan         Path does not exist: trivy-backend.sarif
+Trivy image scan (frontend) Skipped
+Upload frontend scan        Path does not exist: trivy-frontend.sarif
+```
+
+Both Docker builds and the non-root/healthcheck test passed.
+
+### 3.2 What the full log showed
+
+From `gh run view 44895877917 --job 136821294963 --log`, the backend scan step:
+
+```
+##[group]Run aquasecurity/trivy-action@b6643a29…        # v0.33.1
+with:
+  version: v0.65.0                                       # <-- action default
+...
+aquasecurity/trivy info checking GitHub for tag 'v0.65.0'
+aquasecurity/trivy info found version: 0.65.0 for v0.65.0/Linux/64bit
+##[error]Process completed with exit code 1.
+##[end-action display=Install Trivy; outcome=failure]
+```
+
+The failure is in **`setup-trivy` installing the binary**, before Trivy is ever
+invoked. The installer resolved the tag, then failed to fetch and verify the
+release.
+
+### 3.3 Proof of the original cause
+
+```
+GET https://github.com/aquasecurity/trivy/releases/download/v0.65.0/trivy_0.65.0_Linux-64bit.tar.gz
+    -> HTTP 404
+GET https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz
+    -> HTTP 302
+```
+
+`v0.65.0` is an existing git tag whose release has **no published Linux-64bit
+asset**. `trivy-action@v0.33.1` defaults `version` to exactly that `v0.65.0`.
+So the install step exited 1, no scan ran, and **no SARIF file was created**.
+
+The three other messages are consequences, not causes:
+
+- `Path does not exist: trivy-backend.sarif` → `if: always()` uploaded a file
+  that was never produced.
+- `Trivy image scan (frontend) Skipped` → GitHub Actions skips later steps of a
+  job after a failed step, so the frontend never ran.
+- `Path does not exist: trivy-frontend.sarif` → same as the backend.
+
+This is a **scanner execution failure**, not a vulnerability finding — an
+important distinction the fix preserves.
+
+### 3.4 The fix
+
+| Element | Before | After |
 | --- | --- | --- |
-| Railway API | **PASS** | Deployment `75e9a9df-fe69-4c1e-ac46-4f6e421b3709`, `SUCCESS`, root `/backend`, `backend/Dockerfile`, branch `main`, commit `169f76e` |
-| API liveness | **PASS** | `GET /health/live` → `200` `{"status":"ok"}` |
-| API readiness | **PASS** | `GET /health/ready` → `200` `{"status":"ready","checks":{"database":"ok","redis":"ok","clamav":"disabled"}}` |
-| Neon PostgreSQL | **PASS** | `SELECT 1` → `1`; PostgreSQL `18.7`; pooled host; `sslmode=require`; Alembic `0009_attachment_scan_status` (head) |
-| Upstash Redis | **PASS (temporary)** | `rediss://` TLS; direct `PING`/`SET`/`GET`/`DEL` succeeded; readiness reports `redis: ok`; database expires in 3 days unless claimed |
-| Clerk authentication | **PARTIAL** | Clerk JS loads, sign-in form renders, no console errors; no interactive sign-in performed (no test credentials) |
-| Frontend API URL | **PASS** | `VITE_API_URL=https://helpdesk-api-production-1dc9dd39.up.railway.app`; correct origin, no path; present in the compiled bundle |
-| CORS | **PASS** | Preflight `OPTIONS` → `200`, exact origin allowed, credentials on, `Authorization` allowed, rate-limit/request-id headers exposed |
-| CSP | **PASS** | API + Clerk FAPI + telemetry + bot-protection origins present; no `unsafe-eval`; no Railway wildcard; no empty substitution |
-| Dashboard profile endpoint | **PARTIAL** | `/api/v1/users/me` → `401` without a token (correct, CORS headers present); success path untested without a session |
-| User synchronization | **CODE REVIEW OK / UNVERIFIED LIVE** | `get_current_user` links by verified Clerk email or provisions `CUSTOMER`; no live signed-in request available |
-| Dashboard UI | **PARTIAL** | `/dashboard` loads `200`; unauthenticated visit redirects to `/sign-in`; signed-in rendering untested |
+| Action | `trivy-action@b6643a29…` (v0.33.1) | `trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25` (v0.36.0) |
+| Binary | implicit `v0.65.0` (404) | explicit `version: v0.70.0` |
+| Checksum | — | `8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9` (verified against `trivy_0.70.0_checksums.txt`) |
+| SARIF upload | `codeql-action@717e2306…` (v3.30.0, node20) | `codeql-action@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea` (v4.39.4, node24) |
+| CodeQL init/autobuild/analyze | v3.30.0 | same v4.39.4 SHA |
+
+Both SHAs were resolved through the GitHub API and confirmed to exist:
+`ed142fd…` is the `v0.36.0` tag commit, `1bd86f2…` is the `v4.39.4` tag commit.
+
+### 3.5 Scanner independence
+
+Each step now has its own id and a precise condition:
+
+```yaml
+- id: backend_build
+- id: frontend_build
+- id: backend_scan
+  if: ${{ !cancelled() && steps.backend_build.outcome == 'success' }}
+- id: backend_sarif     # validates non-empty, version 2.1.0, runs present
+  if: ${{ !cancelled() && steps.backend_scan.outcome == 'success' }}
+- Upload backend scan
+  if: ${{ !cancelled() && steps.backend_sarif.outcome == 'success' && hashFiles('trivy-backend.sarif') != '' }}
+- id: frontend_scan      # independent of the backend scan
+  if: ${{ !cancelled() && steps.frontend_build.outcome == 'success' }}
+- id: frontend_sarif
+- Upload frontend scan
+  if: ${{ !cancelled() && steps.frontend_sarif.outcome == 'success' && hashFiles('trivy-frontend.sarif') != '' }}
+```
+
+Guarantees this enforces:
+
+- A backend scanner failure cannot skip the frontend scan.
+- A successful scan that produces no/invalid SARIF **fails loudly** at the
+  validation step (a "silent success with no report" is impossible).
+- A scan failure remains a job failure; no unconditional `continue-on-error`.
+- Upload runs only for a successfully validated, existing report.
+- Distinct `category: trivy-backend` / `trivy-frontend` prevent a
+  duplicate-analysis collision between two Trivy reports in one job.
+
+The security policy is unchanged: `severity: CRITICAL,HIGH`, `ignore-unfixed:
+true`, `exit-code: "0"` — report-only findings, real execution failures fail.
+
+### 3.6 CI verified green
+
+Run `44901100310` (head `cf19630`), all jobs `success`:
+
+```
+Backend lint and SQLite tests                    success
+Frontend typecheck, lint, tests, build           success
+Production dependency audit                      success
+Alembic migrations (disposable PostgreSQL)       success
+PostgreSQL integration tests (disposable)        success
+Docker image builds                              success
+Helm chart validation                            success
+Static security analysis and secret scan         success
+CodeQL                                           success
+```
+
+The Docker job's step list, from the API:
+
+```
+Build backend image                        success
+Build frontend image                       success
+Frontend image serves health / non-root    success
+Trivy image scan (backend)                 success
+Validate backend SARIF report              success
+Upload backend scan                        success   (Successfully uploaded results)
+Trivy image scan (frontend)                success
+Validate frontend SARIF report             success
+Upload frontend scan                       success
+```
+
+The frontend scan **ran** (it is no longer "Skipped"), and the log contains
+`aquasecurity/trivy info found version: 0.70.0 for v0.70.0/Linux/64bit`.
+
+### 3.7 Workflow hardening
+
+- Every action remains pinned to a full commit SHA.
+- `persist-credentials: false` added to all eight `actions/checkout` steps (no
+  job needs push credentials; this keeps the checkout token out of git config).
+- `actionlint` 1.7.7: clean. YAML parses.
 
 ---
 
-### C. Changes implemented
+## 4. Defects found in the remediation itself (all reproduced, all fixed)
 
-#### Railway configuration (no code change)
+These are issues introduced or left by the previous 9-commit remediation. They
+are important because every one of them would have shipped.
 
-| Change | Value |
-| --- | --- |
-| `RATE_LIMIT_REDIS_URL` on `helpdesk-api` | Replaced with a fresh Upstash `rediss://` URL, set via `railway variable set --stdin` from a mode-`600` temporary file, which was deleted immediately |
-| `helpdesk-api` public domain target port | `8000` → `8080` (matches the running container / injected `$PORT`) |
-| API deployment | Redeployed from `main` `169f76e` after the changes |
+### 4.1 CORS preflight rejected `Idempotency-Key` (HIGH, user-facing)
 
-#### Documentation
+`frontend/src/hooks/useTickets.ts` sends `Idempotency-Key` on ticket creation
+(the new idempotency feature). `backend/app/main.py` listed only
+`Authorization, Content-Type, Accept, X-Request-ID` in `allow_headers`.
+Starlette answers a preflight with **400** unless every requested header is
+listed.
 
-| File | Change |
-| --- | --- |
-| `data.md` | This review |
-| `docs/RAILWAY_COLLEGE_DEMO.md` | Corrected the API port to `$PORT` (observed `8080`) and documented that the service domain target port must match the container port |
+**Reproduced against the live production API** (old code still deployed):
 
-#### Not changed
+```
+OPTIONS /api/v1/tickets  request-headers: authorization,content-type
+    -> 200
+OPTIONS /api/v1/tickets  request-headers: authorization,content-type,idempotency-key
+    -> 400
+```
 
-- No application code, schema, migration, or test was modified.
-- No Railway service, volume, or paid resource was added.
-- No database write, migration, reset, or record create/delete was performed.
-- Production security settings were preserved (section F).
+Because production serves the web app and API on different origins, this breaks
+ticket creation for every customer. Fixed by adding `Idempotency-Key`.
+
+**Test:** `tests/test_origin_normalization.py::test_cors_preflight_allows_the_idempotency_key_header`
+asserts both the middleware configuration and a real `OPTIONS` response
+(`200`, with `idempotency-key` in `access-control-allow-headers`).
+
+### 4.2 Zero DB timeouts did not disable the limit (MEDIUM)
+
+`_postgres_connect_args` only added the libpq `options` when a timeout was
+`> 0`. PostgreSQL interprets a missing option as "inherit the role/database
+default", so `DB_STATEMENT_TIMEOUT_MS=0` left any server-side limit active — the
+opposite of the setting's meaning.
+
+Fixed to always send an explicit value. The old test asserted `"options" not in
+args`; it now asserts `"-c statement_timeout=0 -c lock_timeout=0"`.
+
+### 4.3 Migration `0011` was not safe on the path its own docstring described (MEDIUM)
+
+The docstring told operators to create the indexes `CONCURRENTLY` first on a
+large table, but `upgrade()` created them unconditionally — that would fail on
+the existing index name. It also created a redundant index if the operator used
+a different name.
+
+Fixed: `upgrade()` inspects the catalog and skips an already-indexed column set.
+Verified on disposable PostgreSQL with both a same-named concurrent index and a
+differently-named equivalent; head is reached with exactly one index per column
+set.
+
+### 4.4 Migration `0011` broke offline SQL generation after 4.3 (MEDIUM, caught here)
+
+The catalog check called `op.get_bind()`, which has no connection under
+`alembic upgrade --sql`, so the repository's documented offline rendering
+crashed. Fixed by skipping inspection in offline mode (emit every statement).
+
+Verified:
+
+```
+$ alembic upgrade 0009_attachment_scan_status:head --sql
+ALTER TABLE tickets ADD COLUMN client_request_id VARCHAR(100);
+CREATE UNIQUE INDEX uq_tickets_creator_request_key ON tickets (created_by_user_id, client_request_id) WHERE client_request_id IS NOT NULL;
+CREATE INDEX ix_tickets_created_at ON tickets (created_at);
+CREATE INDEX ix_notifications_recipient_created_at ON notifications (recipient_user_id, created_at);
+```
+
+Both paths have unit tests (`test_migration_0011_skips_an_already_indexed_column_set`,
+`test_migration_0011_renders_all_indexes_in_offline_mode`).
+
+### 4.5 Frontend timeout was cleared before the body finished (MEDIUM)
+
+`fetch()` resolves when headers arrive. The cleanup (`clearTimeout` + removing
+the caller's abort listener) was in a `finally` attached to that await, so it ran
+before `response.json()`/`text()`. A stalled body could hang the request and the
+UI forever — the exact failure the timeout was added to prevent.
+
+Fixed by consuming the body inside the protected `try`, and by rethrowing a
+timeout/cancellation during the read instead of swallowing it as a parse error.
+A malformed body still yields `null` so the HTTP status is reported as before.
+
+**Regression proof:** the new test `keeps the timeout active while the response
+body is still pending` fails against the previous implementation (it hangs past
+the timeout; observed 5012 ms then failure) and passes now.
+
+### 4.6 Secret scan had path-wide allowlists (HIGH for a security control)
+
+`.gitleaks.toml` excluded `backend/tests/**` and `backend/migrations/**` by
+path. Gitleaks skips matching files entirely, so a real credential committed
+there was invisible.
+
+**Proved with gitleaks 8.28.0:**
+
+| Scenario | Old config | New config |
+| --- | --- | --- |
+| Fake real-looking `sk_live_…` key in `backend/tests/leak.py` | **no leaks found (exit 0)** | **1 leak (exit 1)** |
+| Same key elsewhere | detected | detected |
+| This repository (62 commits) | clean | clean |
+
+The new config keeps only **exact placeholder values** (e.g. `^sk_test_dummy$`,
+`^sk_live_x{32}$`, the disposable `verify:verify@` URLs). It is not a path
+bypass.
+
+### 4.7 Disposable-DB test guard matched the whole URL (MEDIUM)
+
+The PostgreSQL suites searched the entire URL for `test`/`verify`/`ci`, so
+`postgresql+psycopg://ci_runner:pw@db.example.com/helpdesk` passed — yet those
+suites create tables and rows. A production URL with `ci` in the username was a
+real footgun.
+
+Fixed with a shared `tests/_disposable_db_guard.py` that parses the URL and
+checks **only the database name** (including `?dbname=`). Its own tests reject a
+`ci` username, a `verify` password, and an empty database name, and accept
+genuinely disposable names.
+
+### 4.8 Backup/restore runbook could not work as written (HIGH for recovery)
+
+`docs/DATABASE_BACKUP_RESTORE.md`:
+
+- `pg_dump`/`pg_restore` were passed `postgresql+psycopg://`, which libpq
+  rejects → no usable backup. Scheme conversion added.
+- The restore guard was a URL substring test: a production URL with `test` in
+  its password would pass (and `pg_restore --clean` would drop production
+  objects), while a valid isolated Neon branch without a marker would be
+  refused. Replaced with a **host/port/database identity comparison** against
+  `PRODUCTION_DATABASE_URL`.
+- Verification read `RESTORE_DATABASE_URL` while the restore step had set a
+  different variable. Both now use `RESTORE_LIBPQ_URL`.
+- The schema probe needed `FRONTEND_URL`; added.
+- Added the note that Alembic prefers `MIGRATION_DATABASE_URL`, so recovery must
+  repoint both URLs.
+- `README.md`: added a bounded `pg_isready` wait instead of racing `pytest`
+  against container startup.
 
 ---
 
-### D. Deployment evidence
+## 5. Application audit results
+
+### 5.1 Backend
+
+| Area | Finding |
+| --- | --- |
+| FastAPI structure | routers per domain; middleware order documented and intentional (body limit innermost, CORS outermost) |
+| Config validation | fail-closed production checks; placeholder rejection; refuses localhost/HTTP/wildcard/insecure Clerk/diabled rate limit without shared Redis |
+| Clerk auth | verifies the session token; derives identity from `sub`; never trusts client roles |
+| Role authorization | CUSTOMER / AGENT / ADMIN / OWNER enforced server-side; stored role is authoritative |
+| Ticket lifecycle | create (idempotent), claim, assign, status, priority, feedback, history |
+| Attachments | allowlisted + magic-byte checked, ClamAV fail-closed, quarantine → publish |
+| Rate limiting | Redis-backed, fails closed (503) when unreachable; production refuses to start if unusable |
+| DB sessions | async SQLAlchemy, pool pre-ping, bounded pool, per-connection timeouts |
+| Exception handling | coarse readiness errors; no connection string/host/exception text leaked |
+| Logging | JSON in production by default; no secrets logged |
+
+### 5.2 Database
+
+| Area | Finding |
+| --- | --- |
+| Models / migrations | 11 revisions, single head `0011_query_indexes`; `alembic check` reports no drift |
+| Constraints | PK/FK/unique present; single-OWNER partial unique index |
+| Indexes | role indexes from `0001`; `0010` partial unique idempotency index; `0011` ordering indexes |
+| Concurrency | idempotency race resolved by re-reading the winning row |
+| Transactions | transactional DDL; migrations are retry-safe (second run is a no-op) |
+| SQLite/PostgreSQL | SQLite for unit tests; PostgreSQL suites opt-in and guarded |
+| Rollback | `0011 → 0010` and `0010 → 0009` exercises exist; `0009 → head` is additive |
+
+### 5.3 Frontend
+
+| Area | Finding |
+| --- | --- |
+| Auth/session | Clerk session token fetched per request |
+| Protected routes | guarded; unauthorized users redirected |
+| API client | 20 s default timeout, 120 s upload, combined `AbortSignal`, body-read protected (fixed) |
+| ErrorBoundary | application-level fallback with reset |
+| Loading/error states | present on pages |
+| Code splitting | `React.lazy` per route; entry 453.62 kB (122.12 kB gzip), all route chunks under the warning threshold |
+| Security headers | served by nginx: CSP, nosniff, frame DENY, referrer policy, permissions policy, COOP/CORP |
+
+### 5.4 Infrastructure
+
+| Area | Finding |
+| --- | --- |
+| Backend image | multi-stage, `python:3.13.1-slim`, runs as uid `10001` via gosu entrypoint |
+| Frontend image | nginx unprivileged uid `101`, writable config/pid/cache, port 8080 |
+| Healthchecks | backend `/health/live` (image) + `/health/ready` (Railway); frontend `/healthz` |
+| Helm | lint + template (default and API-ingress) pass; numeric ids and `fsGroup` match the image |
+| Replicas | 1 each — required while uploads are local disk |
+
+---
+
+## 6. Production investigation (read-only)
+
+All database work used `read_only=True` / `transaction_read_only=on`. All Redis
+work used read-only commands (`PING`, `INFO`, `DBSIZE`, `ACL WHOAMI`). No
+secret value was printed, and no variable dump was ever run.
+
+### 6.1 Neon PostgreSQL
+
+| Item | Observed |
+| --- | --- |
+| Endpoint | Neon **pooled** (`-pooler`) |
+| Version | PostgreSQL 18.7 |
+| Branch / project IDs | `br-damp-tooth-b5t0ckbx` / `plain-bread-92177409` |
+| Current revision | **`0009_attachment_scan_status`** |
+| `users` | 1 (CUSTOMER, active, linked to Clerk, created 2026-11-19) |
+| `tickets` / `comments` / `attachments` / `notifications` | 0 / 0 / 0 / 0 |
+| `tickets.client_request_id` | absent (consistent with `0009`) |
+| Database size | 8744 kB |
+| Runtime role | `neondb_owner` (not superuser) |
+| Extensions | `plpgsql` |
+
+**Release-critical:** production is `0009`; the merging image ships `0011` and
+its readiness probe is production-fatal on a revision mismatch. Without a
+migration gate the merge would deploy an image that can never become ready.
+This is why the pre-deploy migration in Part 7 is a release gate.
+
+**Historical user-count discrepancy:** the prior audit saw one user, then zero.
+Today there is one CUSTOMER (2026-11-19). No audit log, backup metadata, or
+recovery point is reachable without the Neon console, so **the cause remains
+undetermined**. No restore was performed and none is recommended; there is no
+evidence of current loss.
+
+**Backup/PITR:** **not verified.** Requires the Neon console (`neonctl` is not
+installed and no credential is stored). No isolated restore drill was run, so
+this report does **not** claim a working restore.
+
+### 6.2 Upstash Redis
+
+| Item | Observed |
+| --- | --- |
+| Scheme | `rediss://` (TLS) |
+| `PING` | `PONG` |
+| Version | 8.4.0 |
+| Identity | `default` |
+| Keys now | 0 (`db0` empty) |
+| Max memory / policy | 64 MB / `optimistic-volatile` |
+| AOF/RDB durability | not reported by `INFO` — **unverified** |
+| Ownership/claim/expiry/plan | **unverified** (needs the dashboard) |
+
+No flush, no write, no delete, no replacement. `/health/ready` reports
+`redis: ok` live.
+
+### 6.3 Clerk
+
+| Item | Observed |
+| --- | --- |
+| Backend key family | **`sk_test_*`** (development instance) |
+| Frontend key family | **`pk_test_*`** |
+| FAPI origin | `https://social-ferret-6540.clerk.accounts.dev` |
+| Profile | `DEPLOYMENT_PROFILE=college-demo` (explicitly permits `sk_test_`) |
+| `/api/v1/users/me` unauthenticated | **401** (verified live) |
+| Interactive sign-in / full flow | **UNVERIFIED** — no authorized test account |
+
+### 6.4 OWNER
+
+No OWNER exists; the sole user is a CUSTOMER. `INITIAL_ADMIN_EMAIL` is not set
+on the API service, so bootstrap is not configured. `bootstrap_owner` (verified
+in code and tests) promotes only an already-linked account whose **verified**
+Clerk primary email matches, is idempotent, and is never on the request path.
+**No promotion was performed.**
+
+### 6.5 File storage
+
+Local disk only, and attachments are **disabled** in this deployment. The upload
+path is secure (allowlist, magic bytes, fail-closed ClamAV, quarantine, path
+containment, authorize-before-download) but local storage pins the backend to
+one replica. That is the current setting and was not changed.
+
+**Object storage recommendation:** **Cloudflare R2** — S3-compatible API, no
+egress charge for downloads, private buckets with presigned URLs that fit the
+existing authorize-then-download flow, and lifecycle rules for quarantine
+cleanup. Amazon S3 is the alternative if the deployment later needs AWS IAM or
+cross-region replication. No storage was implemented (needs a decision and
+credentials).
+
+---
+
+## 7. Railway: what was actually configured
+
+The project/environment/service identities were verified before changing
+anything.
 
 | Item | Value |
 | --- | --- |
-| Deployed commit | `169f76e645550e97e2f616ac9677018dc174777f` |
-| API deployment ID | `75e9a9df-fe69-4c1e-ac46-4f6e421b3709` (`SUCCESS`) |
-| API deployment root / Dockerfile | `/backend` / `Dockerfile` |
-| API healthcheck path | `/health/live`, 300 s timeout |
-| API healthcheck result | Passed; container stays running |
-| API public origin | `https://helpdesk-api-production-1dc9dd39.up.railway.app` |
-| Web deployment ID | `96ac72c1-e946-4f7c-b497-32244124a253` (`SUCCESS`, sleeps when idle) |
-| Web deployment root | `/frontend`, commit `169f76e` |
-| Web public origin | `https://helpdesk-web-production-d96f8e2b.up.railway.app` |
-| CI on merge commit | `CI` run `44090500688` — success |
+| Project | `helpdesk-college-demo` (`d59fbf51-…`) |
+| Environment | `production` (`126b1644-…`) |
+| API | `helpdesk-api` (`3ffa5eab-…`), root `/backend`, repo `mdjayedgazi/HelpDesk` |
+| Web | `helpdesk-web` (`a1f2359d-…`), root `/frontend`, repo `mdjayedgazi/HelpDesk` |
+| Triggers | both: branch `main`, `checkSuites: true` (Wait for CI) |
+| API healthcheck (before) | `/health/live` |
+| API healthcheck (after) | **`/health/ready`** |
+| Web healthcheck | `/healthz` |
+| Healthcheck timeout | 300 s |
+| Replicas | 1 each |
+| API pre-deploy (before) | none |
+| API pre-deploy (after) | **`alembic upgrade head`** |
+| API domain target port | `8080` (matches injected `PORT`) |
+| Web domain target port | `8080` |
+| Current deployed commit | `169f76e` on both |
+| Wait-for-CI gating of deploys | enabled |
 
-#### D1. Live HTTP results (after the fix)
+### Changes applied
 
-| Request | Result |
-| --- | --- |
-| `GET /health/live` | `200` |
-| `GET /health/ready` | `200` — database `ok`, redis `ok`, clamav `disabled` |
-| `GET /docs` | `404` |
-| `GET /redoc` | `404` |
-| `GET /openapi.json` | `404` |
-| `GET /api/v1/users/me` (no token) | `401` `{"detail":"Invalid or missing Clerk session"}`, `WWW-Authenticate: Bearer` |
-| `GET /api/v1/tickets` (no token) | `401` |
-| `POST /api/v1/tickets/<id>/attachments` (no token) | `503` (attachments disabled, rejected before auth/upload) |
-| `OPTIONS /api/v1/users/me` (frontend origin) | `200`, exact-origin CORS |
-| `GET /api/v1/does-not-exist` | `404` |
-| Web `/` | `200` |
-| Web `/dashboard` | `200` (SPA shell) |
-| Web `/sign-in` | `200` |
-| Web `/healthz` | `200` |
-| Web asset `assets/index-BaVIDY5W.js` | `200` |
+Only the two settings required for a safe release, to `helpdesk-api`:
 
-#### D2. Redis
+1. `preDeployCommand: ["alembic upgrade head"]`
+2. `healthcheckPath: "/health/ready"`
 
-| Check | Result |
-| --- | --- |
-| URL scheme | `rediss://` (TLS), host suffix `.upstash.io` |
-| Direct connectivity | `PING` true; `SET`/`GET`/`DEL` round-trip true |
-| Server | Redis `8.4.0` |
-| Railway host match | Host hash `87fbf133d893` matches the newly provisioned database |
-| App readiness | `redis: ok` on every `/health/ready` check |
-| Secrets | URL never printed, never passed as an argument, never logged; temp file deleted; no `rediss://` string in runtime logs |
+The mutation required `sleepApplication: true` on the Free plan; it was already
+`true` and was preserved. No other variable, volume, domain, port, or service
+was touched, and no service was created or recreated.
 
-#### D3. Neon PostgreSQL
+### Why the migration gate is correct and safe
 
-Same database as the previous review (local config host hash `e880522f1db4`
-equals the Railway config host hash; database `neondb`, role `neon`, pooled
-endpoint, `sslmode=require`).
+- It runs in the backend image at `/app`; `alembic` is on `PATH`
+  (`/app/.venv/bin/alembic`). Verified inside the built image as root **and** as
+  the runtime `10001:10001` user.
+- A migration failure exits 1 (verified against an unreachable database), which
+  fails the pre-deploy, so the failing image never starts.
+- Only after a successful migration does the container start; only then does
+  `/health/ready` (schema-aware) clear it for traffic.
+- Migrations are additive (nullable column + partial unique index + two
+  non-unique indexes), so the previous `0009` application stays compatible
+  during rollout and for an application rollback; no downgrade is required.
+- Verified `0009 → 0011` locally preserves all existing rows.
 
-| Check | Result |
-| --- | --- |
-| `SELECT 1` | `1` |
-| Server version | PostgreSQL `18.7` |
-| Alembic current | `0009_attachment_scan_status` (head) |
-| `users` | **0** |
-| `tickets` | `0` |
-| `comments` | `0` |
-| `attachments` | `0` |
-| `users` columns | `id, clerk_id, full_name, username, email, password_hash, role, is_active, created_at, updated_at, image_url` |
+### Port and healthcheck
 
-The `users` count is `0` now; the 2026-11-17 review recorded `1`. This audit
-issued only `SELECT`/`SHOW` statements against PostgreSQL (and one `SET`/`GET`/
-`DEL` probe on Redis). The row was not removed by this review. See section E.
-
-#### D4. Frontend bundle and CSP
-
-| Check | Result |
-| --- | --- |
-| Deployed bundle | `assets/index-BaVIDY5W.js`, `1,228,227` bytes |
-| API origin in bundle | Present (`2` occurrences) |
-| `http://127.0.0.1:8000` | Only in the production-guard branch (`VITE_API_URL is required for a production build`); not reachable in this build and not allowed by CSP |
-| `VITE_API_URL` shape | Exact HTTPS origin, no path/query; validated by `apiBase.ts` at build time |
-| `VITE_ATTACHMENTS_ENABLED` | `false` |
-| Clerk FAPI in CSP | `https://social-ferret-6540.clerk.accounts.dev` |
-| Publishable key FAPI match | Yes (decoded key host equals the CSP FAPI host) |
-| Clerk telemetry / bot-protection origins | Present |
-| `unsafe-eval` | Absent |
-| Railway API wildcard | Absent |
-| Empty substitutions | None |
-
-Headless Chromium on the live `/sign-in` page:
-
-- `window.Clerk` defined and Clerk script loaded.
-- Sign-in form rendered; title `HelpDesk · Support, without the chaos`.
-- No console errors, no failed Clerk script loads (only aborted bot-protection
-  probes, which are normal challenge traffic).
-- One benign CSP violation: `script-src` blocks `Function("")` inside a
-  feature-detection helper in the app bundle. The call is wrapped in
-  `try/catch` and falls back to `jitless` mode, so it has no functional impact.
-- `/dashboard` while signed out redirects to `/sign-in`; no API calls are made
-  before authentication, so no spurious "connection" error appears.
+The API binds `$PORT` (`CMD` uses `${PORT:-8000}`), Railway injects `8080`, and
+the public domain targets `8080` — consistent. `/health/live` remains the
+liveness probe; `/health/ready` is the traffic gate.
 
 ---
 
-### E. Remaining problems and required manual actions
+## 8. Full verification matrix (this session)
 
-| Item | Detail |
+### Backend
+
+| Check | Result |
 | --- | --- |
-| **Claim the Upstash database** | The current Redis database is a temporary no-signup database. It expires **3 days after creation** unless claimed. The claim/console link is stored outside the repository at `~/.local/state/helpdesk/upstash-claim.url` (mode `600`, directory `700`). Open it, sign in to Upstash, and click **Claim**; otherwise the API will start failing within three days. |
-| **No Owner account** | `users` is empty and `INITIAL_ADMIN_EMAIL` is not set, so no OWNER exists. The first Clerk sign-in provisions a `CUSTOMER` automatically. To get an OWNER, set `INITIAL_ADMIN_EMAIL` and run the one-time bootstrap: `uv run python -m app.commands.bootstrap_owner` from `backend/`. This is a deliberate manual step and was not performed. |
-| **Interactive Clerk sign-in** | Not tested: no test credentials and no authorization to create production users. The sign-in page, Clerk script, FAPI origin, and CSP are verified. |
-| **Authenticated dashboard** | Not tested for the same reason. The endpoint contract, 401 behavior, CORS, and the auto-provisioning code path were reviewed. |
-| **Live rate-limit `429`** | Not triggered. The limiter protects authenticated write endpoints; without a session the request stops at `401`. Redis reachability and startup validation are verified through `/health/ready` and a direct TLS ping. |
-| **Clerk instance is `pk_test_`** | Development instance. Functional for a college demo; switch to a production Clerk instance for a durable production deployment. |
-| **Cold start** | The container was observed stopping and starting again and served `200` afterwards. A full scheduled sleep→wake cycle was not measured end to end. |
-| **`users` table emptied** | Between 2026-11-17 and 2026-11-19 the single row disappeared. Cause not determined; this audit performed no writes. Existing ticket/comment/attachment data was already empty and remains empty. |
+| pytest, SQLite | **456 passed, 47 skipped** |
+| pytest, + disposable PostgreSQL | **502 passed, 1 skipped** |
+| Ruff lint / format | passed / 113 files formatted |
+| Pyrefly | **0 errors** |
+| Alembic `upgrade head` (fresh PG) | OK, head `0011_query_indexes` |
+| Alembic `check` | no new upgrade operations |
+| Alembic offline SQL `0009:head` | renders all statements |
+| `0009 → 0011` with rows | 1 user / 1 ticket / 1 notification preserved |
+| Retry (`upgrade head` twice) | no-op second time |
+| Downgrade `0011 → 0010` → re-upgrade | rows preserved |
+| Pre-created concurrent index path | converges, one index |
+| Failing migration | exits 1 |
+| Readiness on migrated DB | `database: ok`, `schema: ok` |
+| Readiness on out-of-date DB | 503 in production (unit-tested) |
+
+### Frontend
+
+| Check | Result |
+| --- | --- |
+| Typecheck | passed |
+| Lint | passed |
+| Unit tests | **52 passed** (8 files) |
+| Production build | passed; entry 453.62 kB (122.12 kB gzip) |
+| `npm audit --omit=dev` | **0 vulnerabilities** |
+
+### Infrastructure & security
+
+| Check | Result |
+| --- | --- |
+| Backend image build | passed |
+| Frontend image build | passed |
+| Frontend runs as uid | `101` |
+| `/healthz` | `ok` |
+| Unknown asset | `404` |
+| Security headers + CSP | present |
+| Backend image user | `10001` |
+| Backend `/health/live` | 200 |
+| Backend `/health/ready` (migrated) | ready, schema ok |
+| Helm lint | 0 failed |
+| Helm template (default + ingress) | both render |
+| Trivy backend SARIF | valid, 44 results, exit 0 |
+| Trivy frontend SARIF | valid, 58 results, exit 0 |
+| Gitleaks (repo, 62 commits) | no leaks |
+| Gitleaks (injected real key) | detected, exit 1 |
+| actionlint | clean |
+| `git diff --check` | clean |
+
+The 47 skipped backend tests are the opt-in PostgreSQL suites when no disposable
+URL is set. With PostgreSQL enabled, 1 skip remains: an opt-in Redis test that
+had no disposable Redis locally; CI runs it against its own `redis:7-alpine`
+service.
 
 ---
 
-### F. Production configuration preserved
+## 9. Pull request and release status
 
-| Control | State |
+| Item | Value |
 | --- | --- |
-| `ENVIRONMENT` | `production` |
-| `DEPLOYMENT_PROFILE` | `college-demo` |
-| `RATE_LIMIT_ENABLED` | `true` |
-| `RATE_LIMIT_REDIS_URL` | `rediss://` (TLS) |
-| `ATTACHMENTS_ENABLED` | `false` |
-| `MALWARE_SCAN_ENABLED` | `false` |
-| `AUTO_CREATE_TABLES` | `false` |
-| `FRONTEND_URL` | exact Railway web origin |
-| CORS | exact origin only; credentials on; no wildcard |
-| CSP / security headers | intact on the live frontend |
-| Neon PostgreSQL | unchanged, at Alembic head, no writes |
-| Clerk auth / role authorization | unchanged; `401` enforced on protected routes |
-| Attachments | still rejected (`503`) |
-| Service topology | exactly two services; no volume, no paid resource |
+| PR | #19, `fix/production-readiness → main` |
+| Commits | 15 |
+| Mergeability | `MERGEABLE`, `mergeStateStatus: CLEAN`, 0 behind `main` |
+| Checks | all 8 CI jobs + CodeQL + Trivy + CodeRabbit: success |
+| Branch protection | none configured on `main` |
+| Merge | **not performed in this session** |
 
-No rate-limit bypass, auth bypass, unscanned upload path, development profile,
-or wildcard CORS was introduced.
+**Why the merge was left to the owner:** merging is the one action that
+mutates production data, because the new pre-deploy runs
+`alembic upgrade head` against Neon. The request explicitly requires stopping
+before unsupervised production-data operations. Everything needed to make that
+merge safe is implemented and verified; the remaining steps are account-level
+configuration (Neon PITR, Clerk production instance, Upstash durability, object
+storage) and the owner's go-ahead. A merge into `main` now executes the safe
+sequence: migrate (fail-closed) → start → readiness (schema must match) → traffic.
 
 ---
 
-### G. Conclusion
+## 10. Outstanding blockers (external)
 
-The dashboard was not failing because of Neon. It was failing because the public
-Railway domain for `helpdesk-api` targeted port `8000` while Railway ran the
-container on `8080`. The deployment and container were healthy; only the edge
-route was wrong. Aligning the domain target port to `8080` restored the API, and
-`/health/ready` now confirms both PostgreSQL and Redis.
+| # | Item | Why it matters | Code change? | Blocks demo? | Blocks customers? |
+| --- | --- | --- | --- | --- | --- |
+| L1 | Neon PITR/retention and a restore drill | an untested backup is not a backup | no | no | **yes** |
+| L2 | Clerk production instance (`sk_live_`/`pk_live_`) | dev keys are not for customers | no | no | **yes** |
+| L3 | OWNER bootstrap + `INITIAL_ADMIN_EMAIL` | owner-only admin is unavailable | no | no | admin use |
+| L4 | Upstash durability/claim/expiry | rate limiting fails closed → 503 on eviction | no | no | **yes** (certainty) |
+| L5 | Durable object storage (R2 recommended) | local disk pins to one replica | yes, to enable | no | before scale-out |
+| L6 | Interactive authenticated flow | not exercised without a test account | no | verification gap | verification gap |
 
-The API is live on commit `169f76e` (deployment
-`75e9a9df-fe69-4c1e-ac46-4f6e421b3709`), the frontend is live on the same commit,
-CORS and CSP are correct, unauthenticated access is rejected with `401`, and
-attachments remain disabled. The only unverified link in the chain is a real
-Clerk session, which requires credentials this environment does not have.
+### Exact procedures (owner action)
 
-Two manual follow-ups remain: **claim the Upstash database before it expires**,
-and **bootstrap an OWNER** if administrative access is needed.
+- **L1:** In the Neon console, record the plan, PITR window, and retention.
+  Create a branch from a recent point in time and run section 4 of
+  `docs/DATABASE_BACKUP_RESTORE.md` against that branch. Never restore over
+  production.
+- **L2:** Create a Clerk production instance, add the production domains, put
+  `sk_live_…` on `helpdesk-api` and `pk_live_…` on `helpdesk-web` (rebuild the
+  frontend; `VITE_` values are compile-time), set `FRONTEND_URL`, and remove
+  `DEPLOYMENT_PROFILE=college-demo`. Rotate keys; never paste them into chat.
+- **L3:** Sign in once with the intended admin account, set
+  `INITIAL_ADMIN_EMAIL` to that verified Clerk primary email, run
+  `python -m app.commands.bootstrap_owner` once, then remove the variable.
+  **Do not run without authorization.**
+- **L4:** In Upstash, confirm the database is claimed, has no expiry, and has a
+  persistence/eviction policy suitable for rate-limit keys; record the plan.
+- **L5:** Choose R2 (recommended) or S3, provision a private bucket, add
+  credentials as service variables, implement the adapter, and only then allow
+  more than one replica.
+
+---
+
+## 11. Final recommendation
+
+**CONDITIONALLY READY — college demo.**
+
+The code, tests, container builds, migrations, CI pipeline, Trivy/SARIF
+reporting, and the Railway deployment gates are correct and verified in this
+session. The previously broken Trivy job now installs a real binary, scans both
+images independently, validates real SARIF, and uploads both reports; the
+application's CORS, timeout, migration-safety, and secret-scanning defects found
+in this pass are fixed with regression tests; and the deployment now runs
+migrations behind a fail-closed pre-deploy and gates traffic on schema-aware
+readiness.
+
+It is **not** ready for real customers until L1, L2, and L4 are closed (and L5
+before any scale-out), and the authenticated flow (L6) is exercised with a real
+session. Do not treat a green pipeline as proof of production readiness.
