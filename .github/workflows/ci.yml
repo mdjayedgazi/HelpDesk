@@ -38,7 +38,11 @@ jobs:
       # is disposable and never a project/production Redis instance.
       HD_TEST_REDIS_URL: redis://127.0.0.1:6379/15
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
@@ -76,7 +80,11 @@ jobs:
       VITE_API_URL: https://api.ci.example.invalid
       VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -117,7 +125,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
@@ -162,7 +174,11 @@ jobs:
       AUTO_CREATE_TABLES: "false"
       UPLOAD_DIR: /tmp/helpdesk-ci-uploads
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
@@ -216,7 +232,11 @@ jobs:
       HD_TEST_POSTGRES_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/hdverify
       HD_DEMO_SEED_POSTGRES_URL: postgresql+psycopg://verify:verify@127.0.0.1:5432/helpdesk_demo_verify
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
@@ -258,12 +278,18 @@ jobs:
       contents: read
       security-events: write
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Build backend image
+        id: backend_build
         run: docker build -t helpdesk-backend:ci ./backend
 
       - name: Build frontend image
+        id: frontend_build
         run: >-
           docker build
           --build-arg VITE_API_URL=https://api.ci.example.invalid
@@ -288,9 +314,17 @@ jobs:
       # result is intentionally opt-in: the base images are pinned by tag, so an
       # unfixed base-image CVE must not fail every PR. Once the baseline is
       # reviewed, change `exit-code` to "1" (and keep `ignore-unfixed: true`).
+      #
+      # The `version` input is pinned explicitly. The previous pin relied on the
+      # action default (v0.65.0), which has no published release assets, so
+      # setup-trivy failed before any scan ran and both SARIF files were
+      # missing. v0.70.0 is a real, checksum-verified release for Linux-64bit.
       - name: Trivy image scan (backend)
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        id: backend_scan
+        if: ${{ !cancelled() && steps.backend_build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.70.0
           image-ref: helpdesk-backend:ci
           format: sarif
           output: trivy-backend.sarif
@@ -298,15 +332,28 @@ jobs:
           ignore-unfixed: true
           exit-code: "0"
 
+      - name: Validate backend SARIF report
+        id: backend_sarif
+        if: ${{ !cancelled() && steps.backend_scan.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          test -s trivy-backend.sarif
+          jq -e '.version == "2.1.0" and (.runs | type == "array" and length > 0)' \
+            trivy-backend.sarif >/dev/null
+
       - name: Upload backend scan
-        if: always()
-        uses: github/codeql-action/upload-sarif@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        if: ${{ !cancelled() && steps.backend_sarif.outcome == 'success' && hashFiles('trivy-backend.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           sarif_file: trivy-backend.sarif
+          category: trivy-backend
 
       - name: Trivy image scan (frontend)
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        id: frontend_scan
+        if: ${{ !cancelled() && steps.frontend_build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.70.0
           image-ref: helpdesk-frontend:ci
           format: sarif
           output: trivy-frontend.sarif
@@ -314,18 +361,32 @@ jobs:
           ignore-unfixed: true
           exit-code: "0"
 
+      - name: Validate frontend SARIF report
+        id: frontend_sarif
+        if: ${{ !cancelled() && steps.frontend_scan.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          test -s trivy-frontend.sarif
+          jq -e '.version == "2.1.0" and (.runs | type == "array" and length > 0)' \
+            trivy-frontend.sarif >/dev/null
+
       - name: Upload frontend scan
-        if: always()
-        uses: github/codeql-action/upload-sarif@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        if: ${{ !cancelled() && steps.frontend_sarif.outcome == 'success' && hashFiles('trivy-frontend.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           sarif_file: trivy-frontend.sarif
+          category: trivy-frontend
 
   helm:
     name: Helm chart validation
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
@@ -352,8 +413,11 @@ jobs:
       contents: read
       security-events: write
     steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Secret scan (gitleaks)
@@ -362,12 +426,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: python, javascript-typescript
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        uses: github/codeql-action/autobuild@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
 
       - name: Analyze
-        uses: github/codeql-action/analyze@717e230604b28efc38d8b4d3737d0611b16bc19a # v3.30.0
+        uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
