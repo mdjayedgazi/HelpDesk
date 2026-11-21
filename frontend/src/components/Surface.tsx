@@ -2,6 +2,7 @@ import { Box, type BoxProps, Flex, Heading, Stack, Text } from '@chakra-ui/react
 import type { ReactNode } from 'react'
 
 import { palette } from '../theme/palette.ts'
+import { Reveal } from './Reveal.tsx'
 
 /** A restrained white panel used to group related content. */
 export function Surface({ children, ...rest }: BoxProps) {
@@ -28,23 +29,25 @@ export function SectionHeader({
   actions?: ReactNode
 }) {
   return (
-    <Flex
-      align={{ base: 'flex-start', sm: 'center' }}
-      justify='space-between'
-      gap='4'
-      flexDirection={{ base: 'column', sm: 'row' }}
-    >
-      <Stack gap='0.5'>
-        <Heading as='h2' fontSize='md' fontWeight='medium' color={palette.text}>
-          {title}
-        </Heading>
-        {description ? (
-          <Text fontSize='sm' color={palette.textSecondary}>
-            {description}
-          </Text>
-        ) : null}
-      </Stack>
-      {actions ? <Flex gap='2'>{actions}</Flex> : null}
-    </Flex>
+    <Reveal y={10}>
+      <Flex
+        align={{ base: 'flex-start', sm: 'center' }}
+        justify='space-between'
+        gap='4'
+        flexDirection={{ base: 'column', sm: 'row' }}
+      >
+        <Stack gap='0.5'>
+          <Heading as='h2' fontSize='md' fontWeight='medium' color={palette.text}>
+            {title}
+          </Heading>
+          {description ? (
+            <Text fontSize='sm' color={palette.textSecondary}>
+              {description}
+            </Text>
+          ) : null}
+        </Stack>
+        {actions ? <Flex gap='2'>{actions}</Flex> : null}
+      </Flex>
+    </Reveal>
   )
 }

@@ -15,6 +15,8 @@ import { useRef, useState, type KeyboardEvent } from 'react'
 import { sectionY } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 import { Container } from '../Container.tsx'
+import { Reveal } from '../Reveal.tsx'
+import { stagger } from '../../theme/motion.ts'
 import { Eyebrow, Panel, SectionLead, SectionTitle } from './primitives.tsx'
 import { tones } from '../../theme/statusTone.ts'
 
@@ -289,12 +291,18 @@ export function ShowcaseSection() {
     >
       <Container size='wide'>
         <Stack gap='4' maxW='2xl' mb={{ base: '8', md: '10' }}>
-          <Eyebrow>Product tour</Eyebrow>
-          <SectionTitle>See how a request moves through HelpDesk.</SectionTitle>
-          <SectionLead>
-            Pick an area to explore. The illustrations are examples built into this page — nothing
-            here requires an account.
-          </SectionLead>
+          <Reveal y={10} delay={0}>
+            <Eyebrow>Product tour</Eyebrow>
+          </Reveal>
+          <Reveal y={16} delay={stagger(1)}>
+            <SectionTitle>See how a request moves through HelpDesk.</SectionTitle>
+          </Reveal>
+          <Reveal y={14} delay={stagger(2)}>
+            <SectionLead>
+              Pick an area to explore. The illustrations are examples built into this page — nothing
+              here requires an account.
+            </SectionLead>
+          </Reveal>
         </Stack>
 
         <Box
@@ -333,12 +341,18 @@ export function ShowcaseSection() {
                 bg={selected ? palette.surfaceMuted : 'transparent'}
                 color={selected ? palette.text : palette.textSecondary}
                 borderWidth='1px'
-                borderColor={selected ? palette.border : 'transparent'}
+                borderColor={selected ? palette.accentBorder : 'transparent'}
                 borderRadius='l2'
                 fontWeight={selected ? 'medium' : 'regular'}
+                transition='background var(--hd-dur-1) var(--hd-ease), color var(--hd-dur-1) var(--hd-ease), border-color var(--hd-dur-1) var(--hd-ease)'
                 _hover={{ bg: selected ? palette.surfaceMuted : palette.hover, color: palette.text }}
               >
-                <item.icon size={15} strokeWidth={1.9} aria-hidden />
+                <item.icon
+                  size={15}
+                  strokeWidth={1.9}
+                  color={selected ? palette.accent : undefined}
+                  aria-hidden
+                />
                 {item.label}
               </Button>
             )

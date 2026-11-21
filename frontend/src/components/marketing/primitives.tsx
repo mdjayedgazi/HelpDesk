@@ -1,6 +1,7 @@
 import { Box, Flex, Heading, Text, type BoxProps } from '@chakra-ui/react'
 import type { ReactNode } from 'react'
 
+import { transitions } from '../../theme/motion.ts'
 import { palette } from '../../theme/palette.ts'
 
 /**
@@ -29,7 +30,7 @@ export function Eyebrow({ children }: { children: ReactNode }) {
       letterSpacing='0.08em'
       textTransform='uppercase'
     >
-      <Box boxSize='1.5' borderRadius='full' bg={palette.ink} aria-hidden />
+      <Box boxSize='1.5' borderRadius='full' bg={palette.accent} aria-hidden />
       {children}
     </Flex>
   )
@@ -44,6 +45,7 @@ export function Panel({ children, elevated = false, ...rest }: BoxProps & { elev
       borderColor={palette.border}
       borderRadius='l4'
       boxShadow={elevated ? palette.shadowPanel : palette.shadowSm}
+      transition={transitions.lift}
       {...rest}
     >
       {children}

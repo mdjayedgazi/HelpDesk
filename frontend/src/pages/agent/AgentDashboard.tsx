@@ -117,12 +117,14 @@ export function AgentDashboard({ me }: { me: User }) {
 
       <SimpleGrid columns={{ base: 2, lg: 4 }} gap='3' mb='6'>
         <MetricCard
+          delay={0}
           label='Assigned to you'
           value={loading ? '—' : assignedItems.length}
           icon={Inbox}
           hint={`${stats.active.length} still active`}
         />
         <MetricCard
+          delay={70}
           label='Urgent, still active'
           value={loading ? '—' : stats.urgent.length}
           icon={Flame}
@@ -130,6 +132,7 @@ export function AgentDashboard({ me }: { me: User }) {
           hint={!loading && stats.urgent.length > 0 ? 'Handle these first' : 'Nothing urgent'}
         />
         <MetricCard
+          delay={140}
           label='Waiting on customer'
           value={loading ? '—' : stats.waiting.length}
           icon={Clock}
@@ -137,6 +140,7 @@ export function AgentDashboard({ me }: { me: User }) {
           hint='Blocked on a reply'
         />
         <MetricCard
+          delay={210}
           label='Unassigned in queue'
           value={loading ? '—' : stats.unassigned.length}
           icon={Layers}
@@ -180,7 +184,7 @@ export function AgentDashboard({ me }: { me: User }) {
         </Stack>
 
         <Stack gap='4' minW='0'>
-          <ChartCard title='Your status mix' question='How your assigned tickets are split'>
+          <ChartCard delay={0} title='Your status mix' question='How your assigned tickets are split'>
             {statusSlices.length > 0 ? (
               <DonutChart
                 slices={statusSlices}
@@ -195,7 +199,7 @@ export function AgentDashboard({ me }: { me: User }) {
             )}
           </ChartCard>
 
-          <ChartCard title='Priority pressure' question='The urgency of the work on your plate'>
+          <ChartCard delay={70} title='Priority pressure' question='The urgency of the work on your plate'>
             <BarChart items={priorityBars} ariaLabel='Your tickets by priority' />
             {stats.urgent.length > 0 ? (
               <Text fontSize='2xs' color={palette.semantic.danger} mt='3'>

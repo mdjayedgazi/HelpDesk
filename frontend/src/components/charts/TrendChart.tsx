@@ -2,6 +2,8 @@ import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
 import { useId, useMemo, useState } from 'react'
 
 import { useElementWidth } from '../../hooks/useElementWidth.ts'
+import { useEntrance } from '../../hooks/useEntrance.ts'
+import { motionVars, stagger } from '../../theme/motion.ts'
 import { palette } from '../../theme/palette.ts'
 import { ChartDataTable } from './ChartCard.tsx'
 
@@ -17,6 +19,11 @@ import { ChartDataTable } from './ChartCard.tsx'
  * - the y axis always starts at zero and is rounded up to a "nice" step;
  * - x labels are real dates, spaced evenly, never interpolated;
  * - a hover band reveals the exact values for one day.
+ *
+ * On first appearance every series draws itself left-to-right (a normalised
+ * `pathLength` dash offset, so it works at any width) and each area fill fades
+ * in only after its line has finished. The geometry is computed from the real
+ * data, so the final drawing is exactly the series passed in.
  *
  * The SVG is `aria-hidden`; the adjacent `ChartDataTable` is the accessible
  * representation, so screen readers get real rows and headers.
@@ -68,6 +75,7 @@ export function TrendChart({
   const [active, setActive] = useState<number | null>(null)
   const gradientId = useId().replace(/[:]/g, '')
   const { ref: measureRef, width } = useElementWidth<HTMLDivElement>()
+  const entered = useEntrance()
 
   // The SVG viewBox is 1:1 with its rendered pixels (never `preserveAspectRatio
   // ='none'`), so text and ticks keep their proportions at every column width.
@@ -162,7 +170,6 @@ export function TrendChart({
           height={height}
           role='presentation'
           aria-hidden='true'
-          className='hd-chart-enter'
           style={{ display: 'block', overflow: 'visible' }}
           onPointerLeave={() => setActive(null)}
         >
@@ -205,9 +212,18 @@ export function TrendChart({
             </g>
           ))}
 
-          {geom.lines.map((line) => (
+          {geom.lines.map((line, lineIndex) => (
             <g key={line.entry.key}>
-              <path d={line.area} fill={`url(#${gradientId}-${line.entry.key})`} />
+              <path
+                d={line.area}
+                fill={`url(#${gradientId}-${line.entry.key})`}
+                style={{
+                  opacity: entered ? 1 : 0,
+                  transition: `opacity ${motionVars.reveal} ${motionVars.ease} ${
+                    stagger(lineIndex) + 360
+                  }ms`,
+                }}
+              />
               <path
                 d={line.path}
                 fill='none'
@@ -216,6 +232,14 @@ export function TrendChart({
                 strokeLinejoin='round'
                 strokeLinecap='round'
                 vectorEffect='non-scaling-stroke'
+                pathLength={1}
+                style={{
+                  strokeDasharray: 1,
+                  strokeDashoffset: entered ? 0 : 1,
+                  transition: `stroke-dashoffset ${motionVars.chart} ${motionVars.easeOut} ${stagger(
+                    lineIndex,
+                  )}ms`,
+                }}
               />
             </g>
           ))}
