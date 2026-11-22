@@ -237,7 +237,11 @@ this environment). Those are stated as production-check items in §11.
 
 - Branch: `perf/system-data-fetching-redis-postgres` (from `main` @ `34ca285`).
 - Commits: see the branch (`perf: optimize system-wide data fetching and caching`).
-- PR: opened against `main` (URL in the PR; recorded in `data.md`).
+- PR: **https://github.com/mdjayedgazi/HelpDesk/pull/32** (targets `main`).
+  **All CI checks pass** — Backend lint + SQLite tests, Frontend
+  typecheck/lint/tests/build, Alembic migrations, PostgreSQL integration, Docker
+  image builds, Production dependency audit, Helm validation, Static security +
+  secret scan, CodeQL, Trivy.
 
 ---
 

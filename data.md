@@ -124,7 +124,9 @@ testing on disposable local PostgreSQL or in-memory fakes.
 
 - Branch: `perf/system-data-fetching-redis-postgres`
 - No migration; no env change required (cache is opt-in via `CACHE_ENABLED`).
-- PR against `main` (URL recorded after creation; see PR). Not merged/deployed.
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/32 (targets `main`); **all CI
+  checks pass** (incl. Alembic migrations and PostgreSQL integration). Not
+  merged/deployed.
 
 ### Post-deploy verification
 
