@@ -35,7 +35,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.auth import require_auth
 from app.core.database import get_db
-from app.enums.enums import AttachmentScanStatus, Role, TicketPriority, TicketStatus
+from app.enums.enums import (
+    AttachmentScanStatus,
+    Role,
+    TicketCategory,
+    TicketPriority,
+    TicketStatus,
+)
 from app.main import app
 from app.models.ticket import Ticket
 from app.models.user import User
@@ -146,6 +152,7 @@ async def make_ticket(session_factory):
         title: str = "Printer is broken",
         status: TicketStatus = TicketStatus.OPEN,
         priority: TicketPriority = TicketPriority.NORMAL,
+        category: TicketCategory = TicketCategory.OTHER,
         assignee: User | None = None,
     ) -> Ticket:
         from app.services.tickets import next_ticket_number
@@ -157,6 +164,7 @@ async def make_ticket(session_factory):
                 description="It stopped working this morning.",
                 status=status,
                 priority=priority,
+                category=category,
                 created_by_user_id=owner.id,
                 assignee_user_id=assignee.id if assignee else None,
                 # Mirror the production invariant: assigned_at is written

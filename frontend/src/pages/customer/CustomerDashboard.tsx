@@ -25,8 +25,8 @@ import { statusTone, tones } from '../../theme/statusTone.ts'
  * composition of their own tickets — never organisation-wide data.
  */
 export function CustomerDashboard({ me }: { me: User }) {
-  const tickets = useTickets({ limit: 100 })
-  const items = useMemo(() => tickets.data ?? [], [tickets.data])
+  const tickets = useTickets({ page: 1, page_size: 100 })
+  const items = useMemo(() => tickets.data?.items ?? [], [tickets.data])
 
   const counts = useMemo(() => {
     const open = items.filter((t) => t.status === 'OPEN').length

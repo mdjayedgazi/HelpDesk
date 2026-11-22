@@ -128,6 +128,30 @@ class TicketRead(SQLModel):
     resolved_at: datetime | None
 
 
+class TicketPage(SQLModel):
+    """One page of tickets plus the metadata the UI needs to paginate safely.
+
+    The previous contract returned a bare list, so the client had to *guess*
+    whether another page existed (``len(items) == page_size``). That guess is
+    wrong for a partial last page and for post-pagination client filtering, and
+    it let the UI walk past the real end of the result set. The envelope states
+    the truth: the total number of matching tickets, the requested page, the
+    effective page size, the derived ``total_pages`` and explicit
+    ``has_next`` / ``has_previous`` flags.
+
+    ``items`` keeps exactly the ``TicketRead`` shape, so existing per-ticket
+    consumers are unaffected; only the outer container changed.
+    """
+
+    items: list[TicketRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
+
+
 class TicketContactRead(SQLModel):
     """Staff-only view of the optional contact number.
 

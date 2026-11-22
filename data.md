@@ -1,3 +1,190 @@
+# HelpDesk — Ticket Pagination Continuity Review
+
+**Date:** 2026-11-22
+**Branch:** `fix/ticket-pagination-continuity`
+**Base:** `main` @ `7a3f9f4` (after PR #28)
+**Companion report:** [`docs/ticket-pagination-fix-report.md`](docs/ticket-pagination-fix-report.md)
+**Verdict:** **FIXED — CI PASSING, AWAITING PR MERGE** (not deployed).
+
+> **Document preservation.** The UI width/motion review and the Live Neon
+> Database Population review beneath it follow verbatim. This review is
+> prepended.
+
+---
+
+## Part A — Repository and remote state
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD at start | `7a3f9f4` — merge of PR #28 (width/motion) |
+| `origin/main` | matches `main` @ `7a3f9f4` |
+| Prior feature branch | `feat/helpdesk-ui-width-motion-polish` **merged**; no uncommitted production work |
+| Untracked at start | harness files only (`harness.html`, `harness-*.tsx`, `vite.harness.config.ts`) |
+| New branch | `fix/ticket-pagination-continuity` (created from clean `main`) |
+
+No other branch was overwritten and no previous work was discarded. A separate
+worktree was unnecessary because the previous feature was already merged and the
+only local changes were untracked, non-shipping harness files.
+
+---
+
+## Part B — Versions and architecture
+
+| Area | Finding |
+| --- | --- |
+| Backend | FastAPI 0.162, SQLModel/SQLAlchemy 2.1, Pydantic v2; async SQLAlchemy |
+| Frontend | React 19.3, TypeScript ~6.0, Chakra UI 3.37, TanStack Query 5.104 |
+| Ticket list endpoints | `GET /api/v1/tickets`, `GET /api/v1/tickets/assigned` |
+| Pagination style | offset (`limit`/`offset` originally) — **retained**, fixed |
+| Shared component | `src/components/Pagination.tsx` used by tickets, notifications, users, owner inbox |
+
+---
+
+## Part C — Reproduction (evidence)
+
+A disposable PostgreSQL 18 database was seeded with the shape that bulk seeding
+produces (a large block sharing one `created_at`, plus a small newer block) and
+walked with the shipping query:
+
+```
+page 1: 10 rows   page 2: 10 rows   page 3: 10 rows
+page 4: 10 rows   page 5:  5 rows   page 6: 0 rows
+rows fetched: 45   unique: 30   duplicates: 15
+```
+
+45 tickets, only 30 distinct returned, 15 duplicated — the "missing rows +
+duplicate rows + empty/gapped pages + invalid trailing page" report, reproduced.
+
+---
+
+## Part D — Root cause
+
+1. **No unique tie-breaker.** `ORDER BY created_at DESC` is not a total order;
+   tied timestamps let PostgreSQL reorder rows between `OFFSET` queries →
+   duplicates and gaps. SQLite hid this in tests; PostgreSQL exposed it (the
+   real deployment).
+2. **No total in the response.** The API returned a bare list; the UI guessed
+   `hasNext = len == pageSize`, which is wrong for a partial last page and let
+   the UI walk past the end.
+3. **Client-side filtering after pagination.** `/tickets?assignee=none` filtered
+   the already-paginated page, so a full page could render empty while
+   unassigned rows existed later.
+4. **Duplicated page math.** `limit`/`offset` were computed client-side.
+
+---
+
+## Part E — Backend changes
+
+- `services/tickets.py`: `ticket_list_conditions` (single WHERE builder for data
+  **and** count), `count_tickets`, `paginate_tickets`
+  (`created_at DESC, id DESC`).
+- `schemas/tickets.py`: `TicketPage` envelope
+  `{items,total,page,page_size,total_pages,has_next,has_previous}`.
+- `routers/tickets.py`: both list endpoints now accept `page`/`page_size`
+  (validated `page>=1`, `page_size 1..100`), derive the offset server-side,
+  compute `total`/`total_pages`/`has_next`/`has_previous`, and support
+  `unassigned=true` as a real SQL filter. Filtering runs before the window; the
+  count uses the same conditions as the data query.
+
+Response shape change note: `items` keeps the exact `TicketRead` shape; only the
+outer container changed from `[...]` to `{items:[...], …}`. All backend and
+frontend consumers were updated, and existing tests were adjusted to read
+`["items"]` (not weakened).
+
+---
+
+## Part F — Frontend changes
+
+- `lib/types.ts`: `TicketPage`, and `TicketListParams` now uses
+  `page`/`page_size`/`unassigned`.
+- `hooks/useTickets.ts`: return `TicketPage` for both list hooks.
+- `lib/pagination.ts` (new, pure): `clampPage`, `nextPage`, `previousPage`,
+  `canPaginate`, `pageWindow`, `pageRange`.
+- `components/Pagination.tsx`: circular Next/Previous in "full mode"; renders
+  only valid page numbers (moving window + ellipses); `aria-current="page"`,
+  accessible labels, disabled state while loading or single-page; keeps a
+  "legacy mode" for the notification/user/inbox lists whose endpoints still
+  return bare lists (so those are unaffected).
+- `components/TicketListPanel.tsx`: takes `tickets` + optional `pagination`
+  metadata; dashboards render static worklists without pagination.
+- `pages/TicketsPage.tsx`: server-driven `page`/`page_size`; filters reset page
+  to 1; reconciles an out-of-range page against the fresh `total_pages`;
+  `assignee=none` → `unassigned=true`.
+- `AgentQueuePage`: unassigned tab now uses the server-side `unassigned=true`
+  filter (exact totals). Dashboards/AccountRequests read `data.items`.
+
+---
+
+## Part G — Circular navigation
+
+| From | Action | To |
+| --- | --- | --- |
+| 1 | Previous | last |
+| 1 | Next | 2 |
+| last-1 | Next | last |
+| last | Next | **1** |
+| last | Previous | last-1 |
+
+0/1 page disables both controls. Navigation is suppressed while a request is in
+flight, so rapid clicks cannot request an invalid page.
+
+---
+
+## Part H — Real-browser verification
+
+Local harness, 300 tickets @ 20/page:
+
+```
+PAGES WALKED: 15 · EMPTY INTERMEDIATE: 0 · SHORT INTERMEDIATE: 0
+WRAPPED TO 1: true · ROWS: 300 · UNIQUE: 300
+NEXT FROM LAST -> Page 1 of 15
+```
+
+Partial final page (305 tickets): Previous from page 1 → Page 16 of 16
+("Showing 301-305 of 305"); Next → Page 1 of 16. No console errors.
+
+---
+
+## Part I — Quality checks
+
+| Check | Result |
+| --- | --- |
+| Backend `ruff check` / `ruff format --check` | pass |
+| Backend `pyrefly check` | 0 errors |
+| Backend `pytest` | **544 passed, 65 skipped** |
+| Backend PG integration | **10 passed** against disposable Postgres (incl. new pagination test) |
+| Frontend `typecheck` | pass |
+| Frontend `lint` | pass |
+| Frontend `npm test` | **196 passed / 20 files** (was 174 / 19) |
+| Frontend `build` | pass |
+
+New tests: `tests/test_ticket_pagination.py` (23), a PG integration test,
+`src/lib/pagination.test.ts` (pure), `src/components/Pagination.test.tsx`,
+plus TicketsPage pagination integration cases.
+
+---
+
+## Part J — Delivery status
+
+- Branch: `fix/ticket-pagination-continuity`
+- PR: targeting `main` (URL recorded after creation)
+- Deployment: **none**. Touches **both** `helpdesk-api` and `helpdesk-web`;
+  they must deploy together (frontend expects the envelope). No migration. No
+  Neon data was modified.
+- Railway deploys `main` automatically with Wait-for-CI; no merge or manual
+  trigger was performed.
+
+### Post-deployment checklist
+
+1. `/health/ready` (API) and `/healthz` (web) OK.
+2. `/api/v1/tickets?page=1&page_size=20` returns the envelope.
+3. Walk all pages: no empty intermediate page; last page may be partial; Next on
+   last → page 1; Previous on 1 → last.
+4. Filter/search/page-size changes reset to page 1 with matching totals.
+5. `/queue` unassigned totals are exact.
+
+---
+
 # HelpDesk — UI Width, Motion & Premium Interaction Review
 
 **Date:** 2026-11-22

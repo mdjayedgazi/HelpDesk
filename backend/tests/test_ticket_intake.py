@@ -146,7 +146,7 @@ async def test_customer_cannot_forge_owner_identity_or_route_to_staff(
 
     # The victim never sees the ticket.
     seen = await client.get(INTAKE, headers={"X-Test-User": victim.username})
-    assert seen.status_code == 200 and seen.json() == []
+    assert seen.status_code == 200 and seen.json()["items"] == []
     hidden = await client.get(
         f"{INTAKE}/{body['id']}", headers={"X-Test-User": victim.username}
     )

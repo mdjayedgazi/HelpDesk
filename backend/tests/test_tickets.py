@@ -53,7 +53,7 @@ async def test_customer_only_lists_own_tickets(client, make_user, make_ticket):
         "/api/v1/tickets", headers={"X-Test-User": alice.username}
     )
     assert response.status_code == 200
-    titles = [t["title"] for t in response.json()]
+    titles = [t["title"] for t in response.json()["items"]]
     assert titles == ["Alice ticket"]
 
 
@@ -134,7 +134,7 @@ async def test_agent_sees_queue_and_own_assigned(client, make_user, make_ticket)
         "/api/v1/tickets", headers={"X-Test-User": agent.username}
     )
     assert response.status_code == 200
-    ids = {t["id"] for t in response.json()}
+    ids = {t["id"] for t in response.json()["items"]}
     assert str(unassigned.id) in ids
     assert str(mine.id) in ids
     assert str(theirs.id) not in ids

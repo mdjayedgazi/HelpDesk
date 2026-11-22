@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.permissions import is_admin_role
-from app.enums.enums import ImpactLevel, Role, TicketPriority, TicketStatus
+from app.enums.enums import (
+    ImpactLevel,
+    Role,
+    TicketCategory,
+    TicketPriority,
+    TicketStatus,
+)
 from app.models.ticket import Ticket
 from app.models.ticketHistory import TicketHistory
 from app.models.user import User
@@ -145,3 +151,94 @@ def ticket_list_filter(user: User):
             Ticket.assignee_user_id.is_(None),
         )
     return Ticket.created_by_user_id == user.id
+
+
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+#
+# Every ticket listing is offset-paginated with ``limit``/``offset``. Two rules
+# keep page contents stable and make the metadata honest:
+#
+# 1. Filtering happens *before* the LIMIT/OFFSET window, and the COUNT query is
+#    built from exactly the same WHERE clause as the data query, so ``total``
+#    can never disagree with the rows on the page.
+# 2. Ordering is deterministic: the requested ordering is always followed by a
+#    unique tie-breaker (``created_at DESC, id DESC``). A timestamp-only order
+#    is not stable when rows share a ``created_at`` (bulk seeding, batch
+#    imports): PostgreSQL may return tied rows in a different physical order
+#    for each OFFSET, which produces duplicate rows on one page and silently
+#    drops others from the next. The id tie-breaker removes that ambiguity.
+#
+# Offset pagination is still only *snapshot*-consistent: a ticket inserted or
+# updated between two page requests can shift rows across the page boundary.
+# That is an inherent property of OFFSET; the UI reconciles an out-of-range
+# page against the fresh total instead of trusting a stale "has next" guess.
+
+
+def ticket_list_conditions(
+    user: User,
+    *,
+    status: TicketStatus | None = None,
+    priority: TicketPriority | None = None,
+    category: TicketCategory | None = None,
+    assignee_user_id: uuid.UUID | None = None,
+    unassigned: bool = False,
+    created_by_user_id: uuid.UUID | None = None,
+    q: str | None = None,
+) -> list:
+    """Return the WHERE conditions shared by the COUNT and data queries.
+
+    ``unassigned=True`` restricts to tickets with no assignee. It is applied
+    server-side (rather than filtering a page client-side) so pagination and
+    ``total`` describe the same result set. ``unassigned`` wins over
+    ``assignee_user_id`` when both are present, because "no assignee" is the
+    more specific intent and the two cannot both match one row.
+    """
+    conditions = []
+
+    scope = ticket_list_filter(user)
+    if scope is not None:
+        conditions.append(scope)
+
+    if status is not None:
+        conditions.append(Ticket.status == status)
+    if priority is not None:
+        conditions.append(Ticket.priority == priority)
+    if category is not None:
+        conditions.append(Ticket.category == category)
+    if unassigned:
+        conditions.append(Ticket.assignee_user_id.is_(None))
+    elif assignee_user_id is not None:
+        conditions.append(Ticket.assignee_user_id == assignee_user_id)
+    if created_by_user_id is not None:
+        conditions.append(Ticket.created_by_user_id == created_by_user_id)
+    if q:
+        like = f"%{q.lower()}%"
+        conditions.append(or_(Ticket.title.ilike(like)))
+
+    return conditions
+
+
+async def count_tickets(session: AsyncSession, conditions: list) -> int:
+    """Count tickets matching ``conditions`` using the same WHERE as the list."""
+    statement = select(func.count()).select_from(Ticket)
+    if conditions:
+        statement = statement.where(*conditions)
+    return int((await session.exec(statement)).one())
+
+
+def paginate_tickets(conditions: list, *, limit: int, offset: int):
+    """Build the deterministic, windowed ticket query.
+
+    Newest first, with the primary key as a unique tie-breaker so rows that
+    share a ``created_at`` still have one stable order across every page.
+    """
+    statement = select(Ticket)
+    if conditions:
+        statement = statement.where(*conditions)
+    return (
+        statement.order_by(Ticket.created_at.desc(), Ticket.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )

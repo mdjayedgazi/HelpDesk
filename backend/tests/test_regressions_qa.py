@@ -619,7 +619,7 @@ async def test_priority_filter_and_search(client, make_user, make_ticket):
         params={"priority": "URGENT"},
     )
     assert urgent.status_code == 200
-    assert {t["title"] for t in urgent.json()} == {"Alpha urgent"}
+    assert {t["title"] for t in urgent.json()["items"]} == {"Alpha urgent"}
 
     searched = await client.get(
         "/api/v1/tickets",
@@ -627,7 +627,7 @@ async def test_priority_filter_and_search(client, make_user, make_ticket):
         params={"q": "beta"},
     )
     assert searched.status_code == 200
-    assert {t["title"] for t in searched.json()} == {"Beta low"}
+    assert {t["title"] for t in searched.json()["items"]} == {"Beta low"}
 
 
 @pytest.mark.asyncio
@@ -642,7 +642,7 @@ async def test_agent_only_sees_visible_tickets_in_own_queue(
     response = await client.get(
         "/api/v1/tickets/assigned", headers={"X-Test-User": agent.username}
     )
-    ids = {t["id"] for t in response.json()}
+    ids = {t["id"] for t in response.json()["items"]}
     assert str(assigned.id) in ids
     assert str(unassigned.id) not in ids
 

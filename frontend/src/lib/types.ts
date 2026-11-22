@@ -136,6 +136,24 @@ export interface Ticket {
   resolved_at: string | null
 }
 
+/**
+ * One page of tickets plus pagination metadata.
+ *
+ * Mirrors the backend `TicketPage` envelope. The metadata (`total`,
+ * `total_pages`, `has_next`, `has_previous`) is authoritative: the UI must use
+ * it to decide whether another page exists, never `items.length === page_size`,
+ * which is wrong for a partial last page and for filtered result sets.
+ */
+export interface TicketPage {
+  items: Ticket[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
+}
+
 export interface Comment {
   id: string
   ticket_id: string
@@ -521,10 +539,14 @@ export type TicketListParams = {
   status?: TicketStatus
   priority?: TicketPriority
   assignee_user_id?: string
+  /** Server-side filter for tickets with no assignee. */
+  unassigned?: boolean
   created_by_user_id?: string
   q?: string
-  limit?: number
-  offset?: number
+  /** One-based page number. */
+  page?: number
+  /** Rows per page (backend bounds: 1–100). */
+  page_size?: number
 }
 
 export type UserListParams = {
