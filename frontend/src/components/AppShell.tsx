@@ -1,4 +1,13 @@
-import { Box, Center, Drawer, Flex, Portal, Spinner, Text } from '@chakra-ui/react'
+import {
+  Box,
+  Center,
+  Drawer,
+  Flex,
+  Portal,
+  Spinner,
+  Text,
+  useBreakpointValue,
+} from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 
@@ -37,6 +46,9 @@ function WorkspaceFooter() {
 
 export function AppShell({ me }: { me: User }) {
   const sections = navSectionsForRole(me.role)
+  // True only in the lg–xl band (1024–1279 px): the sidebar collapses to an
+  // icon rail. Below lg the mobile drawer is used; at xl+ the full sidebar.
+  const compactRail = useBreakpointValue({ base: false, lg: true, xl: false }) ?? false
   const [navOpen, setNavOpen] = useState(false)
   const location = useLocation()
 
@@ -54,16 +66,23 @@ export function AppShell({ me }: { me: User }) {
         top='0'
         bottom='0'
         left='0'
-        width='64'
+        width={{ lg: '16', xl: '64' }}
         bg={palette.surface}
         borderRightWidth='1px'
         borderColor={palette.border}
         zIndex='10'
       >
-        <SidebarNav sections={sections} footer={<WorkspaceFooter />} />
+        {/* lg–xl uses an icon rail so content reclaims the width; xl+ keeps the
+            full labelled sidebar. The mobile drawer below reuses the full nav. */}
+        <SidebarNav sections={sections} footer={<WorkspaceFooter />} compact={compactRail} />
       </Box>
 
-      <Flex direction='column' flex='1' minW='0' ml={{ base: '0', lg: '64' }}>
+      <Flex
+        direction='column'
+        flex='1'
+        minW='0'
+        ml={{ base: '0', lg: '16', xl: '64' }}
+      >
         <TopBar onOpenNav={() => setNavOpen(true)} role={me.role} />
         <Box as='main' flex='1' minW='0'>
           <Container size='workspace' py={{ base: '6', md: '8' }}>

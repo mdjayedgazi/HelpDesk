@@ -1,3 +1,118 @@
+# HelpDesk — Frontend Responsive Engineering Review
+
+**Date:** 2026-11-23
+**Branch:** `feat/frontend-responsive-engineering`
+**Base:** `main` @ `5100514` (after PR #32)
+**Companion report:** [`docs/frontend-responsive-engineering-report.md`](docs/frontend-responsive-engineering-report.md)
+**Verdict:** **IMPLEMENTED AND BROWSER-VERIFIED — AWAITING MERGE.** UI identity preserved; no CSS/theme files changed.
+
+> **Document preservation.** The performance-optimization review and everything
+> beneath it follow verbatim. This review is prepended.
+
+---
+
+## Part A — Repository state
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD at start | `5100514` — merge of PR #32 (performance) |
+| `origin/main` | matches `5100514` |
+| Working tree | clean except untracked harness files |
+| New branch | `feat/frontend-responsive-engineering` |
+| `data.md` | restored from `HEAD` before prepending |
+
+---
+
+## Part B — Stack and existing responsive architecture
+
+- React 19.3.1, TS ~6.0.2, Chakra UI 3.37.0, React Router 7.18.4, TanStack
+  Query 5.104, Vite+/Vitest, custom SVG charts.
+- **Tailwind 4.3.3 is installed but unused** (zero utility classes; styling is
+  Chakra + `hd-*` classes). No Tooling changes were needed or made.
+- Chakra breakpoints: `sm 480 · md 768 · lg 1024 · xl 1280 · 2xl 1536`.
+- Existing responsive foundation (`layout.ts`, `Container.tsx`, responsive
+  dashboard/chart grids) was inspected and **kept**; it already had zero overflow.
+
+---
+
+## Part C — Defects found and fixed
+
+1. **Fixed 256 px sidebar at 1024–1279 px** left only 768 px of content (cramped
+   tablet-landscape/small-laptop). → Added an **icon rail** in exactly that band.
+2. **No mobile single-panel messaging** — the list stacked above the conversation
+   with no back affordance. → Added a URL-driven single-panel flow with a Back
+   button at `base`; desktop split pane unchanged.
+3. Rail tap targets were 34 px → raised to 40 px.
+
+---
+
+## Part D — What changed
+
+- `components/AppShell.tsx`: sidebar width `{{ lg:'16', xl:'64' }}`, main margin
+  `{{ base:'0', lg:'16', xl:'64' }}`, `useBreakpointValue` rail flag. Three modes:
+  drawer (<1024), icon rail (1024–1279), full sidebar (≥1280).
+- `components/Sidebar.tsx`: `compact` prop → icons + `aria-label` + `title` +
+  `sr-only` label, dividers, 40 px targets, online dot. **Same component** for all
+  modes (no duplicate nav).
+- `pages/staff/MessagesPage.tsx`: `?conversation`-driven single-panel flow with a
+  **Conversations** back button on narrow screens; split pane preserved at `lg+`.
+- Added `components/Sidebar.test.tsx` (3 tests) and `docs/responsive-assets/*.png`.
+
+No CSS, theme tokens, palette, typography, charts, tables, cards, or animation
+were changed. No dependencies added.
+
+---
+
+## Part E — Browser verification (headless Chromium, project harness, role switchable)
+
+| Sweep | Coverage | Result |
+| --- | --- | --- |
+| Route × width | 10 routes × 22 widths (320–2560) | **220/220 clean** |
+| Second sweep (detail/users/profile) | 8 × 8 | **64/64 clean** |
+| Role × route × width | 4 roles × 6 widths | **186/186 clean**, all render |
+| Breakpoint ±1 px | 480/768/1024/1280/1536 | 0 overflow |
+| Continuous resize 320→2560 (32 px) | 3 routes | 0 overflow |
+| Portrait/landscape + short heights | 11 pairs incl. 568×320, 844×390 | all clean |
+| Public/auth | 3 × 8 | 0 overflow/errors |
+| Reflow 640/320 (WCAG 1.4.10) | key routes | 0 overflow |
+
+Behavioural: rail (1024→64 px, 1280→256 px, no bleed); messaging list→thread→Back
+with composer and no overflow; drawer opens, fits, closes on nav; dialogs
+scrollable at 320×320; touch targets ≥32 px (rail 40, Back 36); desktop unchanged.
+
+---
+
+## Part F — Results
+
+- `typecheck` pass · `lint` pass · `npm test` **231 passed / 24 files** (+3
+  Sidebar rail tests) · `build` pass · `git diff --check` clean.
+- No backend, database, auth, API, Redis, Railway, or data changes.
+- Harness files remain untracked (not committed); production source + test only.
+
+### Testing summary
+| Area | Result |
+| --- | --- |
+| Shell / Nav / Customer / Agent / Admin / Owner | Pass |
+| Dashboard / Tickets / Messaging / Tables / Forms & dialogs | Pass |
+| Portrait & landscape / Browser zoom / Desktop regression | Pass |
+| Production build | Pass |
+
+---
+
+## Part G — Delivery
+
+- Branch: `feat/frontend-responsive-engineering`
+- Files: `AppShell.tsx`, `Sidebar.tsx`, `MessagesPage.tsx` (modified);
+  `Sidebar.test.tsx`, `docs/frontend-responsive-engineering-report.md`,
+  `docs/responsive-assets/*.png` (added).
+- No migration, no env change, no deploy. PR against `main` (see PR).
+
+### Remaining limitations
+Physical-device/Safari testing not performed (Chromium headless matrix used).
+Harness is local-only; fixtures, not production identities.
+
+---
+
 # HelpDesk — System-Wide Performance Optimization Review
 
 **Date:** 2026-11-22
