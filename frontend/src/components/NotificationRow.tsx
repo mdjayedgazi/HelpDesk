@@ -2,6 +2,7 @@ import { Box, Button, Center, Flex, Stack, Text } from '@chakra-ui/react'
 import {
   Flag,
   Inbox,
+  AtSign,
   Mail,
   MailOpen,
   Megaphone,
@@ -33,6 +34,7 @@ const typeIcons: Record<NotificationType, LucideIcon> = {
   TICKET_CREATED: Ticket,
   TICKET_RESOLVED: TicketCheck,
   INTERNAL_MESSAGE_RECEIVED: Megaphone,
+  STAFF_MENTION: AtSign,
 }
 
 const typeCategories: Record<NotificationType, string> = {
@@ -46,6 +48,7 @@ const typeCategories: Record<NotificationType, string> = {
   STAFF_MESSAGE_RECEIVED: 'Message',
   OWNER_MESSAGE_RECEIVED: 'Message',
   INTERNAL_MESSAGE_RECEIVED: 'Message',
+  STAFF_MENTION: 'Message',
   ESCALATION_CREATED: 'Account request',
   ESCALATION_UPDATED: 'Account request',
 }

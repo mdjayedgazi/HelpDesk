@@ -189,4 +189,5 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   TICKET_CREATED: 'Ticket received',
   TICKET_RESOLVED: 'Resolved',
   INTERNAL_MESSAGE_RECEIVED: 'Internal message',
+  STAFF_MENTION: 'Mention',
 }

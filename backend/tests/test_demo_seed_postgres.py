@@ -528,8 +528,8 @@ async def test_seed_notifications_cover_roles_types_and_deep_links(seeded, facto
         if notification.related_conversation_id is not None:
             conversation = conversations[notification.related_conversation_id]
             assert notification.recipient_user_id in {
-                conversation.owner_user_id,
-                conversation.staff_user_id,
+                conversation.participant_a_id,
+                conversation.participant_b_id,
             }
         if notification.related_account_request_id is not None:
             assert notification.related_account_request_id in requests
@@ -564,15 +564,23 @@ async def test_seed_staff_conversations_and_messages(seeded, factory):
         owner = (
             await session.exec(select(User).where(User.role == Role.OWNER))
         ).first()
-        staff_ids = {c.staff_user_id for c in conversations}
+        participants = {
+            user_id
+            for c in conversations
+            for user_id in (c.participant_a_id, c.participant_b_id)
+        }
+        staff_ids = participants - {owner.id}
         message_senders = {m.sender_user_id for m in messages}
     assert len(conversations) >= 10
     assert len(messages) >= 30
-    assert all(c.owner_user_id == owner.id for c in conversations)
-    # One thread per staff member (enforced by a unique index) and only the
-    # Owner / the conversation's staff participant ever send messages.
+    # Every seeded thread is a 1:1 conversation that includes the Owner.
+    assert all(
+        owner.id in (c.participant_a_id, c.participant_b_id) for c in conversations
+    )
+    # One thread per staff member pair (unique pair constraint), and only the
+    # Owner / a conversation participant ever send messages.
     assert len(staff_ids) == len(conversations)
-    assert message_senders <= (staff_ids | {owner.id})
+    assert message_senders <= participants
 
 
 async def test_seed_account_requests_cover_states(seeded, factory):

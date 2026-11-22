@@ -1,31 +1,28 @@
-import { Button, Dialog, Portal, SimpleGrid, Stack, Text } from '@chakra-ui/react'
+import { Button, SimpleGrid, Stack } from '@chakra-ui/react'
 import { Mail, MessageSquare, PenLine } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { ReceivedMessagesPanel } from '../../components/ReceivedMessagesPanel.tsx'
+import { StartConversationDialog } from '../../components/StartConversationDialog.tsx'
 import { ConversationList, ConversationPanel } from '../../components/StaffConversations.tsx'
-import { FormField, TextInput } from '../../components/FormField.tsx'
 import { PageHeader } from '../../components/PageHeader.tsx'
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews.tsx'
-import { toaster } from '../../components/Toaster.tsx'
 import { useMe } from '../../hooks/useMe.ts'
-import {
-  useStaffConversations,
-  useStartStaffConversation,
-} from '../../hooks/useStaffMessages.ts'
+import { useStaffConversations } from '../../hooks/useStaffMessages.ts'
 import { errorMessage } from '../../lib/errors.ts'
-import type { StaffConversation } from '../../lib/types.ts'
 import { palette } from '../../theme/palette.ts'
 import { OwnerInbox } from './OwnerInbox.tsx'
 
 /**
- * The private staff <-> Owner channel.
+ * Universal internal staff messaging.
  *
- * The Owner gets the full internal-messaging hub (Inbox / Compose / Sent); an
- * agent or admin sees their own single thread with the Owner plus any internal
- * messages addressed to them. The backend scopes both lists by the
- * authenticated role, so this page simply renders what it gets.
+ * The Owner additionally gets the full messaging hub (Inbox / Compose / Sent);
+ * every staff member (Owner, Admin, Agent) gets the universal conversation
+ * workspace: their 1:1 threads with any other staff member, the ability to
+ * start new ones, and any internal messages addressed to them. The backend
+ * scopes everything to the authenticated user, so this page simply renders what
+ * it is given.
  */
 export function MessagesPage() {
   const me = useMe()
@@ -60,21 +57,19 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
   return (
     <>
       <PageHeader
-        title='Message the Owner'
-        description='Private channel between you and the Owner, plus internal messages the Owner sends you. Customers never see these messages.'
+        title='Team messages'
+        description='Private direct messages with any teammate. Customers never see these conversations.'
         actions={
-          items.length === 0 && !conversations.isPending ? (
-            <Button
-              size='sm'
-              bg={palette.ink}
-              color={palette.textOnInk}
-              _hover={{ bg: palette.inkHover }}
-              onClick={() => setStartOpen(true)}
-            >
-              <PenLine size={14} aria-hidden />
-              Message the Owner
-            </Button>
-          ) : null
+          <Button
+            size='sm'
+            bg={palette.ink}
+            color={palette.textOnInk}
+            _hover={{ bg: palette.inkHover }}
+            onClick={() => setStartOpen(true)}
+          >
+            <PenLine size={14} aria-hidden />
+            New message
+          </Button>
         }
       />
 
@@ -92,8 +87,8 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
         ) : items.length === 0 ? (
           <EmptyState
             icon={Mail}
-            title='No conversation with the Owner yet'
-            description='Start a private thread to ask the Owner about an account or a case you cannot resolve yourself.'
+            title='No conversations yet'
+            description='Start a private thread with a teammate to coordinate work customers should never see.'
             action={
               <Button
                 size='sm'
@@ -103,7 +98,7 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
                 onClick={() => setStartOpen(true)}
               >
                 <PenLine size={14} aria-hidden />
-                Message the Owner
+                New message
               </Button>
             }
           />
@@ -112,9 +107,8 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
             <ConversationList
               conversations={items}
               activeId={activeId}
-              isOwnerViewer={false}
               onSelect={select}
-              title='Your thread'
+              title='Your conversations'
             />
 
             <Stack gridColumn={{ lg: 'span 2' }} minW='0'>
@@ -122,7 +116,6 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
                 <ConversationPanel
                   key={activeId}
                   conversationId={activeId}
-                  isOwnerViewer={false}
                   viewerId={viewerId}
                 />
               ) : (
@@ -144,104 +137,5 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
         onStarted={(conversation) => select(conversation.id)}
       />
     </>
-  )
-}
-
-function StartConversationDialog({
-  open,
-  onOpenChange,
-  onStarted,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onStarted: (conversation: StaffConversation) => void
-}) {
-  const start = useStartStaffConversation()
-  const [subject, setSubject] = useState('')
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    try {
-      const conversation = await start.mutateAsync(subject.trim() || undefined)
-      toaster.create({
-        title: 'Conversation ready',
-        description: 'The Owner can see your message thread now.',
-      })
-      onOpenChange(false)
-      setSubject('')
-      onStarted(conversation)
-    } catch (error) {
-      toaster.create({
-        title: 'Could not start the conversation',
-        description: errorMessage(error),
-        type: 'error',
-      })
-    }
-  }
-
-  return (
-    <Dialog.Root open={open} onOpenChange={(details) => onOpenChange(details.open)}>
-      <Portal>
-        <Dialog.Backdrop bg={palette.overlay} />
-        <Dialog.Positioner>
-          <Dialog.Content
-            bg={palette.surface}
-            borderWidth='1px'
-            borderColor={palette.border}
-            borderRadius='l3'
-            maxW='md'
-            boxShadow={palette.shadowLg}
-          >
-            <form onSubmit={submit} noValidate>
-              <Dialog.Header px='6' pt='6' pb='2'>
-                <Dialog.Title fontSize='md' fontWeight='medium' color={palette.text}>
-                  Message the Owner
-                </Dialog.Title>
-                <Text fontSize='xs' color={palette.textMuted} pt='2'>
-                  One private thread per staff member. The Owner replies inside it; customers and
-                  other agents can never read it.
-                </Text>
-              </Dialog.Header>
-              <Dialog.Body px='6' py='4'>
-                <FormField
-                  label='Subject (optional)'
-                  htmlFor='conversation-subject'
-                  helperText='A short line so the Owner can triage, for example “Refund approval request”.'
-                >
-                  <TextInput
-                    id='conversation-subject'
-                    maxLength={180}
-                    value={subject}
-                    onChange={(event) => setSubject(event.target.value)}
-                    placeholder='What is this about?'
-                  />
-                </FormField>
-              </Dialog.Body>
-              <Dialog.Footer px='6' pb='6' pt='2' gap='2'>
-                <Button
-                  size='sm'
-                  variant='ghost'
-                  color={palette.textSecondary}
-                  onClick={() => onOpenChange(false)}
-                  disabled={start.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type='submit'
-                  size='sm'
-                  bg={palette.ink}
-                  color={palette.textOnInk}
-                  _hover={{ bg: palette.inkHover }}
-                  loading={start.isPending}
-                >
-                  Start conversation
-                </Button>
-              </Dialog.Footer>
-            </form>
-          </Dialog.Content>
-        </Dialog.Positioner>
-      </Portal>
-    </Dialog.Root>
   )
 }

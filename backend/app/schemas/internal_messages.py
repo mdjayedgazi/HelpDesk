@@ -50,6 +50,8 @@ class InternalMessageCreate(SQLModel):
     subject: TrimmedText = Field(min_length=1, max_length=MAX_SUBJECT_LENGTH)
     body: TrimmedText = Field(min_length=1, max_length=MAX_BODY_LENGTH)
     recipient_user_id: uuid.UUID | None = None
+    # Structured @mentions selected in the composer (real employee ids).
+    mentioned_user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
     def _check_recipient_matches_audience(self) -> "InternalMessageCreate":

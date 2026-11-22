@@ -1,3 +1,152 @@
+# HelpDesk — Universal Staff Messaging & @Mentions Review
+
+**Date:** 2026-11-22
+**Branch:** `feat/universal-staff-mentions`
+**Base:** `main` @ `819a765` (after PR #29)
+**Companion report:** [`docs/universal-staff-messaging-mentions-report.md`](docs/universal-staff-messaging-mentions-report.md)
+**Verdict:** **IMPLEMENTED AND CI VERIFIED — AWAITING MERGE** (not deployed).
+
+> **Document preservation.** The ticket-pagination review and everything beneath
+> it follow verbatim. This review is prepended.
+
+---
+
+## Part A — Repository and remote state
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD at start | `819a765` — merge of PR #29 (pagination) |
+| `origin/main` | matches `main` @ `819a765` |
+| Prior feature branches | width/motion and pagination both **merged**; no in-progress production work |
+| Untracked at start | harness files only (`harness.html`, `harness-*.tsx`, `vite.harness.config.ts`) |
+| `data.md` | found emptied locally; restored from `HEAD` before prepending this review |
+| New branch | `feat/universal-staff-mentions` |
+
+No other branch was overwritten. A separate worktree was unnecessary because the
+prior features were already merged and only untracked harness files existed.
+
+---
+
+## Part B — Existing architecture findings
+
+- `staff_conversations` stored a fixed `(staff_user_id, owner_user_id)` pair with
+  a **unique index on `staff_user_id`**, so only staff ↔ Owner threads were
+  possible. The router even rejected Owner-started conversations.
+- `staff_messages.read_at` = the recipient's read state; summaries were already
+  N+1-safe and were preserved.
+- `internal_messages` / `internal_message_recipients` = Owner compose with
+  per-recipient read state.
+- The staff directory (`/internal-messages/recipients`) was **Owner-only**.
+- No mention capability existed anywhere.
+- `staff_dependency` already allowed AGENT/ADMIN/OWNER; the restrictions were in
+  the start logic and the directory dependency.
+
+---
+
+## Part C — New universal model
+
+- Generalised `staff_conversations`: `participant_a_id` / `participant_b_id`,
+  always written in **canonical (ascending UUID) order**, with a unique pair
+  constraint and a `a <> b` check. Any two eligible staff can now converse; the
+  pair maps to exactly one thread regardless of who starts it.
+- `GET /staff-messages/directory` is now available to every staff role (customer
+  403) and returns active AGENT/ADMIN/OWNER accounts excluding the caller.
+- Case-insensitive, `@`-prefix-tolerant search over name, username and account id
+  with exact-username-first ranking. Verified in-browser that `@A` and `@a`
+  return the same employees.
+
+---
+
+## Part D — Structured mentions
+
+- New tables `staff_message_mentions` and `internal_message_mentions`
+  (`message_id`, `mentioned_user_id` → `users.id`, unique per pair).
+- The body keeps the readable `@username`; the send payload carries
+  `mentioned_user_ids` (real ids). Backend validates existence, active status,
+  staff role, and not-self; invalid mentions abort the send with `422`.
+- Duplicate mentions of one person in a message are stored once.
+- The frontend drops a structured mention if its `@username` is edited out.
+
+---
+
+## Part E — Notifications
+
+- New `STAFF_MENTION` notification type on the existing enum, in the existing
+  `MESSAGE_TYPES` category and frontend icon/type maps.
+- Created only in the same transaction as the persisted message (never on
+  typing); the recipient/sender are resolved server-side.
+- Exactly one notification per message per person: the recipient/counterpart
+  gets one alert, typed `STAFF_MENTION` if mentioned, otherwise the plain
+  message type. A mentioned person who cannot open the message (a third party in
+  a 1:1 thread, or an unaddressed broadcast recipient) is not notified — the
+  mention row is still stored, but no broken/privacy-leaking deep link is sent.
+- Customers are never notified about internal mentions.
+
+---
+
+## Part F — Reusable composer & UI
+
+- `StaffMentionComposer` (conversation panel) and `MentionBodyEditor` (Owner
+  compose) share `lib/mentions.ts` + `useStaffDirectory`.
+- `StaffConversationPicker` + `StartConversationDialog` are shared by the
+  agent/admin workspace and the Owner inbox, so every staff role can start a 1:1.
+- Accessible combobox pattern (roles/aria-expanded/aria-controls/
+  aria-activedescendant), ArrowUp/Down, Enter/Tab to select, Escape to close,
+  Enter sends only when the panel is closed, pointer selection with caret
+  restoration, `onMouseDown` prevented so focus stays in the composer.
+
+---
+
+## Part G — Migration
+
+`0012_staff_mentions` renames the pair columns, canonicalizes existing rows
+(`a < b`; impossible to collide because the old per-staff unique index
+guaranteed distinct participants), swaps the index for a unique pair
+constraint + check, creates the two mention tables, and appends the
+`STAFF_MENTION` enum label. Downgrade restores the columns/constraints and drops
+the new objects. Verified **upgrade → downgrade → upgrade** on a disposable
+PostgreSQL 18 with a seeded legacy row and no data loss. No Neon migration was
+run.
+
+---
+
+## Part H — Tests and results
+
+- Backend: ruff / ruff-format / pyrefly clean; **571 passed, 65 skipped**.
+  New `tests/test_staff_mentions.py` (24) + rewritten `tests/test_staff_messages.py`
+  (21) cover the full role matrix, directory search (case/prefix/id), mention
+  persistence/validation/dedupe, notification dedupe, participant isolation,
+  spoofing rejection and customer exclusion.
+- Frontend: typecheck + lint pass; **224 passed / 22 files**; build pass. New
+  `lib/mentions.test.ts` (18) and `StaffMentionComposer.test.tsx` (10).
+- Browser (Playwright, 1366px): `@`, `@A`, `@a` opened the correct suggestions;
+  selection inserted `@<username> `; Owner "New message" opened the picker.
+
+---
+
+## Part I — Delivery
+
+- Branch: `feat/universal-staff-mentions`
+- Commits: `38fddca`, `37760e7`
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/30 (targets `main`)
+- CI: **all checks pass**, including the Alembic migration and PostgreSQL
+  integration jobs
+- Deployment: **none**. Touches both `helpdesk-api` and `helpdesk-web` and
+  requires migration `0012_staff_mentions`, which Railway runs through its
+  approved pre-deploy migration step after merge. No Neon or Railway change was
+  made from this branch.
+
+### Post-deployment checklist
+
+1. `/health/ready` 200; `alembic current` = `0012_staff_mentions`.
+2. Directory works for staff, `403` for customers.
+3. Agent ↔ admin ↔ owner conversations all send/receive.
+4. `@` works in conversations and Owner compose; active staff only.
+5. One notification per mentioned employee; no duplicate for the counterpart.
+6. Existing conversations/messages intact.
+
+---
+
 # HelpDesk — Ticket Pagination Continuity Review
 
 **Date:** 2026-11-22

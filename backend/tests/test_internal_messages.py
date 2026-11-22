@@ -511,12 +511,13 @@ async def test_sent_filters_and_pagination(client, make_user):
 # ---------------------------------------------------------------------------
 
 
-async def _start(client, user, subject=None):
-    return await client.post(
-        CONVERSATIONS,
-        headers=_h(user),
-        json={} if subject is None else {"subject": subject},
-    )
+async def _start(client, user, recipient=None, subject=None):
+    payload: dict = {}
+    if recipient is not None:
+        payload["recipient_user_id"] = str(recipient.id)
+    if subject is not None:
+        payload["subject"] = subject
+    return await client.post(CONVERSATIONS, headers=_h(user), json=payload)
 
 
 async def _send(client, user, conversation_id, body):
@@ -533,31 +534,28 @@ async def test_owner_inbox_reports_sender_role_and_filters(client, make_user):
     agent = await make_user(role=Role.AGENT, username="filter_agent")
     admin = await make_user(role=Role.ADMIN, username="filter_admin")
 
-    agent_thread = (await _start(client, agent, subject="From an agent")).json()["id"]
-    admin_thread = (await _start(client, admin, subject="From an admin")).json()["id"]
+    agent_thread = (
+        await _start(client, agent, recipient=owner, subject="From an agent")
+    ).json()["id"]
+    admin_thread = (
+        await _start(client, admin, recipient=owner, subject="From an admin")
+    ).json()["id"]
     await _send(client, agent, agent_thread, "agent message")
 
     inbox = await client.get(CONVERSATIONS, headers=_h(owner))
     assert inbox.status_code == 200
-    roles = {c["staff_user_id"]: c["staff_role"] for c in inbox.json()}
+    counterparts = {c["id"]: c["counterpart_user_id"] for c in inbox.json()}
+    assert counterparts[agent_thread] == str(agent.id)
+    assert counterparts[admin_thread] == str(admin.id)
+    roles = {c["counterpart_user_id"]: c["counterpart_role"] for c in inbox.json()}
     assert roles[str(agent.id)] == "agent"
     assert roles[str(admin.id)] == "admin"
-
-    agents = await client.get(f"{CONVERSATIONS}?staff_role=agent", headers=_h(owner))
-    assert {c["id"] for c in agents.json()} == {agent_thread}
-
-    one_sender = await client.get(
-        f"{CONVERSATIONS}?staff_user_id={admin.id}", headers=_h(owner)
-    )
-    assert {c["id"] for c in one_sender.json()} == {admin_thread}
 
     unread = await client.get(f"{CONVERSATIONS}?unread_only=true", headers=_h(owner))
     assert {c["id"] for c in unread.json()} == {agent_thread}
 
     # An agent still only ever sees their own thread.
-    agent_view = await client.get(
-        f"{CONVERSATIONS}?staff_role=admin", headers=_h(agent)
-    )
+    agent_view = await client.get(CONVERSATIONS, headers=_h(agent))
     assert {c["id"] for c in agent_view.json()} == {agent_thread}
 
 
@@ -568,7 +566,7 @@ async def test_owner_inbox_preview_is_the_message_received_not_the_reply(
     owner = await make_user(role=Role.OWNER, username="owner_preview")
     agent = await make_user(role=Role.AGENT, username="preview_agent")
 
-    conversation_id = (await _start(client, agent)).json()["id"]
+    conversation_id = (await _start(client, agent, recipient=owner)).json()["id"]
     await _send(client, agent, conversation_id, "the agent asks for help")
     await _send(client, owner, conversation_id, "the owner replies")
 
@@ -584,8 +582,12 @@ async def test_agent_and_admin_message_the_owner_through_the_thread(client, make
     agent = await make_user(role=Role.AGENT, username="thread_agent")
     admin = await make_user(role=Role.ADMIN, username="thread_admin")
 
-    agent_thread = (await _start(client, agent, subject="Agent to owner")).json()["id"]
-    admin_thread = (await _start(client, admin, subject="Admin to owner")).json()["id"]
+    agent_thread = (
+        await _start(client, agent, recipient=owner, subject="Agent to owner")
+    ).json()["id"]
+    admin_thread = (
+        await _start(client, admin, recipient=owner, subject="Admin to owner")
+    ).json()["id"]
     assert (
         await _send(client, agent, agent_thread, "agent to owner")
     ).status_code == 201

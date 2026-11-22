@@ -146,3 +146,7 @@ class NotificationType(str, Enum):
     # A direct/broadcast message the Owner composed in the Owner Inbox and
     # addressed to an employee (never a customer, never the Owner).
     INTERNAL_MESSAGE_RECEIVED = "INTERNAL_MESSAGE_RECEIVED"
+    # The recipient was @mentioned in a staff message (conversation or internal
+    # compose). Created for the mentioned employees only, at most once per
+    # message per employee.
+    STAFF_MENTION = "STAFF_MENTION"

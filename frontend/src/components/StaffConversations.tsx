@@ -13,27 +13,25 @@ import { formatDateTime, formatRelative } from '../lib/format.ts'
 import type { StaffConversation } from '../lib/types.ts'
 import { palette } from '../theme/palette.ts'
 import { RoleBadge } from './badges.tsx'
-import { Composer } from './Composer.tsx'
 import { EmptyState, ErrorState, LoadingState } from './StateViews.tsx'
+import { StaffMentionComposer } from './StaffMentionComposer.tsx'
 import { Surface } from './Surface.tsx'
 import { toaster } from './Toaster.tsx'
 import { UserAvatar } from './UserAvatar.tsx'
 
 /**
- * The private staff <-> Owner *thread* UI, shared by the agent/admin view and
- * the Owner inbox. The backend scopes every response by role, so these
+ * The 1:1 staff messaging thread UI, shared by every staff role. The backend
+ * scopes every response to the caller's participant columns, so these
  * components only render what the API returned - they never decide access.
  */
 export function ConversationList({
   conversations,
   activeId,
-  isOwnerViewer,
   onSelect,
   title = 'Conversations',
 }: {
   conversations: StaffConversation[]
   activeId: string | undefined
-  isOwnerViewer: boolean
   onSelect: (id: string) => void
   title?: string
 }) {
@@ -50,7 +48,6 @@ export function ConversationList({
             key={conversation.id}
             conversation={conversation}
             selected={conversation.id === activeId}
-            isOwnerViewer={isOwnerViewer}
             onSelect={() => onSelect(conversation.id)}
           />
         ))}
@@ -62,31 +59,16 @@ export function ConversationList({
 function ConversationRow({
   conversation,
   selected,
-  isOwnerViewer,
   onSelect,
 }: {
   conversation: StaffConversation
   selected: boolean
-  isOwnerViewer: boolean
   onSelect: () => void
 }) {
-  const title = isOwnerViewer
-    ? conversation.staff_full_name
-    : (conversation.subject ?? 'Conversation with the Owner')
-
-  // The Owner inbox lists messages *received*, so it prefers the last incoming
-  // message over the Owner's own latest reply.
-  const preview = isOwnerViewer
-    ? (conversation.last_received_preview ??
-      conversation.last_message_preview ??
-      'No messages yet')
-    : (conversation.last_message_preview ?? 'No messages yet')
-
-  const timestamp = isOwnerViewer
-    ? (conversation.last_received_at ??
-      conversation.last_message_at ??
-      conversation.created_at)
-    : (conversation.last_message_at ?? conversation.created_at)
+  const title = conversation.counterpart_full_name
+  const preview = conversation.last_message_preview ?? 'No messages yet'
+  const timestamp =
+    conversation.last_message_at ?? conversation.created_at
 
   const unreadLabel =
     conversation.unread_count > 0
@@ -111,11 +93,7 @@ function ConversationRow({
       transition='background 0.16s ease'
     >
       <Flex gap='3' minW='0' align='flex-start'>
-        <UserAvatar
-          name={title}
-          src={isOwnerViewer ? conversation.staff_image_url : conversation.owner_image_url}
-          size='sm'
-        />
+        <UserAvatar name={title} src={conversation.counterpart_image_url} size='sm' />
         <Stack gap='1' minW='0' flex='1'>
           <Flex align='center' gap='2' justify='space-between'>
             <Text fontSize='sm' fontWeight='medium' color={palette.text} truncate>
@@ -138,20 +116,8 @@ function ConversationRow({
             ) : null}
           </Flex>
 
-          {isOwnerViewer ? (
-            <Flex align='center' gap='2' wrap='wrap'>
-              {conversation.staff_role ? (
-                <RoleBadge role={conversation.staff_role} />
-              ) : null}
-              <Text
-                fontSize='2xs'
-                color={palette.textFaint}
-                fontFamily='mono'
-                title={conversation.staff_user_id}
-              >
-                ID {conversation.staff_user_id.slice(0, 8)}
-              </Text>
-            </Flex>
+          {conversation.counterpart_role ? (
+            <RoleBadge role={conversation.counterpart_role} />
           ) : null}
 
           <Flex align='center' gap='2' justify='space-between'>
@@ -170,11 +136,9 @@ function ConversationRow({
 
 export function ConversationPanel({
   conversationId,
-  isOwnerViewer,
   viewerId,
 }: {
   conversationId: string
-  isOwnerViewer: boolean
   viewerId: string
 }) {
   const detail = useStaffConversation(conversationId)
@@ -207,22 +171,19 @@ export function ConversationPanel({
   }
 
   const messages = detail.data?.messages ?? []
-  const counterpart = isOwnerViewer ? conversation.staff_full_name : 'Owner'
-  const counterpartImage = isOwnerViewer
-    ? conversation.staff_image_url
-    : conversation.owner_image_url
+  const counterpart = conversation.counterpart_full_name
+  const counterpartImage = conversation.counterpart_image_url
 
-  const labelFor = (senderId: string) => {
-    if (senderId === viewerId) return 'You'
-    return counterpart
-  }
-
+  const labelFor = (senderId: string) => (senderId === viewerId ? 'You' : counterpart)
   const imageFor = (senderId: string) =>
     senderId === viewerId ? me.data?.image_url : counterpartImage
 
-  const submit = async (input: { body: string }) => {
+  const submit = async (input: { body: string; mentionedUserIds: string[] }) => {
     try {
-      await send.mutateAsync(input.body)
+      await send.mutateAsync({
+        body: input.body,
+        mentioned_user_ids: input.mentionedUserIds,
+      })
     } catch (error) {
       toaster.create({
         title: 'Could not send message',
@@ -238,10 +199,10 @@ export function ConversationPanel({
       <Stack gap='5'>
         <Stack gap='1'>
           <Text fontSize='md' fontWeight='medium' color={palette.text}>
-            {isOwnerViewer ? conversation.staff_full_name : conversation.subject}
+            {counterpart}
           </Text>
           <Text fontSize='xs' color={palette.textMuted}>
-            Started {formatDateTime(conversation.created_at)}
+            {conversation.subject} · Started {formatDateTime(conversation.created_at)}
           </Text>
         </Stack>
 
@@ -250,9 +211,7 @@ export function ConversationPanel({
             compact
             icon={MessageSquare}
             title='No messages yet'
-            description={
-              isOwnerViewer ? 'Reply below to start the thread.' : 'Write the first message below.'
-            }
+            description='Write the first message below. Type @ to mention a teammate.'
           />
         ) : (
           <Stack gap='0'>
@@ -299,15 +258,12 @@ export function ConversationPanel({
         )}
 
         <Box borderTopWidth='1px' borderColor={palette.borderSubtle} pt='5'>
-          <Composer
+          <StaffMentionComposer
             onSubmit={submit}
             isPending={send.isPending}
-            placeholder={
-              isOwnerViewer
-                ? `Reply to ${conversation.staff_full_name}…`
-                : 'Write a private message to the Owner…'
-            }
+            placeholder={`Message ${counterpart}…`}
             submitLabel='Send message'
+            ariaLabel={`Message ${counterpart}`}
             maxLength={5000}
           />
         </Box>

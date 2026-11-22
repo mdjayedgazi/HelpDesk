@@ -106,6 +106,7 @@ export type NotificationType =
   | 'TICKET_CREATED'
   | 'TICKET_RESOLVED'
   | 'INTERNAL_MESSAGE_RECEIVED'
+  | 'STAFF_MENTION'
 
 export interface User {
   id: string
@@ -217,13 +218,14 @@ export interface TicketContact {
 export interface StaffConversation {
   id: string
   subject: string
-  staff_user_id: string
-  staff_full_name: string
-  /** The staff participant's role, so the Owner inbox can show and filter it. */
-  staff_role: Role | null
-  staff_image_url: string | null
-  owner_user_id: string
-  owner_image_url: string | null
+  /** The two participants (canonical order), so the UI never invents people. */
+  participant_a_id: string
+  participant_b_id: string
+  /** The other participant relative to the viewer, resolved server-side. */
+  counterpart_user_id: string | null
+  counterpart_full_name: string
+  counterpart_role: Role | null
+  counterpart_image_url: string | null
   created_at: string
   last_message_at: string | null
   message_count: number
@@ -236,14 +238,8 @@ export interface StaffConversation {
   last_received_at: string | null
 }
 
-/**
- * Filters the Owner may apply to the conversation inbox. The sender-scoped
- * filters are only honoured for the Owner; an agent is always scoped to their
- * own single thread by the backend.
- */
+/** Filters for a staff member's own conversation list. */
 export interface StaffConversationListParams {
-  staff_role?: Role
-  staff_user_id?: string
   unread_only?: boolean
 }
 
@@ -254,6 +250,8 @@ export interface StaffMessage {
   body: string
   created_at: string
   read_at: string | null
+  /** Structured @mentions, as real employee ids. */
+  mentioned_user_ids: string[]
 }
 
 export interface StaffConversationDetail {
@@ -285,6 +283,18 @@ export interface InternalMessageCreateInput {
   body: string
   /** Required for (and only valid with) the `individual` audience. */
   recipient_user_id?: string | null
+  /** Structured @mentions (real employee ids). */
+  mentioned_user_ids?: string[]
+}
+
+export interface StaffConversationCreateInput {
+  recipient_user_id: string
+  subject?: string
+}
+
+export interface StaffMessageCreateInput {
+  body: string
+  mentioned_user_ids?: string[]
 }
 
 export interface InternalMessageRecipient {

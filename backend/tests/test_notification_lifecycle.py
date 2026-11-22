@@ -303,7 +303,9 @@ async def test_staff_to_owner_message_notifies_the_owner(client, make_user):
     agent = await make_user(role=Role.AGENT, username="thread_agent2")
 
     conversation = await client.post(
-        STAFF_CONVERSATIONS, headers=_h(agent), json={"subject": "Question"}
+        STAFF_CONVERSATIONS,
+        headers=_h(agent),
+        json={"recipient_user_id": str(owner.id), "subject": "Question"},
     )
     conversation_id = conversation.json()["id"]
     sent = await client.post(
