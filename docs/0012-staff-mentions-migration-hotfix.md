@@ -168,9 +168,12 @@ and project review documents are preserved.
 - `git diff --check` clean.
 - Committed on `fix/migration-0012-canonicalize-order` (based on `main` @
   `883fedf`).
-- PR opened against `main` (see PR URL). CI status is recorded on the PR; the
-  `Alembic migrations (disposable PostgreSQL)` and
-  `PostgreSQL integration tests` jobs exercise this change directly.
+- PR: **https://github.com/mdjayedgazi/HelpDesk/pull/31** (targets `main`).
+  **All CI checks pass**, including `Alembic migrations (disposable PostgreSQL)`
+  and `PostgreSQL integration tests (disposable service)` which exercise this
+  change directly. Also green: Backend lint + SQLite tests, Frontend
+  typecheck/lint/tests/build, Docker image builds, Production dependency audit,
+  Helm validation, Static security + secret scan, CodeQL, Trivy.
 
 ## 10. Remaining steps before the owner merges
 
