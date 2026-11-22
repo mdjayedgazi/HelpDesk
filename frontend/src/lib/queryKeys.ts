@@ -1,3 +1,4 @@
+import type { Role } from './types.ts'
 import type {
   AccountRequestListParams,
   InternalMessageListParams,
@@ -35,6 +36,8 @@ export const queryKeys = {
 
   staffMessages: {
     all: ['staff-messages'] as const,
+    directory: (params?: { q?: string; role?: Role; limit?: number; offset?: number }) =>
+      ['staff-messages', 'directory', params ?? {}] as const,
     conversations: (params?: StaffConversationListParams) =>
       ['staff-messages', 'conversations', params ?? {}] as const,
     conversation: (id: string) => ['staff-messages', 'conversation', id] as const,

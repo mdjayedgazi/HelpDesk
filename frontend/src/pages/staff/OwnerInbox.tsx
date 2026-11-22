@@ -17,7 +17,9 @@ import { useSearchParams } from 'react-router-dom'
 import { ConversationList, ConversationPanel } from '../../components/StaffConversations.tsx'
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx'
 import { EmployeePicker } from '../../components/EmployeePicker.tsx'
-import { FormField, FormStack, TextAreaInput, TextInput } from '../../components/FormField.tsx'
+import { MentionBodyEditor } from '../../components/MentionBodyEditor.tsx'
+import { StartConversationDialog } from '../../components/StartConversationDialog.tsx'
+import { FormField, FormStack, TextInput } from '../../components/FormField.tsx'
 import { PageHeader } from '../../components/PageHeader.tsx'
 import { Pagination } from '../../components/Pagination.tsx'
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews.tsx'
@@ -38,7 +40,6 @@ import { audienceLabels, formatDateTime, formatRelative, roleLabels } from '../.
 import type {
   InternalAudience,
   InternalMessageSummary,
-  Role,
   StaffConversationListParams,
   User,
 } from '../../lib/types.ts'
@@ -156,15 +157,10 @@ export function OwnerInbox() {
 function InboxSection() {
   const me = useMe()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all')
-  const [sender, setSender] = useState<User | null>(null)
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const [startOpen, setStartOpen] = useState(false)
 
-  const params: StaffConversationListParams = {
-    ...(roleFilter !== 'all' ? { staff_role: roleFilter } : {}),
-    ...(sender ? { staff_user_id: sender.id } : {}),
-    ...(unreadOnly ? { unread_only: true } : {}),
-  }
+  const params: StaffConversationListParams = unreadOnly ? { unread_only: true } : {}
 
   const conversations = useStaffConversations(params)
   const items = conversations.data ?? []
@@ -183,50 +179,33 @@ function InboxSection() {
     setSearchParams(next, { replace: true })
   }
 
-  const hasFilters = roleFilter !== 'all' || sender !== null || unreadOnly
+  const hasFilters = unreadOnly
 
   return (
     <Stack gap='6'>
-      <Surface p='4'>
-        <Flex wrap='wrap' gap='4' align='flex-end'>
-          <FormField label='Sender role'>
-            <Select
-              value={roleFilter}
-              onChange={(value) => setRoleFilter(value as Role | 'all')}
-              minW='10rem'
-              ariaLabel='Filter by sender role'
-            >
-              <option value='all'>All senders</option>
-              <option value='agent'>Agents</option>
-              <option value='admin'>Administrators</option>
-            </Select>
-          </FormField>
-
-          <Stack gap='1.5' minW={{ base: 'full', md: '18rem' }} flex='1'>
-            <Text fontSize='sm' fontWeight='medium' color={palette.text}>
-              Specific sender
-            </Text>
-            <EmployeePicker
-              value={sender}
-              onChange={(user) => setSender(user)}
-              showResultsWhenEmpty={false}
-              placeholder='Search by name, email, or account ID…'
-            />
-          </Stack>
-
-          <Button
-            size='sm'
-            variant={unreadOnly ? 'solid' : 'outline'}
-            bg={unreadOnly ? palette.ink : undefined}
-            color={unreadOnly ? palette.textOnInk : palette.textSecondary}
-            borderColor={palette.border}
-            aria-pressed={unreadOnly}
-            onClick={() => setUnreadOnly((value) => !value)}
-          >
-            Unread only
-          </Button>
-        </Flex>
-      </Surface>
+      <Flex justify='flex-end' gap='2'>
+        <Button
+          size='sm'
+          bg={palette.ink}
+          color={palette.textOnInk}
+          _hover={{ bg: palette.inkHover }}
+          onClick={() => setStartOpen(true)}
+        >
+          <PenLine size={14} aria-hidden />
+          New message
+        </Button>
+        <Button
+          size='sm'
+          variant={unreadOnly ? 'solid' : 'outline'}
+          bg={unreadOnly ? palette.ink : undefined}
+          color={unreadOnly ? palette.textOnInk : palette.textSecondary}
+          borderColor={palette.border}
+          aria-pressed={unreadOnly}
+          onClick={() => setUnreadOnly((value) => !value)}
+        >
+          Unread only
+        </Button>
+      </Flex>
 
       {conversations.isPending ? (
         <LoadingState label='Loading messages…' />
@@ -252,7 +231,6 @@ function InboxSection() {
             <ConversationList
               conversations={items}
               activeId={activeId}
-              isOwnerViewer
               onSelect={select}
               title='Messages received'
             />
@@ -263,7 +241,6 @@ function InboxSection() {
               <ConversationPanel
                 key={activeId}
                 conversationId={activeId}
-                isOwnerViewer
                 viewerId={me.data?.id ?? ''}
               />
             ) : (
@@ -277,6 +254,12 @@ function InboxSection() {
           </chakra.div>
         </SimpleGrid>
       )}
+
+      <StartConversationDialog
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        onStarted={(conversation) => select(conversation.id)}
+      />
     </Stack>
   )
 }
@@ -299,6 +282,7 @@ function ComposeSection({ onSent }: { onSent: () => void }) {
   const [recipient, setRecipient] = useState<User | null>(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([])
   const [reviewOpen, setReviewOpen] = useState(false)
   const [errors, setErrors] = useState<{ subject?: string; body?: string; recipient?: string }>({})
 
@@ -341,6 +325,7 @@ function ComposeSection({ onSent }: { onSent: () => void }) {
         subject: subject.trim(),
         body: body.trim(),
         recipient_user_id: audience === 'individual' ? (recipient?.id ?? null) : null,
+        mentioned_user_ids: mentionedUserIds,
       })
       toaster.create({
         title: 'Message sent',
@@ -352,6 +337,7 @@ function ComposeSection({ onSent }: { onSent: () => void }) {
       setReviewOpen(false)
       setSubject('')
       setBody('')
+      setMentionedUserIds([])
       setRecipient(null)
       setAudience('everyone')
       setErrors({})
@@ -414,13 +400,12 @@ function ComposeSection({ onSent }: { onSent: () => void }) {
           </FormField>
 
           <FormField label='Message' htmlFor='compose-body' error={errors.body} required>
-            <TextAreaInput
+            <MentionBodyEditor
               id='compose-body'
-              rows={6}
-              maxLength={5000}
               value={body}
-              onChange={(event) => setBody(event.target.value)}
-              placeholder='Write your message…'
+              onChange={setBody}
+              onMentionsChange={setMentionedUserIds}
+              placeholder='Write your message… Type @ to mention a teammate.'
             />
           </FormField>
         </FormStack>

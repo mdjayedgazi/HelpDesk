@@ -346,6 +346,7 @@ export const endpoints = {
 
   ticketFeedback: (ticketId: string) => `${P}/tickets/${ticketId}/feedback`,
 
+  staffDirectory: () => `${P}/staff-messages/directory`,
   staffConversations: () => `${P}/staff-messages/conversations`,
   staffConversation: (id: string) => `${P}/staff-messages/conversations/${id}`,
   staffConversationMessages: (id: string) => `${P}/staff-messages/conversations/${id}/messages`,

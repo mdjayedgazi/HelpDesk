@@ -36,6 +36,7 @@ MESSAGE_TYPES: tuple[NotificationType, ...] = (
     NotificationType.STAFF_MESSAGE_RECEIVED,
     NotificationType.OWNER_MESSAGE_RECEIVED,
     NotificationType.INTERNAL_MESSAGE_RECEIVED,
+    NotificationType.STAFF_MENTION,
 )
 ACCOUNT_TYPES: tuple[NotificationType, ...] = (
     NotificationType.ESCALATION_CREATED,

@@ -68,6 +68,7 @@ from app.models import (
     TicketHistory,
     User,
 )
+from app.services.staff_messages import canonical_pair
 from app.services.tickets import TICKET_NUMBER_START
 
 logger = logging.getLogger(__name__)
@@ -1121,10 +1122,11 @@ async def _seed_staff_conversations(
         conversation_id = _uid("staff_conversation", spec["key"])
         conversation = await session.get(StaffConversation, conversation_id)
         if conversation is None:
+            a_id, b_id = canonical_pair(users[spec["staff"]].id, users["owner"].id)
             conversation = StaffConversation(
                 id=conversation_id,
-                staff_user_id=users[spec["staff"]].id,
-                owner_user_id=users["owner"].id,
+                participant_a_id=a_id,
+                participant_b_id=b_id,
                 subject=spec["subject"],
                 created_at=_at(spec["at"]),
                 updated_at=_at(spec["at"]),

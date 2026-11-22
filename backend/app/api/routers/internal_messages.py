@@ -46,6 +46,7 @@ from app.services.internal_messages import (
     mark_message_read,
     resolve_recipients,
 )
+from app.services.staff_messages import validate_mentions
 
 router = APIRouter(prefix="/api/v1/internal-messages", tags=["internal-messages"])
 
@@ -138,6 +139,12 @@ async def compose_message(
     is rejected (``409``) instead of silently succeeding. The message and every
     recipient row are written in one transaction.
     """
+    # Validate every structured @mention first: an invalid mention is a client
+    # error (422) and must not be masked by an unrelated audience error.
+    mentioned_user_ids = await validate_mentions(
+        session, sender=owner, mentioned_user_ids=payload.mentioned_user_ids
+    )
+
     recipients = await resolve_recipients(
         session,
         audience=payload.audience,
@@ -151,6 +158,7 @@ async def compose_message(
         subject=payload.subject,
         body=payload.body,
         recipients=recipients,
+        mentioned_user_ids=mentioned_user_ids,
     )
     await session.commit()
     await session.refresh(message)

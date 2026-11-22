@@ -13,9 +13,17 @@ from app.models.account_request import (
 )
 from app.models.attachment import Attachment
 from app.models.comment import Comment
-from app.models.internal_message import InternalMessage, InternalMessageRecipient
+from app.models.internal_message import (
+    InternalMessage,
+    InternalMessageMention,
+    InternalMessageRecipient,
+)
 from app.models.notification import Notification
-from app.models.staff_message import StaffConversation, StaffMessage
+from app.models.staff_message import (
+    StaffConversation,
+    StaffMessage,
+    StaffMessageMention,
+)
 from app.models.ticket import Ticket
 from app.models.ticket_feedback import TicketFeedback
 from app.models.ticketHistory import TicketHistory
@@ -28,10 +36,12 @@ __all__ = [
     "Attachment",
     "Comment",
     "InternalMessage",
+    "InternalMessageMention",
     "InternalMessageRecipient",
     "Notification",
     "StaffConversation",
     "StaffMessage",
+    "StaffMessageMention",
     "Ticket",
     "TicketFeedback",
     "TicketHistory",

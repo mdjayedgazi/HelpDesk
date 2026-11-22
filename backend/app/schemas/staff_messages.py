@@ -36,10 +36,15 @@ TrimmedText = Annotated[str, BeforeValidator(_stripped)]
 
 
 class StaffConversationCreate(SQLModel):
-    """Start (or fetch) the caller's conversation with the Owner."""
+    """Start (or fetch) a 1:1 conversation with another staff member.
+
+    ``recipient_user_id`` is the employee to talk to. The pair is unique, so a
+    second call for the same two people returns the existing conversation.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    recipient_user_id: uuid.UUID
     subject: TrimmedText | None = Field(
         default=None, min_length=1, max_length=MAX_SUBJECT_LENGTH
     )
@@ -54,6 +59,15 @@ class StaffMessageCreate(SQLModel):
     model_config = ConfigDict(extra="forbid")
 
     body: TrimmedText = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    # Structured @mentions: real employee ids selected in the composer. The
+    # backend validates each one; display-name text is never authoritative.
+    # Capped so one message cannot fan out an unbounded number of rows.
+    mentioned_user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
+
+    @field_validator("mentioned_user_ids", mode="before")
+    @classmethod
+    def _default_mentions(cls, value: object) -> object:
+        return value or []
 
 
 class StaffMessageRead(SQLModel):
@@ -65,6 +79,9 @@ class StaffMessageRead(SQLModel):
     body: str
     created_at: datetime
     read_at: datetime | None
+    # The employees this message mentions, so the client can render them as
+    # distinguishable tokens without re-parsing the body.
+    mentioned_user_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class StaffConversationRead(SQLModel):
@@ -74,20 +91,17 @@ class StaffConversationRead(SQLModel):
 
     id: uuid.UUID
     subject: str
-    # Both participants, so a client can render "you / the Owner" without
-    # inventing identities. The staff display name is included because agents
-    # cannot read the user directory (that is ADMIN/OWNER-only).
-    staff_user_id: uuid.UUID
-    staff_full_name: str
-    # The staff participant's application role, so the Owner inbox can show who
-    # is an Administrator and who is an Agent (and filter by it).
-    staff_role: Role | None = None
-    # Cached Clerk profile images for the two participants, so the messaging UI
-    # can render real avatars without exposing the Clerk secret. Null when the
-    # participant has no Clerk-hosted image (e.g. imported demo records).
-    staff_image_url: str | None = None
-    owner_user_id: uuid.UUID
-    owner_image_url: str | None = None
+    # The two participants (canonical order). Exposed so a client never has to
+    # invent identities.
+    participant_a_id: uuid.UUID
+    participant_b_id: uuid.UUID
+    # The *other* participant relative to the requesting viewer, resolved
+    # server-side, so the conversation panel can render the counterpart without
+    # needing the admin-only user directory.
+    counterpart_user_id: uuid.UUID | None = None
+    counterpart_full_name: str
+    counterpart_role: Role | None = None
+    counterpart_image_url: str | None = None
     created_at: datetime
     last_message_at: datetime | None
     message_count: int

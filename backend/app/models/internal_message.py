@@ -104,3 +104,33 @@ class InternalMessageRecipient(SQLModel, table=True):
     )
     # Set when the addressed recipient opens the message.
     read_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
+class InternalMessageMention(SQLModel, table=True):
+    """A structured @mention on an Owner-composed internal message.
+
+    Like ``StaffMessageMention``, the row references the real ``users.id`` and
+    the message body keeps the readable ``@Name`` text. One row per
+    (message, mentioned user).
+    """
+
+    __tablename__ = "internal_message_mentions"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id",
+            "mentioned_user_id",
+            name="uq_internal_message_mentions_message_user",
+        ),
+        Index("ix_internal_message_mentions_message_id", "message_id"),
+        Index("ix_internal_message_mentions_mentioned_user_id", "mentioned_user_id"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    message_id: uuid.UUID = Field(foreign_key="internal_messages.id", nullable=False)
+    mentioned_user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime(timezone=True),
+        nullable=False,
+        sa_column_kwargs={"server_default": func.now()},
+    )

@@ -123,13 +123,14 @@ async def make_user(session_factory):
         *,
         username: str | None = None,
         email: str | None = None,
+        full_name: str | None = None,
         is_active: bool = True,
     ) -> User:
         username = username or f"user_{uuid.uuid4().hex[:8]}"
         email = email or f"{username}@example.com"
         user = User(
             clerk_id=f"test_{username}",
-            full_name=username.title(),
+            full_name=full_name or username.title(),
             username=username,
             email=email.lower(),
             role=role,

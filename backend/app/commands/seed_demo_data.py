@@ -105,6 +105,7 @@ from app.models import (
     TicketHistory,
     User,
 )
+from app.services.staff_messages import canonical_pair
 from app.services.tickets import TICKET_NUMBER_START
 
 # --------------------------------------------------------------------------- #
@@ -1942,10 +1943,11 @@ async def _seed_staff_conversations(
             counts.reused += 1
             result[spec["key"]] = existing_by_id[cid]
             continue
+        a_id, b_id = canonical_pair(users[spec["staff_key"]].id, owner.id)
         conversation = StaffConversation(
             id=cid,
-            staff_user_id=users[spec["staff_key"]].id,
-            owner_user_id=owner.id,
+            participant_a_id=a_id,
+            participant_b_id=b_id,
             subject=spec["subject"],
             created_at=_at(spec["created_at"]),
             updated_at=_at(spec["created_at"]),

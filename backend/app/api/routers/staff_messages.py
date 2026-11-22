@@ -1,22 +1,25 @@
-"""Private messaging between staff (AGENT/ADMIN) and the Owner.
+"""Universal private messaging between staff members (AGENT/ADMIN/OWNER).
 
 Authorization summary (enforced here, in the backend, not just in the UI):
 
 * every endpoint requires a staff role via ``staff_dependency`` - a CUSTOMER
-  receives ``403`` from the dependency and can never read, start, or send in a
-  private conversation;
-* only AGENT/ADMIN may *start* a conversation; the Owner answers from the
-  inbox;
+  receives ``403`` from the dependency and can never read, start, search, or
+  send in a private conversation;
+* any two eligible staff members can start a conversation with each other (the
+  Owner is no longer a required participant);
 * reading, replying and marking read all require being a participant of that
-  specific conversation; anybody else gets ``404`` (an agent cannot even
-  discover that another agent's thread exists).
+  specific conversation; anybody else gets ``404`` (an employee cannot even
+  discover that another employee's thread exists);
+* the recipient of a new conversation is validated server-side (must exist, be
+  active, and hold a staff role);
+* structured @mentions are validated against real, active staff accounts.
 """
 
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import exists, func
+from sqlalchemy import String, case, cast, exists, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
@@ -34,16 +37,100 @@ from app.schemas.staff_messages import (
     StaffMessageCreate,
     StaffMessageRead,
 )
+from app.schemas.users import UserRead
 from app.services.staff_messages import (
+    STAFF_ROLES,
     conversation_summaries,
     conversation_summary,
-    get_owner,
+    eligible_recipient,
+    find_or_create_conversation,
     load_conversation,
     mark_conversation_read,
+    message_mentions,
     send_message,
+    validate_mentions,
 )
 
 router = APIRouter(prefix="/api/v1/staff-messages", tags=["staff-messages"])
+
+
+async def _messages_with_mentions(
+    session, messages: list[StaffMessage]
+) -> list[StaffMessageRead]:
+    """Serialize messages, attaching their structured mention ids in bulk."""
+    mentions = await message_mentions(session, [message.id for message in messages])
+    result: list[StaffMessageRead] = []
+    for message in messages:
+        read = StaffMessageRead.model_validate(message)
+        read.mentioned_user_ids = mentions.get(message.id, [])
+        result.append(read)
+    return result
+
+
+@router.get("/directory", response_model=list[UserRead])
+async def search_staff_directory(
+    session: session_Dependency,
+    staff: staff_dependency,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+    role: Annotated[Role | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[User]:
+    """Search the eligible internal employee directory (any staff member).
+
+    Returns only active AGENT/ADMIN/OWNER accounts other than the caller.
+    Search is case-insensitive across display name, username and the account
+    id, and supports an ``@``-prefix query from the mention composer (the
+    leading ``@`` is stripped). Results are ordered so an exact username match
+    comes first, then names that start with the query, then other partial
+    matches.
+
+    Customers never reach this endpoint (``403`` from the dependency), so the
+    staff directory is never exposed to a customer.
+    """
+    if role is not None and role not in STAFF_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Only staff roles are searchable",
+        )
+    roles = (role,) if role is not None else STAFF_ROLES
+
+    statement = select(User).where(
+        User.role.in_(roles),
+        User.is_active.is_(True),
+        User.id != staff.id,
+    )
+
+    term = (q or "").strip().lstrip("@").strip()
+    ordered = statement
+    if term:
+        like = f"%{term.lower()}%"
+        statement = statement.where(
+            or_(
+                User.username.ilike(like),
+                User.full_name.ilike(like),
+                cast(User.id, String).ilike(like),
+            )
+        )
+        # Rank: exact username first, then usernames/names that start with the
+        # query, then other partial matches. Case-insensitive on both sides so
+        # @Alice and @alice rank identically. ``case`` yields a small integer
+        # sort key that works on both PostgreSQL and SQLite.
+        prefix = f"{term.lower()}%"
+        rank = case(
+            (func.lower(User.username) == term.lower(), 0),
+            (func.lower(User.username).like(prefix), 1),
+            (func.lower(User.full_name).like(prefix), 2),
+            else_=3,
+        )
+        ordered = statement.order_by(
+            rank,
+            User.full_name.asc(),
+            User.id.asc(),
+        )
+
+    ordered = ordered.limit(limit).offset(offset)
+    return list((await session.exec(ordered)).all())
 
 
 @router.post("/conversations", response_model=StaffConversationRead)
@@ -52,55 +139,45 @@ async def start_conversation(
     session: session_Dependency,
     staff: staff_dependency,
 ) -> StaffConversationRead:
-    """Get or create the caller's private conversation with the Owner.
+    """Get or create a 1:1 conversation between the caller and a staff member.
 
-    Idempotent: an AGENT/ADMIN has exactly one thread with the Owner, so
-    calling this again returns the existing conversation instead of creating a
-    duplicate. The Owner does not start conversations (there is one thread per
-    staff member; the Owner replies inside them).
+    Idempotent on the participant pair: the same two people always map to one
+    thread, whether the Owner, an admin or an agent starts it. A concurrent
+    creator is resolved by re-reading the winner after a unique violation.
     """
-    if staff.role not in (Role.AGENT, Role.ADMIN):
+    recipient = await eligible_recipient(
+        session,
+        sender=staff,
+        recipient_user_id=payload.recipient_user_id,
+    )
+
+    conversation = await find_or_create_conversation(
+        session,
+        sender=staff,
+        recipient=recipient,
+        subject=payload.subject,
+    )
+
+    if conversation.id is None:  # pragma: no cover - defensive
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only agents and admins start conversations with the Owner",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not open the conversation",
         )
 
-    owner = await get_owner(session)
-
-    conversation = (
-        await session.exec(
-            select(StaffConversation).where(StaffConversation.staff_user_id == staff.id)
-        )
-    ).first()
-
-    if conversation is None:
-        conversation = StaffConversation(
-            staff_user_id=staff.id,
-            owner_user_id=owner.id,
-            subject=payload.subject or f"Conversation with {staff.full_name}",
-        )
-        session.add(conversation)
+    if conversation in session.new:
         try:
             await session.commit()
         except IntegrityError:
-            # A concurrent request created the same thread (unique index on
-            # staff_user_id). Return the winner instead of failing.
             await session.rollback()
             await session.refresh(staff)
-            conversation = (
-                await session.exec(
-                    select(StaffConversation).where(
-                        StaffConversation.staff_user_id == staff.id
-                    )
-                )
-            ).first()
-            if conversation is None:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Could not open the conversation",
-                ) from None
-        else:
-            await session.refresh(conversation)
+            conversation = await find_or_create_conversation(
+                session,
+                sender=staff,
+                recipient=recipient,
+                subject=payload.subject,
+            )
+            await session.commit()
+        await session.refresh(conversation)
 
     return await conversation_summary(session, conversation, staff)
 
@@ -109,40 +186,24 @@ async def start_conversation(
 async def list_conversations(
     session: session_Dependency,
     staff: staff_dependency,
-    staff_role: Annotated[Role | None, Query()] = None,
-    staff_user_id: Annotated[uuid.UUID | None, Query()] = None,
     unread_only: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[StaffConversationRead]:
-    """AGENT/ADMIN: their own thread. OWNER: the whole inbox.
+    """Every conversation the caller participates in, newest activity first.
 
-    The Owner inbox additionally supports the filters the UI exposes: by the
-    staff participant's role, by one specific sender, and by unread threads.
-    Those two sender filters are applied for the Owner view only (an agent is
-    already scoped to their own single thread). The result is paginated and
-    summaries are built in bulk to avoid N+1 queries.
+    The list is scoped to the caller's participant columns, so no employee can
+    ever see a thread they are not part of. ``unread_only`` keeps threads with
+    at least one unread message addressed to the viewer.
     """
-    if staff.role == Role.OWNER:
-        statement = select(StaffConversation)
-
-        if staff_role is not None:
-            staff_ids = (
-                await session.exec(select(User.id).where(User.role == staff_role))
-            ).all()
-            statement = statement.where(StaffConversation.staff_user_id.in_(staff_ids))
-        if staff_user_id is not None:
-            statement = statement.where(
-                StaffConversation.staff_user_id == staff_user_id
-            )
-    else:
-        statement = select(StaffConversation).where(
-            StaffConversation.staff_user_id == staff.id
+    statement = select(StaffConversation).where(
+        or_(
+            StaffConversation.participant_a_id == staff.id,
+            StaffConversation.participant_b_id == staff.id,
         )
+    )
 
     if unread_only:
-        # Keep only threads that contain a message addressed to the viewer that
-        # has not been read yet.
         statement = statement.where(
             exists().where(
                 StaffMessage.conversation_id == StaffConversation.id,
@@ -153,12 +214,11 @@ async def list_conversations(
 
     statement = (
         statement.order_by(
-            # Conversations without messages yet fall back to their creation time
-            # so the inbox ordering is stable and portable (works on SQLite too).
             func.coalesce(
                 StaffConversation.last_message_at, StaffConversation.created_at
             ).desc(),
             StaffConversation.created_at.desc(),
+            StaffConversation.id.desc(),
         )
         .limit(limit)
         .offset(offset)
@@ -176,18 +236,20 @@ async def get_conversation(
 ) -> StaffConversationDetail:
     conversation = await load_conversation(session, conversation_id, staff)
 
-    messages = (
-        await session.exec(
-            select(StaffMessage)
-            .where(StaffMessage.conversation_id == conversation.id)
-            .order_by(StaffMessage.created_at.asc(), StaffMessage.id.asc())
-            .limit(limit)
-        )
-    ).all()
+    messages = list(
+        (
+            await session.exec(
+                select(StaffMessage)
+                .where(StaffMessage.conversation_id == conversation.id)
+                .order_by(StaffMessage.created_at.asc(), StaffMessage.id.asc())
+                .limit(limit)
+            )
+        ).all()
+    )
 
     return StaffConversationDetail(
         conversation=await conversation_summary(session, conversation, staff),
-        messages=[StaffMessageRead.model_validate(m) for m in messages],
+        messages=await _messages_with_mentions(session, messages),
     )
 
 
@@ -204,15 +266,30 @@ async def post_message(
     _rate_limit: Annotated[None, Depends(rate_limit("staff_message_create"))],
 ) -> StaffMessageRead:
     """Send a private message. Participants only; the recipient is derived
-    from the conversation, never from the request body."""
+    from the conversation, never from the request body.
+
+    Mentions are validated against real, active staff accounts before the
+    message is written; an invalid mention aborts the whole send with a clear
+    4xx rather than silently dropping it.
+    """
     conversation = await load_conversation(session, conversation_id, staff)
+    mentioned_user_ids = await validate_mentions(
+        session, sender=staff, mentioned_user_ids=payload.mentioned_user_ids
+    )
 
     message = send_message(
-        session, conversation=conversation, sender=staff, body=payload.body
+        session,
+        conversation=conversation,
+        sender=staff,
+        body=payload.body,
+        mentioned_user_ids=mentioned_user_ids,
     )
     await session.commit()
     await session.refresh(message)
-    return StaffMessageRead.model_validate(message)
+
+    read = StaffMessageRead.model_validate(message)
+    read.mentioned_user_ids = mentioned_user_ids
+    return read
 
 
 @router.post(
