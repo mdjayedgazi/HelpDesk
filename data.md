@@ -194,21 +194,39 @@ plus 2 donut cases in `dataAccuracy.test.tsx`. Existing tests were not weakened.
 ## Part H — Delivery status
 
 - Branch: `feat/helpdesk-ui-width-motion-polish`
-- Commit: `e6863fb`
-- PR: https://github.com/mdjayedgazi/HelpDesk/pull/28 (targets `main`)
+- Commits: `e6863fb` (implementation) → `d5f10dd`, `f6b874b` (report updates)
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/28 (targets `main`,
+  `MERGEABLE`)
 - CI: **all checks pass** — Backend lint + SQLite tests, Frontend
   typecheck/lint/tests/build, Alembic migrations, PostgreSQL integration, Docker
   image builds, Production dependency audit, Helm validation, Static security +
   secret scan, CodeQL, Trivy.
-- **Deployment: none.** No merge, no production trigger. Railway's `helpdesk-web`
-  deploys on `main` via the established CI-gated path; this branch has not
-  entered it.
+- **Deployment: none.** No merge, no production trigger.
 - The harness files used for visual verification are **not committed**, so the
-  PR is frontend-production-only.
+  PR is frontend-production-only (26 files, none matching `harness`).
+
+### Verified Railway deployment configuration
+
+From `docs/RAILWAY_COLLEGE_DEMO.md`, `docs/DEPLOYMENT.md` and
+`frontend/Dockerfile`:
+
+| Item | Value |
+| --- | --- |
+| Service | `helpdesk-web` (dashboard-configured; no `railway.toml/json`) |
+| Repository root | `/frontend` |
+| Build | `frontend/Dockerfile` → `npm ci && npm run build` (`tsc && vp build`) |
+| Production branch | `main`, automatic on push |
+| CI gate | Wait-for-CI (`checkSuites=true`): required GitHub checks must pass |
+| Healthcheck | `/healthz` on container port `8080` (`nginx.conf.template`) |
+| Preview deploys | none configured |
+
+Because deployment is automatic on `main` behind Wait-for-CI, merging this PR is
+the release trigger — so no merge or manual trigger was performed during this
+task.
 
 ### Post-deployment checklist (after a future merge)
 
-1. `/health/ready` → 200 (`database/redis ok`).
+1. API `/health/ready` → 200 (`database/redis ok`); frontend `/healthz` → `ok`.
 2. `/dashboard` at ≥1600 px fills the main column (no ~230 px side gutters).
 3. Hovering an "Open" donut segment shows the real count and share.
 4. Hovering/focusing a priority bar shows the rich tooltip, unclipped.
