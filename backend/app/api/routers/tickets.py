@@ -48,10 +48,9 @@ from app.services.notifications import (
 )
 from app.services.tickets import (
     CUSTOMER_EDITABLE_STATUSES,
-    count_tickets,
+    count_and_page_tickets,
     load_visible_ticket,
     next_ticket_number,
-    paginate_tickets,
     priority_for_impact,
     record_history,
     ticket_list_conditions,
@@ -234,14 +233,13 @@ async def list_tickets(
         q=q,
     )
 
-    total = await count_tickets(session, conditions)
-    total_pages = max(1, (total + page_size - 1) // page_size)
     offset = (page - 1) * page_size
-
-    rows = await session.exec(
-        paginate_tickets(conditions, limit=page_size, offset=offset)
+    # One round-trip for both the page rows and the total (see
+    # count_and_page_tickets): halves database latency on high-latency Neon.
+    items, total = await count_and_page_tickets(
+        session, conditions, limit=page_size, offset=offset
     )
-    items = list(rows.all())
+    total_pages = max(1, (total + page_size - 1) // page_size)
 
     return TicketPage(
         items=[TicketRead.model_validate(ticket) for ticket in items],
@@ -267,14 +265,13 @@ async def list_my_assigned_tickets(
     if status_filter is not None:
         conditions.append(Ticket.status == status_filter)
 
-    total = await count_tickets(session, conditions)
-    total_pages = max(1, (total + page_size - 1) // page_size)
     offset = (page - 1) * page_size
-
-    rows = await session.exec(
-        paginate_tickets(conditions, limit=page_size, offset=offset)
+    # One round-trip for both the page rows and the total (see
+    # count_and_page_tickets): halves database latency on high-latency Neon.
+    items, total = await count_and_page_tickets(
+        session, conditions, limit=page_size, offset=offset
     )
-    items = list(rows.all())
+    total_pages = max(1, (total + page_size - 1) // page_size)
 
     return TicketPage(
         items=[TicketRead.model_validate(ticket) for ticket in items],

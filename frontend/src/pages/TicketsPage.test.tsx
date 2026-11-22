@@ -13,7 +13,10 @@ const { useMeMock, useTicketsMock, useAgentsMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('../hooks/useMe.ts', () => ({ useMe: useMeMock }))
-vi.mock('../hooks/useTickets.ts', () => ({ useTickets: useTicketsMock }))
+vi.mock('../hooks/useTickets.ts', () => ({
+  useTickets: useTicketsMock,
+  usePrefetchTicketPage: () => vi.fn(),
+}))
 vi.mock('../hooks/useAdmin.ts', () => ({ useAgents: useAgentsMock }))
 vi.mock('../hooks/useUserDirectory.ts', () => ({
   useUserDirectory: () => ({

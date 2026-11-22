@@ -515,6 +515,39 @@ async def test_request_path_survives_clerk_failure(
     assert response.json()["role"] == "customer"
 
 
+async def test_request_path_owner_fast_path_skips_clerk_and_lock(
+    client, make_user, session_factory, monkeypatch
+):
+    """An existing Owner request must not pay the reconcile round-trip/Clerk call.
+
+    Reconciliation can never *change* an account that already holds OWNER, so the
+    request path skips the advisory lock and Clerk verification for them. This is
+    the common case for the person browsing the app, and removing those calls is
+    the whole point of the fast path. The role must still be returned correctly.
+    """
+    from app.core import auth as auth_module
+    from app.core import config as config_module
+
+    owner = await make_user(role=Role.OWNER, email="owner@example.com")
+    monkeypatch.setattr(config_module.settings, "OWNER_EMAIL", "owner@example.com")
+    monkeypatch.setattr(config_module.settings, "INITIAL_ADMIN_EMAIL", None)
+
+    calls = {"n": 0}
+
+    async def _spy(user_id: str):
+        calls["n"] += 1
+        return _FakeClerkUser(primary="owner@example.com")
+
+    monkeypatch.setattr(auth_module.clerk_client.users, "get_async", _spy)
+
+    response = await client.get(
+        "/api/v1/users/me", headers={"X-Test-User": owner.username}
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "owner"
+    assert calls["n"] == 0, "the Owner fast path must not call Clerk"
+
+
 # --------------------------------------------------------------------------- #
 # Security: no client-side escalation
 # --------------------------------------------------------------------------- #

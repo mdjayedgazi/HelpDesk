@@ -242,3 +242,59 @@ def paginate_tickets(conditions: list, *, limit: int, offset: int):
         .limit(limit)
         .offset(offset)
     )
+
+
+# The Ticket columns, read from the model so this can never drift from the schema.
+_TICKET_COLUMN_NAMES = tuple(column.name for column in Ticket.__table__.columns)
+
+
+async def count_and_page_tickets(
+    session: AsyncSession,
+    conditions: list,
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[Ticket], int]:
+    """Return one page of tickets **and** the total count in a single round-trip.
+
+    The list endpoint previously issued two sequential queries (``count(*)`` then
+    the page). Against a high-latency database such as Neon — where each
+    round-trip can approach hundreds of milliseconds — that doubled the request's
+    database latency for no benefit. A window function ``count(*) OVER ()``
+    returns the full filtered total alongside each page row, so one round-trip
+    yields both values.
+
+    The count is computed over the same filtered set as the page (the window is
+    evaluated before ``LIMIT``), so it can never disagree with the data query —
+    the exact invariant the previous two-query implementation maintained.
+
+    An empty page still needs the true total (e.g. a deep page past the end), and
+    a window function produces no rows to read it from. In that one case we fall
+    back to a separate ``COUNT`` — still correct, and only for out-of-range pages,
+    which are not the hot path. Ordering is unchanged (``created_at DESC,
+    id DESC``) for deterministic pagination.
+    """
+    # ``session.exec`` unwraps a single-entity SELECT into ``Ticket`` objects,
+    # so build an explicit column select: every Ticket column plus the windowed
+    # total. This keeps each result row a tuple on every dialect/driver.
+    columns = [getattr(Ticket, name) for name in _TICKET_COLUMN_NAMES]
+    ordered = select(*columns)
+    if conditions:
+        ordered = ordered.where(*conditions)
+    ordered = ordered.order_by(Ticket.created_at.desc(), Ticket.id.desc())
+
+    total_column = func.count().over().label("__total")
+    windowed = ordered.add_columns(total_column).limit(limit).offset(offset)
+    result = (await session.exec(windowed)).all()
+
+    if not result:
+        # No rows on this page: the true total cannot be read from the window.
+        return [], await count_tickets(session, conditions)
+
+    # Each row is ``(*ticket_columns, total)``; the total is identical per row.
+    items = [
+        Ticket(**dict(zip(_TICKET_COLUMN_NAMES, tuple(row)[:-1], strict=True)))
+        for row in result
+    ]
+    total = int(tuple(result[0])[-1])
+    return items, total

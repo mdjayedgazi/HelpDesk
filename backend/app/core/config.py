@@ -185,6 +185,15 @@ class Settings(BaseSettings):
         return None
 
     @property
+    def cache_redis_url(self) -> str | None:
+        """Redis URL for the optional read-through cache.
+
+        Falls back to ``RATE_LIMIT_REDIS_URL`` so a deployment that already has a
+        shared Redis for rate limiting gets caching with a single variable set.
+        """
+        return (self.CACHE_REDIS_URL or self.RATE_LIMIT_REDIS_URL or "").strip() or None
+
+    @property
     def initial_admin_email(self) -> str | None:
         """Deprecated accessor; retained for the bootstrap command and tests.
 
@@ -270,6 +279,15 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = False
     RATE_LIMIT_REDIS_URL: str | None = None
     RATE_LIMIT_REDIS_TIMEOUT_SECONDS: float = 0.5
+    # Optional read-through cache for expensive, frequently requested read-only
+    # aggregates (currently the admin support analytics). Off by default; when
+    # enabled it reuses the same shared Redis instance as rate limiting. A cache
+    # miss or an unavailable Redis simply falls back to PostgreSQL, so enabling
+    # it can never break a request. CACHE_REDIS_URL defaults to the rate-limit
+    # Redis URL when unset, so a single configured Redis serves both.
+    CACHE_ENABLED: bool = False
+    CACHE_REDIS_URL: str | None = None
+    CACHE_REDIS_TIMEOUT_SECONDS: float = 0.5
     # Only these direct peers may supply X-Forwarded-For. An empty list means
     # the header is ignored and the TCP peer address is used. Behind Railway's
     # edge, set this explicitly (see docs/DEPLOYMENT.md) because the edge is the

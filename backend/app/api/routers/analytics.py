@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from sqlalchemy import func
 from sqlmodel import select
 
+from app.core import cache
 from app.core.auth import admin_dependency
 from app.core.database import session_Dependency
 from app.enums.enums import Role, TicketCategory, TicketPriority, TicketStatus
@@ -49,12 +50,34 @@ async def get_analytics(
 ) -> AnalyticsRead:
     """Aggregated, read-only support analytics for the admin/owner dashboard.
 
-    This endpoint only *reads* existing rows with aggregate queries. It adds no
-    table, column, migration or business rule; it exists so the dashboard can
-    visualize real data instead of inventing metrics. Anything that cannot be
-    derived from stored timestamps (for example SLA compliance) is deliberately
-    omitted.
+    The aggregate runs up to ~14 sequential queries, so it is served from the
+    optional read-through cache when available (see ``app.core.cache``). The
+    cache is a pure performance layer: a miss, a disabled cache, or an
+    unreachable Redis simply computes from PostgreSQL, so the response is always
+    correct. Mutations bump a single version counter, which invalidates every
+    cached payload at once without scanning keys.
     """
+    cached = await cache.get_analytics_cache()
+    if cached is not None:
+        return AnalyticsRead.model_validate(cached)
+
+    # Stampede protection: only one concurrent miss rebuilds while the others
+    # proceed. The losers compute directly (still correct) rather than block on
+    # the lock — the cache is a performance layer, never a source of truth.
+    lock_token = await cache.try_acquire_rebuild_lock()
+    if lock_token is None:
+        return await _compute_analytics(session)
+
+    try:
+        result = await _compute_analytics(session)
+        await cache.set_analytics_cache(result.model_dump(mode="json"))
+        return result
+    finally:
+        await cache.release_rebuild_lock(lock_token)
+
+
+async def _compute_analytics(session: session_Dependency) -> AnalyticsRead:
+    """Compute the analytics aggregate from PostgreSQL (read-only)."""
     now = datetime.now(UTC)
     window_days = DEFAULT_WINDOW_DAYS
     since = now - timedelta(days=window_days - 1)

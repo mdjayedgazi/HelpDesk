@@ -18,6 +18,10 @@ from app.api.routers import (
     tickets,
     users,
 )
+from app.core.cache import (
+    AnalyticsCacheInvalidationMiddleware,
+    close_cache_client,
+)
 from app.core.config import settings
 from app.core.database import create_session_and_tables
 from app.core.health import readiness
@@ -66,6 +70,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await close_cache_client()
         await close_rate_limit_store()
 
 
@@ -118,6 +123,9 @@ app = FastAPI(
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(AttachmentsDisabledMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+# Invalidate the analytics cache after analytics-affecting writes. Added here so
+# it runs inside the security/body middleware and cannot affect error shaping.
+app.add_middleware(AnalyticsCacheInvalidationMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

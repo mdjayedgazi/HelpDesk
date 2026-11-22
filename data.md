@@ -1,3 +1,143 @@
+# HelpDesk — System-Wide Performance Optimization Review
+
+**Date:** 2026-11-22
+**Branch:** `perf/system-data-fetching-redis-postgres`
+**Base:** `main` @ `34ca285` (after PR #31 hotfix merge)
+**Companion report:** [`docs/performance-optimization-report.md`](docs/performance-optimization-report.md)
+**Verdict:** **IMPLEMENTED — CI PASSING, AWAITING MERGE** (not deployed). **UI unchanged.**
+
+> **Document preservation.** The 0012 migration hotfix review and everything
+> beneath it follow verbatim. This review is prepended.
+
+---
+
+## Part A — Repository and remote state
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD at start | `34ca285` — merge of PR #31 (0012 migration hotfix) |
+| `origin/main` | matches `main` @ `34ca285` |
+| Prior branches | width/motion, pagination, mentions, migration hotfix all **merged** |
+| Untracked at start | harness files only |
+| `data.md` | emptied locally; restored from `HEAD` before prepending |
+| New branch | `perf/system-data-fetching-redis-postgres` |
+
+---
+
+## Part B — The real bottleneck (measured, not assumed)
+
+PostgreSQL **18.7** (verified read-only with `SELECT version()`), pooled Neon
+endpoint, 300 tickets / 100 users, `tickets` total size **224 kB**.
+
+- `EXPLAIN (ANALYZE, BUFFERS)` of the ticket page query: **execution 3.5 ms**
+  (unfiltered), **0.13 ms** (status-filtered). The planner is fine; indexes are
+  sufficient.
+- A single round-trip from the developer vantage is **~305 ms**, and a bare
+  `SELECT 1` costs the same as the real query → the cost is **network
+  round-trips**, not execution.
+- `GET /tickets` issued **two sequential round-trips** (count then page), plus,
+  for the Owner, an advisory-lock query **and a Clerk API call on every request**.
+- Dashboard analytics issues **~14 sequential queries** with no caching.
+
+Measured, live Neon:
+
+| | Before | After |
+| --- | --- | --- |
+| Ticket list round-trips | 2 (count+page) | **1** |
+| Ticket list SQL statements | 3 | **2** |
+| 2 vs 1 round-trip | **679.8 ms** | **307.3 ms** (**−372 ms**) |
+| Analytics | ~14 round-trips/load | **0 on cache hit** |
+
+---
+
+## Part C — Frontend optimizations (no visual change)
+
+- Ticket-list `staleTime` set to an explicit 30 s (was 15 s global): revisited
+  pages come from cache; mutations still invalidate `['tickets']`.
+- New `usePrefetchTicketPage`: warms **only the immediate next page**, only when
+  `has_next` and not already cached, using the same query key/fetch — so it can
+  never show different data. Predictable Next clicks render from cache.
+- Verified: only `useTickets.ts` and one effect in `TicketsPage.tsx` changed; **no
+  JSX/markup/style edits**. `keepPreviousData` (previous page stays visible while
+  the next loads) was already present and is preserved.
+
+---
+
+## Part D — Backend optimizations
+
+- `count_and_page_tickets`: one query with `count(*) OVER ()` replaces the
+  `COUNT(*)`+page pair. The window is computed before `LIMIT`, so the total is
+  identical to the old two-query result (verified on PostgreSQL; empty past-end
+  pages fall back to a single `COUNT`). Ordering unchanged.
+- Owner reconcile fast path: an existing **OWNER** request skips the advisory
+  lock and Clerk `users.get_async` (reconciliation cannot change an owner —
+  `evaluate` returns `already_owner`/`not_verified`, `changed=False`). A *new*
+  configured owner still takes the full path and is promoted as before (covered
+  by tests). This removes one round-trip + one external call from **every** Owner
+  request.
+- No N+1 in the ticket list; no API contract change.
+
+---
+
+## Part E — Redis (analytics cache-aside, optional)
+
+- Reuses the existing Redis (rate limiting); `CACHE_REDIS_URL` defaults to
+  `RATE_LIMIT_REDIS_URL`. Off unless `CACHE_ENABLED=true`.
+- Cache key `helpdesk:cache:analytics:support:v<version>`, TTL 60 s.
+- Invalidation: one `INCR` of a version key after analytics-affecting writes
+  (ticket create/update/claim/assign; user profile/role/status), after the
+  response is sent. No `KEYS`, no `FLUSHDB`/`FLUSHALL`, no key scans. Comments and
+  other unrelated writes do **not** invalidate (test-verified).
+- Any Redis error/timeout/corrupt value = cache miss → PostgreSQL. Caching can
+  never break a request or return wrong data.
+- Stampede: short `SET NX PX` rebuild lock; losers compute directly.
+- Security: no user data in keys, admin-gated endpoint only, no secrets logged,
+  authorization unchanged.
+
+---
+
+## Part F — Tests and results
+
+- Backend: ruff / ruff-format / pyrefly clean; `pytest` **580 passed, 72 skipped**.
+  New `tests/test_analytics_cache.py` (7: miss/hit, invalidation, non-invalidation,
+  Redis-down fallback, corrupt entry, stampede lock, swallowed errors) + an owner
+  fast-path test (no Clerk call). Existing owner/auth/pagination/analytics tests
+  unchanged and green.
+- PostgreSQL (disposable, exact CI order, fresh DB): E2E 2; PG suites + migration
+  module **32**; demo-seed **31** — all pass. Window pagination proven equivalent
+  to the two-query result on real PostgreSQL.
+- Frontend: typecheck + lint pass; **228 tests / 23 files** (new
+  `useTickets.test.tsx`); production build pass.
+
+---
+
+## Part G — Data safety
+
+Neon accessed **read-only** only (`SET TRANSACTION READ ONLY`; SELECT/SHOW/EXPLAIN).
+No migration needed (no schema change; existing indexes shown sufficient). No
+seeders, drops, truncation, or owner changes. No credentials printed. All perf
+testing on disposable local PostgreSQL or in-memory fakes.
+
+---
+
+## Part H — Delivery
+
+- Branch: `perf/system-data-fetching-redis-postgres`
+- No migration; no env change required (cache is opt-in via `CACHE_ENABLED`).
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/32 (targets `main`); **all CI
+  checks pass** (incl. Alembic migrations and PostgreSQL integration). Not
+  merged/deployed.
+
+### Post-deploy verification
+
+1. Switch ticket pages: previous page stays visible; next page loads fast.
+2. `GET /api/v1/tickets?page=2` returns the same `total`/items.
+3. If `CACHE_ENABLED=true`: dashboard second load is fast; creating a ticket
+   updates the totals (invalidation).
+4. Redis down: pages/dashboard still load (DB fallback).
+
+---
+
 # HelpDesk — Universal Staff Messaging & @Mentions Review
 
 **Date:** 2026-11-22

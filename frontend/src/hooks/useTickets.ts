@@ -1,4 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 
 import { endpoints } from '../lib/api.ts'
 import { queryKeys } from '../lib/queryKeys.ts'
@@ -17,12 +18,22 @@ import type {
 } from '../lib/types.ts'
 import { useApi } from '../lib/useApi.ts'
 
+/**
+ * Ticket list pages stay "fresh" for a short window so returning to a page you
+ * just viewed (pagination back/forward, or a quick filter toggle) is served from
+ * the cache instead of re-hitting the API. The value is deliberately short: ticket
+ * data changes often, and mutations already invalidate the ticket queries, so this
+ * only avoids redundant refetches of an unchanged page — it does not hide updates.
+ */
+const TICKET_LIST_STALE_MS = 30_000
+
 export function useTickets(params?: TicketListParams, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: queryKeys.tickets.list(params),
     queryFn: () => api.request<TicketPage>(endpoints.tickets(), { query: params }),
     placeholderData: keepPreviousData,
+    staleTime: TICKET_LIST_STALE_MS,
     enabled,
   })
 }
@@ -31,10 +42,44 @@ export function useAssignedTickets(params?: TicketListParams, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: queryKeys.tickets.assigned(params),
-    queryFn: () => api.request<TicketPage>(endpoints.assignedTickets(), { query: params }),
+    queryFn: () =>
+      api.request<TicketPage>(endpoints.assignedTickets(), { query: params }),
     placeholderData: keepPreviousData,
+    staleTime: TICKET_LIST_STALE_MS,
     enabled,
   })
+}
+
+/**
+ * Prefetch an adjacent ticket-list page so a predictable Next/Previous click
+ * renders from cache immediately.
+ *
+ * It fires at most one page ahead, only when that page is not already cached,
+ * and uses the same query key and fetch function as the visible query, so it can
+ * never show different data. It is intentionally conservative (one page, no
+ * loops) to avoid background-fetch churn on metered infrastructure.
+ */
+export function usePrefetchTicketPage(params?: TicketListParams) {
+  const api = useApi()
+  const queryClient = useQueryClient()
+  // ``params`` is memoized by the caller (the ticket page), so its identity only
+  // changes when a filter/page actually changes. The callback therefore stays
+  // stable and the caller's effect does not loop on unrelated re-renders.
+  return useCallback(
+    (page: number) => {
+      if (!params) return
+      const nextParams = { ...params, page }
+      const key = queryKeys.tickets.list(nextParams)
+      if (queryClient.getQueryData(key) !== undefined) return
+      void queryClient.prefetchQuery({
+        queryKey: key,
+        queryFn: () =>
+          api.request<TicketPage>(endpoints.tickets(), { query: nextParams }),
+        staleTime: TICKET_LIST_STALE_MS,
+      })
+    },
+    [api, queryClient, params],
+  )
 }
 
 export function useTicket(id: string | undefined) {
