@@ -333,10 +333,20 @@ committed, so the PR contains only production frontend changes.
 
 - No merge into `main` was performed.
 - No production deployment was triggered.
-- Railway's `helpdesk-web` service deploys from `main` through the established
-  CI-gated release path; this branch has not entered that path.
-- Expected post-merge behaviour: a merge to `main` triggers CI; once green,
-  Railway's existing `main`-branch deployment builds and releases the frontend.
+- Verified Railway configuration (from `docs/RAILWAY_COLLEGE_DEMO.md`,
+  `docs/DEPLOYMENT.md`, `frontend/Dockerfile`):
+  - `helpdesk-web` is a dashboard-configured service (no `railway.toml/json`);
+    repository root `/frontend`, built from `frontend/Dockerfile`
+    (`npm ci && npm run build`).
+  - Production deployment branch: **`main`**, **automatic** on push.
+  - **Wait for CI** (`checkSuites=true`) gates deployment on required GitHub
+    checks, so a failing `main` commit is not released.
+  - Frontend healthcheck: `/healthz` on container port `8080`
+    (`nginx.conf.template`).
+  - No branch/PR preview-deployment mechanism exists.
+- Expected post-merge behaviour: merging this PR to `main` triggers CI; once the
+  required checks pass, Railway's `main` deployment builds and releases the
+  frontend automatically. This branch has **not** entered that path.
 - Post-deployment checklist:
   1. `/health/ready` on the API returns 200 (`database/redis ok`).
   2. `/dashboard` at ≥1600 px fills the main column (no ~230 px side gutters).
