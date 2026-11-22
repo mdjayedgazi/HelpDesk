@@ -85,8 +85,12 @@ export function NotificationsPage() {
       />
 
       <Flex mb='4' gap='4' wrap='wrap' align='center'>
-        <Tabs.Root value={filter} onValueChange={(details) => changeFilter(details.value)}>
-          <Tabs.List>
+        <Tabs.Root
+          value={filter}
+          minW='0'
+          onValueChange={(details) => changeFilter(details.value)}
+        >
+          <Tabs.List className='hd-tabs-scroll'>
             <Tabs.Trigger value='all' fontSize='sm'>
               All
             </Tabs.Trigger>
@@ -97,8 +101,12 @@ export function NotificationsPage() {
           </Tabs.List>
         </Tabs.Root>
 
-        <Tabs.Root value={category} onValueChange={(details) => changeCategory(details.value)}>
-          <Tabs.List>
+        <Tabs.Root
+          value={category}
+          minW='0'
+          onValueChange={(details) => changeCategory(details.value)}
+        >
+          <Tabs.List className='hd-tabs-scroll'>
             <Tabs.Trigger value='all' fontSize='sm'>
               Everything
             </Tabs.Trigger>

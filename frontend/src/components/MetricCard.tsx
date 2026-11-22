@@ -7,6 +7,7 @@ import { transitions } from '../theme/motion.ts'
 import { palette } from '../theme/palette.ts'
 import { type Tone, tones } from '../theme/statusTone.ts'
 import { AnimatedNumber } from './motion/AnimatedNumber.tsx'
+import { PointerHighlight } from './PointerHighlight.tsx'
 import { Reveal } from './Reveal.tsx'
 import { Surface } from './Surface.tsx'
 
@@ -53,10 +54,10 @@ export function MetricCard({
   // it only stops a revisit of the same page from counting up from zero again.
   const { pathname } = useLocation()
 
-  const body = (
+  const surface = (
     <Surface
       as='div'
-      p='4'
+      p={{ base: '4', md: '5' }}
       height='full'
       position='relative'
       transition={transitions.lift}
@@ -86,6 +87,7 @@ export function MetricCard({
             color={palette.textMuted}
             fontWeight='medium'
             letterSpacing='0.01em'
+            lineHeight='1.4'
             lineClamp={2}
           >
             {label}
@@ -117,7 +119,13 @@ export function MetricCard({
             <AnimatedNumber value={value} cacheKey={`${pathname}:${to ?? ''}:${label}`} />
           </Text>
           {hint ? (
-            <Text fontSize='2xs' color={palette.textMuted} mt='2' lineClamp={2}>
+            <Text
+              fontSize='2xs'
+              color={palette.textMuted}
+              mt='2.5'
+              lineHeight='1.45'
+              lineClamp={2}
+            >
               {hint}
             </Text>
           ) : null}
@@ -126,6 +134,17 @@ export function MetricCard({
         {footer ? <Box>{footer}</Box> : null}
       </Stack>
     </Surface>
+  )
+
+  // Interactive cards get a very soft light that follows the pointer. Inert
+  // cards skip it entirely — a highlight on something you cannot click would
+  // suggest an affordance that is not there.
+  const body = interactive ? (
+    <PointerHighlight height='full' borderRadius='l3' intensity={0.22} radius={260}>
+      {surface}
+    </PointerHighlight>
+  ) : (
+    surface
   )
 
   const content = to ? (

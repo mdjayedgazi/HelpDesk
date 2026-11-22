@@ -13,7 +13,7 @@ import { TicketListPanel } from '../../components/TicketListPanel.tsx'
 import { useAssignedTickets, useTickets } from '../../hooks/useTickets.ts'
 import type { Ticket, User } from '../../lib/types.ts'
 import { TICKET_PRIORITIES, TICKET_STATUSES } from '../../lib/types.ts'
-import { priorityLabels, statusLabels } from '../../lib/format.ts'
+import { priorityDescriptions, priorityLabels, statusDescriptions, statusLabels } from '../../lib/format.ts'
 import { palette } from '../../theme/palette.ts'
 import { priorityTone, statusTone, tones } from '../../theme/statusTone.ts'
 
@@ -86,6 +86,7 @@ export function AgentDashboard({ me }: { me: User }) {
     label: statusLabels[status],
     value: stats.byStatus[status] ?? 0,
     color: tones[statusTone[status]].solid,
+    description: statusDescriptions[status],
   })).filter((slice) => slice.value > 0)
 
   const priorityBars = TICKET_PRIORITIES.map((priority) => ({
@@ -93,6 +94,7 @@ export function AgentDashboard({ me }: { me: User }) {
     label: priorityLabels[priority],
     value: stats.byPriority[priority] ?? 0,
     color: tones[priorityTone[priority]].solid,
+    description: priorityDescriptions[priority],
   }))
 
   return (

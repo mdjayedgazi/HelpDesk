@@ -38,7 +38,9 @@ import {
 } from '../../lib/analytics.ts'
 import { errorMessage } from '../../lib/errors.ts'
 import {
+  priorityDescriptions,
   priorityLabels,
+  statusDescriptions,
   statusLabels,
   ticketCategoryLabels,
 } from '../../lib/format.ts'
@@ -104,6 +106,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
     label: statusLabels[status],
     value: data.tickets_by_status[status] ?? 0,
     color: tones[statusTone[status]].solid,
+    description: statusDescriptions[status],
   }))
 
   const priorityBars = TICKET_PRIORITIES.map((priority) => ({
@@ -111,6 +114,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
     label: priorityLabels[priority],
     value: data.tickets_by_priority[priority] ?? 0,
     color: tones[priorityTone[priority]].solid,
+    description: priorityDescriptions[priority],
   }))
 
   const categoryBars = TICKET_CATEGORIES.map((category) => ({
@@ -174,7 +178,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
       />
 
       {/* Headline metrics ------------------------------------------------- */}
-      <SimpleGrid columns={{ base: 2, lg: 5 }} gap='3' mb='6'>
+      <SimpleGrid columns={{ base: 2, md: 3, xl: 5 }} gap='3' mb='6'>
         <MetricCard
           delay={0}
           label='Total tickets'
@@ -297,7 +301,7 @@ export function AdminDashboard({ variant = 'admin' }: { variant?: 'admin' | 'own
       </SimpleGrid>
 
       {/* Composition ------------------------------------------------------ */}
-      <SimpleGrid columns={{ base: 1, lg: 3 }} gap='4' mb='4' alignItems='start'>
+      <SimpleGrid columns={{ base: 1, md: 2, '2xl': 3 }} gap='4' mb='4' alignItems='start'>
         <ChartCard
           delay={0}
           title='Status composition'

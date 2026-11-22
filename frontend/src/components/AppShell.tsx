@@ -66,7 +66,7 @@ export function AppShell({ me }: { me: User }) {
       <Flex direction='column' flex='1' minW='0' ml={{ base: '0', lg: '64' }}>
         <TopBar onOpenNav={() => setNavOpen(true)} role={me.role} />
         <Box as='main' flex='1' minW='0'>
-          <Container size='content' py={{ base: '6', md: '8' }}>
+          <Container size='workspace' py={{ base: '6', md: '8' }}>
             {/* Keyed on the pathname so each workspace view enters with a short
                 fade-and-rise. Navigation stays immediate: the route renders on
                 the same tick and the animation only decorates the arrival. */}

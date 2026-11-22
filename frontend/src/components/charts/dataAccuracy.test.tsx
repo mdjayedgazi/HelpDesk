@@ -1,10 +1,11 @@
 import { ChakraProvider } from '@chakra-ui/react'
-import { render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vite-plus/test'
 import { MemoryRouter } from 'react-router-dom'
 
 import { BarChart } from './BarChart.tsx'
+import { DonutChart } from './DonutChart.tsx'
 import { Sparkline } from './Sparkline.tsx'
 import { MetricCard } from '../MetricCard.tsx'
 import { palette } from '../../theme/palette.ts'
@@ -149,6 +150,32 @@ describe('BarChart exact proportions', () => {
     expect(screen.getAllByText('80%').length).toBeGreaterThanOrEqual(1)
     // The accessible table carries the same numbers.
     expect(screen.getAllByRole('table', { hidden: true }).length).toBe(1)
+  })
+})
+
+describe('DonutChart tooltip', () => {
+  const slices = [
+    { key: 'OPEN', label: 'Open', value: 30, color: palette.chart[0] },
+    { key: 'RESOLVED', label: 'Resolved', value: 70, color: palette.chart[1] },
+  ]
+
+  it('exposes the real count and share for the focused slice', async () => {
+    render(<DonutChart slices={slices} centerLabel='tickets' ariaLabel='Tickets by status' />)
+
+    const openRow = screen.getAllByText('Open')[0]!
+    fireEvent.pointerEnter(openRow)
+
+    // 30 of 100. The centre label, the row and the tooltip all agree.
+    await waitFor(() => {
+      expect(screen.getAllByText('30% of 100 tickets').length).toBeGreaterThan(0)
+    })
+  })
+
+  it('still ships the accessible data table with exact values', () => {
+    render(<DonutChart slices={slices} centerLabel='tickets' ariaLabel='Tickets by status' />)
+    const table = screen.getByRole('table', { hidden: true })
+    expect(table.textContent).toContain('Open')
+    expect(table.textContent).toContain('30%')
   })
 })
 

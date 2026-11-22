@@ -11,7 +11,7 @@ import { MetricCard } from '../../components/MetricCard.tsx'
 import { SectionHeader, Surface } from '../../components/Surface.tsx'
 import { TicketListPanel } from '../../components/TicketListPanel.tsx'
 import { useTickets } from '../../hooks/useTickets.ts'
-import { statusLabels } from '../../lib/format.ts'
+import { statusDescriptions, statusLabels } from '../../lib/format.ts'
 import { TICKET_STATUSES, type User } from '../../lib/types.ts'
 import { palette } from '../../theme/palette.ts'
 import { statusTone, tones } from '../../theme/statusTone.ts'
@@ -52,6 +52,7 @@ export function CustomerDashboard({ me }: { me: User }) {
     label: statusLabels[status],
     value: counts.byStatus[status] ?? 0,
     color: tones[statusTone[status]].solid,
+    description: statusDescriptions[status],
   })).filter((slice) => slice.value > 0)
 
   const recent = items.slice(0, 6)
@@ -210,6 +211,7 @@ export function CustomerDashboard({ me }: { me: User }) {
                   label: statusLabels[status],
                   value: counts.byStatus[status] ?? 0,
                   color: tones[statusTone[status]].solid,
+                  description: statusDescriptions[status],
                 }))}
                 ariaLabel='Your tickets by status'
               />

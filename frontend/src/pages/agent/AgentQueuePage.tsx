@@ -72,7 +72,7 @@ export function AgentQueuePage() {
             if (details.value) setTab(details.value as QueueTab)
           }}
         >
-          <Tabs.List>
+          <Tabs.List className='hd-tabs-scroll'>
             <Tabs.Trigger value='unassigned' fontSize='sm'>
               Unassigned
               {unassigned.length > 0 ? ` (${unassigned.length})` : ''}

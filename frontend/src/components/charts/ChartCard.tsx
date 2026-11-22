@@ -159,10 +159,11 @@ export function ChartDataTable({
   rows: Array<Array<string | number>>
 }) {
   return (
+    // The clipping wrapper — not the <table> itself — is what hides the table.
+    // A table with `width: 1px` still expands to its min-content width, so the
+    // old version could push the document wider than the viewport at narrow
+    // column widths. Positioning and clipping an outer box contains it fully.
     <Box
-      as='table'
-      // Visible to assistive technology and to users who print the page, but
-      // not part of the visual layout (the chart is the visual encoding).
       position='absolute'
       width='1px'
       height='1px'
@@ -173,31 +174,33 @@ export function ChartDataTable({
       whiteSpace='nowrap'
       borderWidth='0'
     >
-      <caption>{caption}</caption>
-      <thead>
-        <tr>
-          {columns.map((column) => (
-            <th key={column} scope='col'>
-              {column}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={index}>
-            {row.map((cell, cellIndex) =>
-              cellIndex === 0 ? (
-                <th key={cellIndex} scope='row'>
-                  {cell}
-                </th>
-              ) : (
-                <td key={cellIndex}>{cell}</td>
-              ),
-            )}
+      <Box as='table'>
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column} scope='col'>
+                {column}
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index}>
+              {row.map((cell, cellIndex) =>
+                cellIndex === 0 ? (
+                  <th key={cellIndex} scope='row'>
+                    {cell}
+                  </th>
+                ) : (
+                  <td key={cellIndex}>{cell}</td>
+                ),
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </Box>
     </Box>
   )
 }
