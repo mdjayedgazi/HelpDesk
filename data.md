@@ -167,7 +167,9 @@ plus TicketsPage pagination integration cases.
 ## Part J — Delivery status
 
 - Branch: `fix/ticket-pagination-continuity`
-- PR: targeting `main` (URL recorded after creation)
+- Commit: `613dd61`
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/29 (targets `main`)
+- CI: **all checks pass**, including the PostgreSQL integration job
 - Deployment: **none**. Touches **both** `helpdesk-api` and `helpdesk-web`;
   they must deploy together (frontend expects the envelope). No migration. No
   Neon data was modified.

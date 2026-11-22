@@ -240,7 +240,13 @@ Partial-final-page case (305 tickets): page 1 of 16 shown; Previous from page 1
 
 ## 11. Actual CI results
 
-To be filled from the PR once checks complete. Locally, on the final tree:
+All PR checks pass, including the dedicated **PostgreSQL integration** job
+(which runs the real-database pagination regression). Reported checks:
+Backend lint + SQLite tests, Frontend typecheck/lint/tests/build, Alembic
+migrations, PostgreSQL integration, Docker image builds, Production dependency
+audit, Helm validation, Static security + secret scan, CodeQL, Trivy.
+
+Locally, on the final tree:
 
 - Backend: `ruff check` pass, `ruff format --check` pass, `pyrefly check` 0
   errors, `pytest` **544 passed, 65 skipped** (607 including the opt-in PG
@@ -255,13 +261,15 @@ To be filled from the PR once checks complete. Locally, on the final tree:
 - Branch: `fix/ticket-pagination-continuity` (from `main` @ `7a3f9f4`; the prior
   width/motion work was already merged, so the tree started clean apart from the
   untracked verification harness).
-- Commits: implementation commit(s) on the branch (see PR).
+- Implementation commit: `613dd61` — `fix(tickets): make pagination
+  deterministic and add circular navigation`.
 
 ---
 
 ## 13. PR URL
 
-See the PR created for this branch (targets `main`).
+**https://github.com/mdjayedgazi/HelpDesk/pull/29** (targets `main`, all checks
+passing).
 
 ---
 
