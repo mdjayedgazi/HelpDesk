@@ -105,6 +105,19 @@ async def _reconcile_owner_for(user: User, *, session, clerk_user=None) -> User:
         if configured is None:
             return user
 
+        # Fast path: a user who already holds OWNER can never be *changed* by
+        # reconciliation. ``evaluate`` returns ALREADY_OWNER (or NOT_VERIFIED)
+        # for the current Owner, both ``changed == False``, so the atomic apply
+        # path — which acquires a transaction advisory lock and calls Clerk to
+        # verify the email — cannot alter anything for them. Skipping it removes
+        # one Neon round-trip and one Clerk API call from *every* authenticated
+        # request the Owner makes (the common case for the person browsing the
+        # dashboard/tickets). Recognition of a *new* configured owner is
+        # unaffected: that person is not yet OWNER, so they take the full path and
+        # are promoted exactly as before.
+        if user.role == Role.OWNER:
+            return user
+
         decision = await reconcile_owner(
             session,
             clerk=clerk_client,

@@ -8,7 +8,7 @@ import { TicketFilterBar } from '../components/TicketFilterBar.tsx'
 import { TicketListPanel } from '../components/TicketListPanel.tsx'
 import { useMe } from '../hooks/useMe.ts'
 import { useAgents } from '../hooks/useAdmin.ts'
-import { useTickets } from '../hooks/useTickets.ts'
+import { usePrefetchTicketPage, useTickets } from '../hooks/useTickets.ts'
 import { useDebounced } from '../hooks/useDebounced.ts'
 import type { TicketListParams, TicketPriority, TicketStatus } from '../lib/types.ts'
 import { TICKET_PRIORITIES, TICKET_STATUSES } from '../lib/types.ts'
@@ -118,6 +118,7 @@ export function TicketsPage() {
 
   const tickets = useTickets(params)
   const agents = useAgents(admin)
+  const prefetchPage = usePrefetchTicketPage(params)
 
   const pageData = tickets.data
   const items = pageData?.items ?? []
@@ -135,6 +136,15 @@ export function TicketsPage() {
       if (page > lastValid) setPage(lastValid)
     }
   }, [pageData, page])
+
+  // Warm the next page once the current page has loaded, so a forward
+  // Next click is served from cache. One page ahead only; skipped when the
+  // page is already cached (see usePrefetchTicketPage). Purely internal — the
+  // controls and layout are unchanged.
+  useEffect(() => {
+    if (!pageData) return
+    if (pageData.has_next) prefetchPage(page + 1)
+  }, [pageData, page, prefetchPage])
 
   const hasFilters = Boolean(debouncedSearch || status || priority || assignee)
 
