@@ -1,3 +1,219 @@
+# HelpDesk — UI Width, Motion & Premium Interaction Review
+
+**Date:** 2026-11-22
+**Branch:** `feat/helpdesk-ui-width-motion-polish`
+**Base:** `main` @ `5a379d9` (merge of PR #27)
+**Companion report:** [`docs/ui-width-motion-polish-report.md`](docs/ui-width-motion-polish-report.md)
+**Verdict:** Frontend-only refinement complete; all checks green; **awaiting review
+and merge — not deployed**.
+
+> **Document preservation.** The Live Neon Database Population review and the
+> owner-identity, demo-dataset and PR reviews beneath it follow verbatim. This
+> review is prepended.
+
+---
+
+## Part A — Repository and remote state
+
+| Item | Finding |
+| --- | --- |
+| `main` HEAD at start | `5a379d9` — merge of PR #27 (populate Neon demo data) |
+| `origin/main` | matches local `main` @ `5a379d9` |
+| Feature branch | `feat/helpdesk-ui-width-motion-polish` (existing local branch was at `main`; reused) |
+| Open PRs at start | none affecting this work |
+| Uncommitted at start | `data.md` modified (emptied); harness files untracked |
+| `data.md` | restored from `HEAD` before prepending this review |
+
+The branch was confirmed to share its merge base with `main` at `5a379d9`
+(`git merge-base`), i.e. it was a clean starting point, not an older divergent
+branch. No other branch was overwritten.
+
+---
+
+## Part B — Versions and stack (verified from `package.json` + lockfile)
+
+| Area | Finding |
+| --- | --- |
+| React | `19.3.1` |
+| TypeScript | `~6.0.2` |
+| Chakra UI | `@chakra-ui/react` `3.37.0` (v3 API: `SimpleGrid columns={{…}}`, `Tabs.Root`, `Dialog.Root`) |
+| Router | `react-router-dom` `7.18.4` |
+| Charts | **hand-written SVG** (no chart library) — `DonutChart`, `BarChart`, `TrendChart`, `Sparkline` |
+| Animation libs | **none installed** — no `motion`, no `framer-motion` (checked `package.json` and `package-lock.json`) |
+| Motion approach | CSS custom-property transitions + `requestAnimationFrame` + `IntersectionObserver` (`Reveal`) |
+| Testing | `vite-plus` / Vitest (`vp test`), Testing Library, jsdom |
+| Build | `tsc && vp build`; production build validates `VITE_API_URL` + Clerk key |
+| Breakpoints | Chakra defaults: sm 30rem, md 48rem, lg 64rem, xl 80rem, 2xl 96rem |
+
+**Important finding:** the brief references the `motion` package APIs. The
+project does not use Motion at all and has a deliberate, documented CSS/rAF
+motion system. Adding Motion would have been an unnecessary dependency for a
+handful of interactions, so the existing system was extended instead. Nothing
+here uses outdated `framer-motion` patterns because nothing uses either package.
+
+---
+
+## Part C — The width problem: cause and fix
+
+### C.1 Exact cause
+
+The authenticated shell rendered every page through
+`<Container size='content'>`, and `widths.content` was **`1200px`**. On a 1920 px
+display the fixed 256 px sidebar leaves a **1664 px** main column, but the
+container clamped it to 1200 px and centred it — **232 px of dead space on each
+side**. It was not a `50%` rule and not a grid bug; it was one reused cap.
+
+Compounding issues found during measurement:
+
+1. The dashboard composition row was a fixed `lg:3` grid, so at 1024 px three
+   chart cards were squeezed to ~177 px of inner width — the "half width" look.
+2. The five KPI cards used `lg:5`, giving ~128 px cards at 1024 px.
+3. The accessible chart `<table>` (visually hidden) still expanded to its
+   intrinsic width and could push the document wider than the viewport.
+4. The mobile filter tab strip overflowed horizontally at 390 px.
+5. `AccountRequestDetailPage` used Chakra's `container.lg` (~1024 px), not the
+   app token, so it floated narrow on wide screens.
+
+### C.2 Measured before → after
+
+| Viewport | Main column | Container before | Container after | Dead space/side before → after |
+| --- | --- | --- | --- | --- |
+| 1366 | 1110 | 1110 | 1110 | 0 → 0 |
+| 1440 | 1184 | 1184 | 1184 | 0 → 0 |
+| 1600 | 1344 | 1200 | 1344 | 72 → 0 |
+| 1920 | 1664 | 1200 | 1664 | **232 → 0** |
+
+### C.3 Changes
+
+- `theme/layout.ts`: added `widths.workspace = '1680px'` (cap only bites on
+  ultra-wide displays), `widths.detail = '1120px'`, and a `workspaceGutter`
+  scale (tighter on phones, roomier at 2xl). Marketing `content/wide/reading`
+  measures are unchanged.
+- `components/Container.tsx`: new `workspace` size using that gutter.
+- `components/AppShell.tsx`: `size='content'` → `size='workspace'`.
+- `pages/admin/AdminDashboard.tsx`: KPI grid `base:2 → md:3 → xl:5`; composition
+  grid `base:1 → md:2 → 2xl:3`.
+- `pages/staff/AccountRequestDetailPage.tsx`: `maxW='container.lg'` →
+  `widths.detail` + `w='full'`.
+- `components/charts/ChartCard.tsx`: clip the outer wrapper, keep the `<table>`
+  inside it (stops intrinsic-width overflow).
+- `pages/NotificationsPage.tsx`, `pages/agent/AgentQueuePage.tsx`: tab strips get
+  `hd-tabs-scroll` + `minW='0'` (contained horizontal scroll, no page overflow).
+
+### C.4 Result
+
+Every route in the sweep now reports **0 horizontal overflow** at 390, 430, 768,
+1024, 1280, 1366, 1440, 1600 and 1920 px, and the main column is fully used on
+wide displays.
+
+---
+
+## Part D — Data-viz interaction improvements
+
+The charts were not replaced. Their interaction layer was enriched, using only
+the real analytics payload.
+
+- **Status donut:** hover **or keyboard focus** on a segment/legend row opens a
+  rich panel showing the status name, colour, exact ticket count, share of all
+  tickets and a one-line meaning. Verified live: "In progress · 27 tickets · 9%
+  of 300 tickets · An agent is actively working on the request."
+- **Priority bars:** same rich panel with exact count, share and a meaning line
+  ("Urgent · 19 tickets · 6% of 300 tickets · Blocking the requester; handle
+  first."). Actionable rows are keyboard reachable; category rows are not put in
+  the tab order because their numbers are already printed and mirrored in the
+  accessible table.
+- **Trend chart:** existing per-day readout (created vs resolved) retained;
+  surfacing aligned to the new tooltip styling.
+- **Tooltip engine:** `lib/tooltipPosition.ts` (pure, unit-tested) flips and
+  clamps the panel inside its host; `chart/ChartTooltip.tsx` renders inside the
+  chart wrapper (no portal, no clipping) with `pointer-events:none` (no
+  flicker when moving toward it).
+- **Narrow-card fix:** the donut measures its own width and stacks the legend
+  under the ring below 424 px, fixing a real 0 px legend-label collapse at
+  1024 px.
+
+All percentages are computed from the same totals rendered elsewhere on the
+page, so the panel, legend, centre label and accessible table cannot disagree.
+
+---
+
+## Part E — Cursor and motion engineering
+
+No library was added; the existing `requestAnimationFrame` + CSS system was
+extended.
+
+- **`hooks/usePointerSpotlight.ts`** — a critically-damped spring (stiffness 170,
+  damping 26) integrated per-frame, writing CSS custom properties directly to
+  the node. Pointer movement causes **zero React renders**. The loop parks itself
+  when settled (measured **0 idle rAF/s**) and clears all values on unmount.
+- **`components/PointerHighlight.tsx`** — soft radial light painted **above** the
+  opaque card (a glow behind an opaque panel would be invisible). ~20% peak of a
+  low-alpha accent, faded to nothing at the edge. Applied only to interactive
+  metric cards; inert cards get nothing so the affordance is never false.
+- **`components/motion/TiltSurface.tsx`** — marketing-only 3D tilt upgraded from
+  a fixed CSS easing to the same spring integration (4° cap, fine-pointer and
+  ≥1024 px gates, reduced-motion guard all preserved).
+- All of the above bail out under `prefers-reduced-motion`, on coarse pointers
+  and below 1024 px. Verified in a reduced-motion browser context.
+
+Animation properties are `transform`/`opacity`/custom-property only — no
+width/height/top/left churn — so there is no layout thrash.
+
+---
+
+## Part F — Accessibility
+
+- Reduced motion disables the spotlight, the tilt and the new tooltip entrance;
+  global CSS already zeroes durations. Confirmed in-browser.
+- Tooltips are reachable by keyboard (focus), not hover-only. Confirmed.
+- Chart SVGs remain `aria-hidden`; the visually hidden tables carry the data.
+- Tooltips are `aria-hidden` because they duplicate data the screen reader
+  already has (avoids double announcements).
+- Touch: hover effects are gated behind `pointer: fine`; nothing critical
+  depends on hover.
+
+---
+
+## Part G — Quality checks (final tree)
+
+| Check | Result |
+| --- | --- |
+| `npm run typecheck` | pass |
+| `npm run lint` | pass |
+| `npm test` | **148 passed / 18 files** (baseline was 136 / 16) |
+| `npm run build` (CI-style env) | pass |
+| Browser overflow sweep (9 widths × 9 routes) | 0 overflow rows (was 3) |
+| Console errors on tested routes | none |
+| Tooltip containment (390/1024/1280/1366/1920) | fully inside host + viewport |
+
+New tests: `tooltipPosition.test.ts` (6), `usePointerSpotlight.test.tsx` (4),
+plus 2 donut cases in `dataAccuracy.test.tsx`. Existing tests were not weakened.
+
+---
+
+## Part H — Delivery status
+
+- Branch: `feat/helpdesk-ui-width-motion-polish`
+- PR: targeting `main` (URL in the PR; recorded in the report)
+- CI: repository workflow gates frontend on audit + typecheck + lint + tests +
+  production build; the PR is declared ready only when those pass.
+- **Deployment: none.** No merge, no production trigger. Railway's `helpdesk-web`
+  deploys on `main` via the established CI-gated path; this branch has not
+  entered it.
+- The harness files used for visual verification are **not committed**, so the
+  PR is frontend-production-only.
+
+### Post-deployment checklist (after a future merge)
+
+1. `/health/ready` → 200 (`database/redis ok`).
+2. `/dashboard` at ≥1600 px fills the main column (no ~230 px side gutters).
+3. Hovering an "Open" donut segment shows the real count and share.
+4. Hovering/focusing a priority bar shows the rich tooltip, unclipped.
+5. Card spotlight is subtle and clears on leave; absent under reduced motion.
+6. No horizontal scrollbar at 390 px.
+
+---
+
 # HelpDesk — Live Neon Database Population
 
 **Date:** 2026-11-21

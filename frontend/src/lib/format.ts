@@ -101,11 +101,31 @@ export const statusLabels: Record<TicketStatus, string> = {
   CLOSED: 'Closed',
 }
 
+/**
+ * One-line meaning for each status, used as supporting text in chart tooltips.
+ * It describes the workflow stage only — no SLA targets or invented thresholds.
+ */
+export const statusDescriptions: Record<TicketStatus, string> = {
+  OPEN: 'Newly raised and not yet picked up by an agent.',
+  IN_PROGRESS: 'An agent is actively working on the request.',
+  WAITING_ON_CUSTOMER: 'Blocked until the requester replies.',
+  RESOLVED: 'Outcome delivered; may still be reopened by a reply.',
+  CLOSED: 'Finished and archived.',
+}
+
 export const priorityLabels: Record<TicketPriority, string> = {
   LOW: 'Low',
   NORMAL: 'Normal',
   HIGH: 'High',
   URGENT: 'Urgent',
+}
+
+/** One-line meaning for each priority, used as supporting tooltip text. */
+export const priorityDescriptions: Record<TicketPriority, string> = {
+  LOW: 'Can wait; no immediate business impact.',
+  NORMAL: 'Standard handling queue.',
+  HIGH: 'Needs prompt attention from the team.',
+  URGENT: 'Blocking the requester; handle first.',
 }
 
 export const roleLabels: Record<Role, string> = {

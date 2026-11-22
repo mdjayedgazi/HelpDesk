@@ -46,6 +46,8 @@
   --hd-glass: rgba(250, 250, 250, 0.82);
   --hd-grid: rgba(17, 17, 17, 0.045);
   --hd-glow: rgba(17, 17, 17, 0.05);
+  /* Soft light used by the pointer-following card highlight. */
+  --hd-spot: rgba(74, 109, 184, 0.45);
 
   /* Shadows -------------------------------------------------------------- */
   --hd-shadow-sm: 0 1px 2px -1px rgba(17, 17, 17, 0.14), 0 1px 1px rgba(17, 17, 17, 0.05);
@@ -167,6 +169,7 @@ html.dark {
   --hd-glass: rgba(11, 11, 13, 0.74);
   --hd-grid: rgba(245, 245, 245, 0.05);
   --hd-glow: rgba(245, 245, 245, 0.05);
+  --hd-spot: rgba(147, 180, 255, 0.42);
 
   /* Shadows -------------------------------------------------------------- */
   --hd-shadow-sm: 0 1px 2px -1px rgba(0, 0, 0, 0.6), 0 1px 1px rgba(0, 0, 0, 0.4);
@@ -223,6 +226,23 @@ html.dark {
 html {
   background-color: var(--hd-page);
   color: var(--hd-text);
+}
+
+/*
+ * Horizontal tab strips. On phones a row of filters can be wider than the
+ * viewport; scrolling the strip sideways keeps every tab reachable without
+ * pushing the document wider than the screen. The scrollbar is hidden because
+ * the strip is short and the tabs themselves signal that it is scrollable.
+ */
+.hd-tabs-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.hd-tabs-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* Anchored sections sit below the sticky marketing header. */
@@ -312,6 +332,20 @@ html {
   }
 }
 
+/* Chart tooltip entrance. Short and shallow so it reads as "appeared", not as
+ * a panel sliding into view. The tooltip has no exit animation: removing it
+ * instantly avoids a floating ghost when the pointer leaves a segment. */
+@keyframes hd-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Workspace route transition. Short and shallow so navigation still feels
  * immediate: a 6px rise reads as arrival, not as a wait. */
 @keyframes hd-page-enter {
@@ -342,6 +376,11 @@ html {
 
 .hd-menu-in {
   animation: hd-menu-in var(--hd-dur-2) var(--hd-ease);
+}
+
+.hd-tooltip-in {
+  animation: hd-tooltip-in var(--hd-dur-2) var(--hd-ease-out);
+  transform-origin: center;
 }
 
 .hd-page-enter {
@@ -382,6 +421,7 @@ html {
   .hd-pulse,
   .hd-fade-up,
   .hd-menu-in,
+  .hd-tooltip-in,
   .hd-page-enter {
     animation: none !important;
   }

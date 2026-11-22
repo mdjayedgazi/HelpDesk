@@ -28,6 +28,7 @@ import {
 } from '../../lib/format.ts'
 import { isAdmin } from '../../lib/roles.ts'
 import type { AccountRequestEvent, EscalationStatus } from '../../lib/types.ts'
+import { widths } from '../../theme/layout.ts'
 import { palette } from '../../theme/palette.ts'
 
 const ALLOWED_TRANSITIONS: Record<EscalationStatus, EscalationStatus[]> = {
@@ -165,7 +166,7 @@ export function AccountRequestDetailPage() {
         actions={<EscalationStatusBadge status={request.status} />}
       />
 
-      <Stack gap='6' maxW='container.lg'>
+      <Stack gap='6' maxW={widths.detail} w='full'>
         <Surface p={{ base: '5', md: '6' }}>
           <Stack gap='5'>
             <Flex gap='2' wrap='wrap' align='center'>

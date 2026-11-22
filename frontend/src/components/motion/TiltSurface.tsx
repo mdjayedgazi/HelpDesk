@@ -5,6 +5,11 @@ import { prefersReducedMotion } from '../../theme/motion.ts'
 
 const MAX_TILT = 4
 
+/** Critically-damped spring used to smooth the tilt target. */
+const STIFFNESS = 180
+const DAMPING = 24
+const MAX_DT = 1 / 30
+
 /**
  * Very small pointer-responsive 3D tilt.
  *
@@ -16,9 +21,11 @@ const MAX_TILT = 4
  * - only attaches on fine pointers at >= 1024 px, so touch and mobile are
  *   unaffected;
  * - does nothing when reduced motion is requested;
- * - writes transforms straight to the node inside rAF, so pointer movement
- *   never causes a React re-render;
- * - resets on pointer leave/blur and removes every listener on unmount.
+ * - integrates a damped spring per axis inside rAF and writes the transform
+ *   straight to the node, so pointer movement never causes a React re-render
+ *   and the surface follows the cursor with a short, natural settle instead of
+ *   a fixed CSS easing curve;
+ * - resets to rest on pointer leave/blur and removes every listener on unmount.
  */
 export function TiltSurface({
   children,
@@ -35,12 +42,57 @@ export function TiltSurface({
     if (window.matchMedia('(max-width: 1023px)').matches) return
 
     let frame = 0
-    let pending: { rotateX: number; rotateY: number } | null = null
+    let last = 0
 
-    const apply = () => {
+    // Target and current rotation in degrees.
+    let targetX = 0
+    let targetY = 0
+    let rx = 0
+    let ry = 0
+    let vx = 0
+    let vy = 0
+    let active = false
+
+    const write = () => {
+      node.style.transform =
+        rx === 0 && ry === 0
+          ? ''
+          : `perspective(1400px) rotateX(${rx.toFixed(3)}deg) rotateY(${ry.toFixed(3)}deg)`
+    }
+
+    const step = (now: number) => {
       frame = 0
-      if (!pending) return
-      node.style.transform = `perspective(1400px) rotateX(${pending.rotateX}deg) rotateY(${pending.rotateY}deg)`
+      const dt = last === 0 ? 1 / 60 : Math.min(MAX_DT, (now - last) / 1000)
+      last = now
+
+      vx += (STIFFNESS * (targetX - rx) - DAMPING * vx) * dt
+      vy += (STIFFNESS * (targetY - ry) - DAMPING * vy) * dt
+      rx += vx * dt
+      ry += vy * dt
+      write()
+
+      const settled =
+        !active &&
+        Math.abs(targetX - rx) < 0.01 &&
+        Math.abs(targetY - ry) < 0.01 &&
+        Math.abs(vx) < 0.01 &&
+        Math.abs(vy) < 0.01
+      if (settled) {
+        rx = 0
+        ry = 0
+        vx = 0
+        vy = 0
+        write()
+        return
+      }
+      frame = window.requestAnimationFrame(step)
+    }
+
+    const ensureFrame = () => {
+      if (!frame) {
+        last = 0
+        frame = window.requestAnimationFrame(step)
+      }
     }
 
     const onMove = (event: PointerEvent) => {
@@ -48,20 +100,17 @@ export function TiltSurface({
       if (rect.width === 0 || rect.height === 0) return
       const px = (event.clientX - rect.left) / rect.width
       const py = (event.clientY - rect.top) / rect.height
-      pending = {
-        rotateX: (0.5 - py) * MAX_TILT * 2,
-        rotateY: (px - 0.5) * MAX_TILT * 2,
-      }
-      if (!frame) frame = window.requestAnimationFrame(apply)
+      targetX = (0.5 - py) * MAX_TILT * 2
+      targetY = (px - 0.5) * MAX_TILT * 2
+      active = true
+      ensureFrame()
     }
 
     const reset = () => {
-      pending = null
-      if (frame) {
-        window.cancelAnimationFrame(frame)
-        frame = 0
-      }
-      node.style.transform = ''
+      active = false
+      targetX = 0
+      targetY = 0
+      ensureFrame()
     }
 
     node.addEventListener('pointermove', onMove)
@@ -80,7 +129,10 @@ export function TiltSurface({
   return (
     <Box
       ref={ref}
-      style={{ transformStyle: 'preserve-3d', transition: 'transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1)' }}
+      style={{
+        transformStyle: 'preserve-3d',
+        willChange: 'transform',
+      }}
       {...rest}
     >
       {children}
