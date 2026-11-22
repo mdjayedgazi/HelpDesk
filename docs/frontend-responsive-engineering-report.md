@@ -181,6 +181,10 @@ Public/auth: `/`, `/sign-in`, `/sign-up`. Customer: `/dashboard`, `/tickets`,
 - `npm run build` (CI-style env) — pass
 - `git diff --check` — clean
 
+**PR:** https://github.com/mdjayedgazi/HelpDesk/pull/33 (targets `main`).
+**All CI checks pass**, including `Frontend typecheck, lint, tests, build`
+(231 tests / 24 files) and the backend/PostgreSQL/Docker/security jobs.
+
 ---
 
 ## 7. Audit checklist (findings)

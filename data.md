@@ -105,7 +105,10 @@ scrollable at 320×320; touch targets ≥32 px (rail 40, Back 36); desktop uncha
 - Files: `AppShell.tsx`, `Sidebar.tsx`, `MessagesPage.tsx` (modified);
   `Sidebar.test.tsx`, `docs/frontend-responsive-engineering-report.md`,
   `docs/responsive-assets/*.png` (added).
-- No migration, no env change, no deploy. PR against `main` (see PR).
+- No migration, no env change, no deploy.
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/33 (targets `main`);
+  **all CI checks pass**, including Frontend typecheck/lint/tests/build (231
+  tests / 24 files).
 
 ### Remaining limitations
 Physical-device/Safari testing not performed (Chromium headless matrix used).
