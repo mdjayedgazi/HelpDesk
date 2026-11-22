@@ -332,7 +332,7 @@ async def test_new_workflow_enums_roundtrip_on_postgres(client, factory, make_us
         await client.post(
             "/api/v1/staff-messages/conversations",
             headers={"X-Test-User": agent.username},
-            json={"subject": "Roundtrip"},
+            json={"recipient_user_id": str(owner.id), "subject": "Roundtrip"},
         )
     ).json()["id"]
     sent = await client.post(
@@ -368,7 +368,11 @@ async def test_new_workflow_enums_roundtrip_on_postgres(client, factory, make_us
     assert stored_ticket.contact_phone == "+1 555 010 4242"
     assert stored_request.category.value == "IDENTITY_LINKING"
     assert stored_request.status.value == "PENDING"
-    assert stored_conversation.owner_user_id == owner.id
+    # Participants are stored in canonical order; the Owner is one of them.
+    assert owner.id in (
+        stored_conversation.participant_a_id,
+        stored_conversation.participant_b_id,
+    )
     assert len(messages) == 1 and messages[0].body == "Native roundtrip."
     assert len(notifications) == 1
     assert notifications[0].recipient_user_id == owner.id
