@@ -194,9 +194,12 @@ plus 2 donut cases in `dataAccuracy.test.tsx`. Existing tests were not weakened.
 ## Part H — Delivery status
 
 - Branch: `feat/helpdesk-ui-width-motion-polish`
-- PR: targeting `main` (URL in the PR; recorded in the report)
-- CI: repository workflow gates frontend on audit + typecheck + lint + tests +
-  production build; the PR is declared ready only when those pass.
+- Commit: `e6863fb`
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/28 (targets `main`)
+- CI: **all checks pass** — Backend lint + SQLite tests, Frontend
+  typecheck/lint/tests/build, Alembic migrations, PostgreSQL integration, Docker
+  image builds, Production dependency audit, Helm validation, Static security +
+  secret scan, CodeQL, Trivy.
 - **Deployment: none.** No merge, no production trigger. Railway's `helpdesk-web`
   deploys on `main` via the established CI-gated path; this branch has not
   entered it.

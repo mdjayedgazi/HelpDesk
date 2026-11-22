@@ -311,13 +311,14 @@ added alongside them.
 
 ## 10. GitHub delivery
 
-- Branch: `feat/helpdesk-ui-width-motion-polish` (cut from `main` @ `5a379d9`).
-- Commit: see the commit on the branch (`feat(frontend): …`).
-- PR: targeting `main` (URL recorded after creation).
-- CI: the repo's `.github/workflows/ci.yml` runs backend and frontend jobs on
-  pull requests. Frontend gates: dependency audit, typecheck, lint, unit tests,
-  production build. Status is reported on the PR; the PR is only declared ready
-  when the required checks pass.
+- Branch: `feat/helpdesk-ui-width-motion-polish` (base `main` @ `5a379d9`).
+- Commit: `e6863fb` — `feat(frontend): widen workspace and add rich chart motion
+  interactions`.
+- PR: **https://github.com/mdjayedgazi/HelpDesk/pull/28** (targets `main`).
+- CI (all pass): Backend lint + SQLite tests, Frontend typecheck/lint/tests/build,
+  Alembic migrations, PostgreSQL integration, Docker image builds, Production
+  dependency audit, Helm validation, Static security + secret scan, CodeQL,
+  Trivy. CodeRabbit skipped review (manual review required for this OSS repo).
 
 Note: the local ignored files `frontend/harness.html`,
 `frontend/src/harness-main.tsx`, `frontend/src/harness-fixtures.ts` and
