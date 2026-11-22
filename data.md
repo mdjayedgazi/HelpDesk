@@ -127,7 +127,10 @@ run.
 ## Part I — Delivery
 
 - Branch: `feat/universal-staff-mentions`
-- PR: targeting `main` (URL recorded after creation)
+- Commits: `38fddca`, `37760e7`
+- PR: https://github.com/mdjayedgazi/HelpDesk/pull/30 (targets `main`)
+- CI: **all checks pass**, including the Alembic migration and PostgreSQL
+  integration jobs
 - Deployment: **none**. Touches both `helpdesk-api` and `helpdesk-web` and
   requires migration `0012_staff_mentions`, which Railway runs through its
   approved pre-deploy migration step after merge. No Neon or Railway change was

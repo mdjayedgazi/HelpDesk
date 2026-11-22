@@ -203,19 +203,26 @@ No migration was run against Neon.
 - Branch: `feat/universal-staff-mentions` (from `main` @ `819a765`; the prior
   width/motion and pagination work were already merged, so the tree started clean
   apart from the untracked verification harness).
-- Commit: `feat(messaging): add universal staff conversations and mentions`
-  (see the PR for the exact hash).
+- Commits: `38fddca` (implementation) and `37760e7` (PostgreSQL-suite updates
+  for the participant model).
 
 ## 15. Pull request URL
 
-See the PR created for this branch (targets `main`).
+**https://github.com/mdjayedgazi/HelpDesk/pull/30** (targets `main`, all checks
+passing).
 
 ## 16. CI status
 
-The repository workflow runs backend (ruff, ruff format, pyrefly, pytest) and
-frontend (typecheck, lint, tests, build) plus the PostgreSQL integration,
-migration, Docker, dependency-audit, Helm, security and CodeQL jobs. Status is
-reported on the PR; results are recorded in `data.md`.
+All PR checks pass: Backend lint + SQLite tests, Frontend typecheck/lint/tests/
+build, **Alembic migrations**, **PostgreSQL integration**, Docker image builds,
+Production dependency audit, Helm validation, Static security + secret scan,
+CodeQL, Trivy.
+
+The PostgreSQL-opt-in suites (skipped locally without a test database) initially
+failed in CI because two files still used the old conversation shape; both were
+updated (`test_support_workflows_postgres.py`, `test_demo_seed_postgres.py`) and
+verified against disposable PostgreSQL 18 in the exact CI order (E2E first, then
+the PG suites, then the demo-seed suite).
 
 ## 17. Deployment status
 
