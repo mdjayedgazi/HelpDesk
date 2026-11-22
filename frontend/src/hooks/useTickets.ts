@@ -12,6 +12,7 @@ import type {
   TicketCreateInput,
   TicketHistoryEntry,
   TicketListParams,
+  TicketPage,
   TicketUpdateInput,
 } from '../lib/types.ts'
 import { useApi } from '../lib/useApi.ts'
@@ -20,7 +21,7 @@ export function useTickets(params?: TicketListParams, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: queryKeys.tickets.list(params),
-    queryFn: () => api.request<Ticket[]>(endpoints.tickets(), { query: params }),
+    queryFn: () => api.request<TicketPage>(endpoints.tickets(), { query: params }),
     placeholderData: keepPreviousData,
     enabled,
   })
@@ -30,7 +31,7 @@ export function useAssignedTickets(params?: TicketListParams, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: queryKeys.tickets.assigned(params),
-    queryFn: () => api.request<Ticket[]>(endpoints.assignedTickets(), { query: params }),
+    queryFn: () => api.request<TicketPage>(endpoints.assignedTickets(), { query: params }),
     placeholderData: keepPreviousData,
     enabled,
   })

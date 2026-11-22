@@ -326,10 +326,15 @@ async def test_ticket_list_pagination_and_status_filter(client, make_user, make_
     page = await client.get(
         "/api/v1/tickets",
         headers={"X-Test-User": customer.username},
-        params={"limit": 1, "offset": 1},
+        params={"page": 2, "page_size": 1},
     )
     assert page.status_code == 200
-    assert len(page.json()) == 1
+    body = page.json()
+    assert len(body["items"]) == 1
+    assert body["total"] == 3
+    assert body["page"] == 2
+    assert body["page_size"] == 1
+    assert body["total_pages"] == 3
 
     filtered = await client.get(
         "/api/v1/tickets",
@@ -337,8 +342,10 @@ async def test_ticket_list_pagination_and_status_filter(client, make_user, make_
         params={"status": "OPEN"},
     )
     assert filtered.status_code == 200
-    assert {t["status"] for t in filtered.json()} == {"OPEN"}
-    assert len(filtered.json()) == 2
+    filtered_body = filtered.json()
+    assert {t["status"] for t in filtered_body["items"]} == {"OPEN"}
+    assert len(filtered_body["items"]) == 2
+    assert filtered_body["total"] == 2
 
 
 # --------------------------------------------------------------------------- #

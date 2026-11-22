@@ -27,11 +27,11 @@ import { priorityTone, statusTone, tones } from '../../theme/statusTone.ts'
  * permission to see.
  */
 export function AgentDashboard({ me }: { me: User }) {
-  const assigned = useAssignedTickets({ limit: 100 })
-  const queue = useTickets({ limit: 100 })
+  const assigned = useAssignedTickets({ page: 1, page_size: 100 })
+  const queue = useTickets({ page: 1, page_size: 100 })
 
-  const assignedItems = useMemo(() => assigned.data ?? [], [assigned.data])
-  const queueItems = useMemo(() => queue.data ?? [], [queue.data])
+  const assignedItems = useMemo(() => assigned.data?.items ?? [], [assigned.data])
+  const queueItems = useMemo(() => queue.data?.items ?? [], [queue.data])
 
   const stats = useMemo(() => {
     const active = assignedItems.filter(

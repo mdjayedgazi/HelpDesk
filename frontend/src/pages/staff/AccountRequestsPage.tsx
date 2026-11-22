@@ -325,7 +325,7 @@ function CreateRequestDialog({
   const role = me.data?.role
   const admin = isAdmin(role)
 
-  const tickets = useTickets({ limit: 100 })
+  const tickets = useTickets({ page: 1, page_size: 100 })
   const users = useAdminUsers({ limit: 100 }, admin)
   const create = useCreateAccountRequest()
 
@@ -427,7 +427,7 @@ function CreateRequestDialog({
                   >
                     <SelectInput id='request-ticket' {...form.register('ticket_id')}>
                       <option value=''>No related ticket</option>
-                      {(tickets.data ?? []).map((ticket) => (
+                      {(tickets.data?.items ?? []).map((ticket) => (
                         <option key={ticket.id} value={ticket.id}>
                           {ticketRef(ticket.ticket_number)} — {ticket.title}
                         </option>

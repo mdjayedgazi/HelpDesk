@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -34,6 +33,7 @@ from app.schemas.tickets import (
     TicketAssign,
     TicketContactRead,
     TicketCreate,
+    TicketPage,
     TicketRead,
     TicketStaffUpdate,
 )
@@ -48,11 +48,13 @@ from app.services.notifications import (
 )
 from app.services.tickets import (
     CUSTOMER_EDITABLE_STATUSES,
+    count_tickets,
     load_visible_ticket,
     next_ticket_number,
+    paginate_tickets,
     priority_for_impact,
     record_history,
-    ticket_list_filter,
+    ticket_list_conditions,
     validate_status_transition,
 )
 
@@ -195,7 +197,7 @@ async def create_ticket(
     )
 
 
-@router.get("", response_model=list[TicketRead])
+@router.get("", response_model=TicketPage)
 async def list_tickets(
     session: session_Dependency,
     user: user_dependency,
@@ -203,56 +205,86 @@ async def list_tickets(
     priority: Annotated[TicketPriority | None, Query()] = None,
     category: Annotated[TicketCategory | None, Query()] = None,
     assignee_user_id: Annotated[uuid.UUID | None, Query()] = None,
+    unassigned: Annotated[bool, Query()] = False,
     created_by_user_id: Annotated[uuid.UUID | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=180)] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[Ticket]:
-    """List tickets the user is allowed to see.
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> TicketPage:
+    """List one page of tickets the user is allowed to see.
 
     Customers only ever get their own tickets. Agents get their assigned
     tickets plus the unassigned queue. Admins see everything.
+
+    ``page`` is one-based and ``page_size`` is the number of rows per page;
+    the offset is derived here as ``(page - 1) * page_size`` so the client can
+    never compute it inconsistently. ``unassigned=true`` is applied in SQL (not
+    after the fact) so pagination and ``total`` describe the same set. Ordering
+    is deterministic (see ``paginate_tickets``), which is required for stable
+    LIMIT/OFFSET paging.
     """
-    statement = select(Ticket)
+    conditions = ticket_list_conditions(
+        user,
+        status=status_filter,
+        priority=priority,
+        category=category,
+        assignee_user_id=assignee_user_id,
+        unassigned=unassigned,
+        created_by_user_id=created_by_user_id,
+        q=q,
+    )
 
-    scope = ticket_list_filter(user)
-    if scope is not None:
-        statement = statement.where(scope)
+    total = await count_tickets(session, conditions)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    offset = (page - 1) * page_size
 
-    if status_filter is not None:
-        statement = statement.where(Ticket.status == status_filter)
-    if priority is not None:
-        statement = statement.where(Ticket.priority == priority)
-    if category is not None:
-        statement = statement.where(Ticket.category == category)
-    if assignee_user_id is not None:
-        statement = statement.where(Ticket.assignee_user_id == assignee_user_id)
-    if created_by_user_id is not None:
-        statement = statement.where(Ticket.created_by_user_id == created_by_user_id)
-    if q:
-        like = f"%{q.lower()}%"
-        statement = statement.where(or_(Ticket.title.ilike(like)))
+    rows = await session.exec(
+        paginate_tickets(conditions, limit=page_size, offset=offset)
+    )
+    items = list(rows.all())
 
-    statement = statement.order_by(Ticket.created_at.desc()).limit(limit).offset(offset)
-    result = await session.exec(statement)
-    return list(result.all())
+    return TicketPage(
+        items=[TicketRead.model_validate(ticket) for ticket in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1,
+    )
 
 
-@router.get("/assigned", response_model=list[TicketRead])
+@router.get("/assigned", response_model=TicketPage)
 async def list_my_assigned_tickets(
     session: session_Dependency,
     agent: agent_dependency,
     status_filter: Annotated[TicketStatus | None, Query(alias="status")] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[Ticket]:
-    """The agent's own assigned ticket queue."""
-    statement = select(Ticket).where(Ticket.assignee_user_id == agent.id)
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> TicketPage:
+    """One page of the agent's own assigned ticket queue."""
+    conditions = [Ticket.assignee_user_id == agent.id]
     if status_filter is not None:
-        statement = statement.where(Ticket.status == status_filter)
-    statement = statement.order_by(Ticket.created_at.desc()).limit(limit).offset(offset)
-    result = await session.exec(statement)
-    return list(result.all())
+        conditions.append(Ticket.status == status_filter)
+
+    total = await count_tickets(session, conditions)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    offset = (page - 1) * page_size
+
+    rows = await session.exec(
+        paginate_tickets(conditions, limit=page_size, offset=offset)
+    )
+    items = list(rows.all())
+
+    return TicketPage(
+        items=[TicketRead.model_validate(ticket) for ticket in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1,
+    )
 
 
 @router.get("/{ticket_id}", response_model=TicketRead)

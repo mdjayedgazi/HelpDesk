@@ -22,22 +22,25 @@ export function AgentQueuePage() {
   const [claimingId, setClaimingId] = useState<string | null>(null)
 
   const debouncedSearch = useDebounced(search)
-  const params = {
-    limit: 100,
+  const baseParams = {
     q: debouncedSearch || undefined,
     status: status || undefined,
     priority: priority || undefined,
   }
 
-  const visibleTickets = useTickets(params)
-  const assignedTickets = useAssignedTickets(params)
+  // The unassigned queue is filtered in SQL (`unassigned=true`), so the count
+  // and the rows describe the same set instead of a filtered page.
+  const visibleTickets = useTickets({
+    ...baseParams,
+    page: 1,
+    page_size: 100,
+    unassigned: true,
+  })
+  const assignedTickets = useAssignedTickets({ ...baseParams, page: 1, page_size: 100 })
   const claimTicket = useClaimTicket()
 
-  const unassigned = useMemo(
-    () => (visibleTickets.data ?? []).filter((ticket) => !ticket.assignee_user_id),
-    [visibleTickets.data],
-  )
-  const assigned = assignedTickets.data ?? []
+  const unassigned = useMemo(() => visibleTickets.data?.items ?? [], [visibleTickets.data])
+  const assigned = assignedTickets.data?.items ?? []
 
   const activeQuery = tab === 'unassigned' ? visibleTickets : assignedTickets
   const items = tab === 'unassigned' ? unassigned : assigned

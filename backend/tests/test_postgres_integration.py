@@ -500,3 +500,60 @@ async def test_new_signup_provisions_customer_on_real_postgres(
         assert stored is not None
         assert stored.role == Role.CUSTOMER
         assert stored.is_active is True
+
+
+async def test_pagination_is_gap_free_on_real_postgres(
+    client, factory, make_user, make_ticket
+):
+    """The reported bug on the database it actually happened on.
+
+    ``ORDER BY created_at`` alone is not stable on PostgreSQL when many rows
+    tie and some are newer: the planner may return tied rows in a different
+    physical order for each OFFSET, so page N and page N+1 can overlap while
+    other rows are never shown (empty/gapped intermediate pages). The unique
+    ``id`` tie-breaker makes the order total.
+
+    The dataset mixes a large tied block with a small newer block, and the walk
+    deliberately reads *past* the reported last page — exactly what the UI did
+    when it guessed ``hasNext`` from the page length. Without the tie-breaker
+    that walk returns duplicate rows and skips others; with it, every ticket is
+    returned exactly once.
+    """
+    from datetime import UTC, datetime
+
+    customer = await make_user()
+    created = [await make_ticket(customer) for _ in range(45)]
+
+    tied = datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC)
+    async with factory() as session:
+        rows = (await session.exec(select(Ticket))).all()
+        rows.sort(key=lambda row: row.ticket_number)
+        # Oldest 40 share a timestamp; the newest 5 are distinct.
+        for index, row in enumerate(rows):
+            if index < 40:
+                row.created_at = tied
+            else:
+                row.created_at = datetime(2026, 11, 2, 12, 0, index % 60, tzinfo=UTC)
+            session.add(row)
+        await session.commit()
+
+    expected = {str(ticket.id) for ticket in created}
+    seen: list[str] = []
+    page = 1
+    page_size = 10
+    # 40 tickets / 10 per page = 4 pages. Read 6 pages to reproduce the UI
+    # walking past the real end.
+    for _ in range(6):
+        response = await client.get(
+            "/api/v1/tickets",
+            headers={"X-Test-User": customer.username},
+            params={"page": page, "page_size": page_size},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 45
+        seen.extend(item["id"] for item in body["items"])
+        page += 1
+
+    assert len(seen) == len(set(seen)), "a ticket appeared on two pages"
+    assert set(seen) == expected, "a ticket was never returned"

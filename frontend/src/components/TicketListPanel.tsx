@@ -10,6 +10,20 @@ import { Surface } from './Surface.tsx'
 import { Pagination } from './Pagination.tsx'
 import { TicketTable, TicketTableSurface } from './TicketTable.tsx'
 
+/** Server pagination metadata for a paged ticket table. */
+export interface TicketPagination {
+  /** The page the user requested (may differ from data while loading). */
+  page: number
+  pageSize: number
+  /** Total matching records across all pages. */
+  total: number
+  /** Server-provided page count (>= 1). */
+  totalPages: number
+  /** True while a different page is being fetched. */
+  isFetching?: boolean
+  onPageChange: (page: number) => void
+}
+
 export function TicketListPanel({
   tickets,
   isLoading,
@@ -20,9 +34,7 @@ export function TicketListPanel({
   emptyTitle,
   emptyDescription,
   emptyAction,
-  page,
-  pageSize,
-  onPageChange,
+  pagination,
   showAssignee = false,
   showRequester = false,
   renderActions,
@@ -36,9 +48,8 @@ export function TicketListPanel({
   emptyTitle: string
   emptyDescription?: string
   emptyAction?: ReactNode
-  page?: number
-  pageSize?: number
-  onPageChange?: (page: number) => void
+  /** Omit for a static, unpaginated list (dashboard worklists). */
+  pagination?: TicketPagination
   showAssignee?: boolean
   showRequester?: boolean
   renderActions?: (ticket: Ticket) => ReactNode
@@ -74,8 +85,6 @@ export function TicketListPanel({
     )
   }
 
-  const hasNext = typeof pageSize === 'number' ? tickets.length === pageSize : false
-
   return (
     <Stack gap='4'>
       <TicketTableSurface>
@@ -87,13 +96,14 @@ export function TicketListPanel({
           renderActions={renderActions}
         />
       </TicketTableSurface>
-      {page && pageSize && onPageChange ? (
+      {pagination ? (
         <Pagination
-          page={page}
-          pageSize={pageSize}
-          itemCount={tickets.length}
-          hasNext={hasNext}
-          onPageChange={onPageChange}
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          totalPages={pagination.totalPages}
+          isLoading={pagination.isFetching}
+          onPageChange={pagination.onPageChange}
         />
       ) : null}
     </Stack>

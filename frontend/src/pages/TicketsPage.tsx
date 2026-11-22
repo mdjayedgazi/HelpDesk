@@ -17,6 +17,7 @@ import { palette } from '../theme/palette.ts'
 
 const PAGE_SIZE = 20
 
+
 function parseStatus(value: string | null): TicketStatus | '' {
   return value && TICKET_STATUSES.includes(value as TicketStatus) ? (value as TicketStatus) : ''
 }
@@ -93,15 +94,24 @@ export function TicketsPage() {
     setPage(1)
   }, [debouncedSearch, searchParams, setSearchParams])
 
+  // Any filter that changes the result set must return to page 1 so the user
+  // never lands on a page that the new filter no longer has.
+  useEffect(() => {
+    setPage(1)
+  }, [status, priority, assignee])
+
   const params: TicketListParams = useMemo(
     () => ({
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
+      page,
+      page_size: PAGE_SIZE,
       q: debouncedSearch || undefined,
       status: status || undefined,
       priority: priority || undefined,
-      // `assignee=none` is the "unassigned" deep link used by the dashboard.
-      ...(assignee === 'none' ? {} : { assignee_user_id: assignee || undefined }),
+      // `assignee=none` is the server-side "unassigned" filter; a specific
+      // assignee is a plain id filter. Both are applied in SQL before paging.
+      ...(assignee === 'none'
+        ? { unassigned: true }
+        : { assignee_user_id: assignee || undefined }),
     }),
     [page, debouncedSearch, status, priority, assignee],
   )
@@ -109,13 +119,22 @@ export function TicketsPage() {
   const tickets = useTickets(params)
   const agents = useAgents(admin)
 
-  // The backend has no "unassigned" filter, so the deep link filters the page
-  // client-side. The page size is fixed, so this is an honest view of the
-  // current page rather than a silent, incomplete global count.
-  const items = useMemo(() => {
-    const list = tickets.data ?? []
-    return assignee === 'none' ? list.filter((ticket) => !ticket.assignee_user_id) : list
-  }, [tickets.data, assignee])
+  const pageData = tickets.data
+  const items = pageData?.items ?? []
+
+  // Reconcile the requested page with the server's truth. If records were
+  // deleted (or a filter shrank the set) while the user was on a high page,
+  // the response comes back for the requested page but with a smaller
+  // `total_pages`. Snap back to the last valid page instead of showing an
+  // "empty page N" with data clearly missing. Import placed here so the effect
+  // only runs when a real page envelope arrives.
+  useEffect(() => {
+    if (!pageData) return
+    if (page) {
+      const lastValid = Math.max(1, pageData.total_pages)
+      if (page > lastValid) setPage(lastValid)
+    }
+  }, [pageData, page])
 
   const hasFilters = Boolean(debouncedSearch || status || priority || assignee)
 
@@ -214,15 +233,15 @@ export function TicketsPage() {
         >
           <Inbox size={14} color={palette.textMuted} aria-hidden />
           <Flex as='span' fontSize='xs' color={palette.textSecondary} align='center' gap='1'>
-            Showing unassigned tickets on this page. The API does not expose a
-            server-side unassigned filter, so the count reflects the current page.
+            Showing tickets with no assignee. The filter is applied across the
+            whole result set, so the page count and totals are exact.
           </Flex>
         </Flex>
       ) : null}
 
       <TicketListPanel
         tickets={items}
-        isLoading={tickets.isPending}
+        isLoading={tickets.isPending && !pageData}
         isError={tickets.isError}
         error={tickets.error}
         onRetry={() => void tickets.refetch()}
@@ -244,9 +263,14 @@ export function TicketsPage() {
             </Button>
           ) : null
         }
-        page={page}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
+        pagination={{
+          page,
+          pageSize: PAGE_SIZE,
+          total: pageData?.total ?? 0,
+          totalPages: pageData?.total_pages ?? 1,
+          isFetching: tickets.isFetching && Boolean(pageData),
+          onPageChange: setPage,
+        }}
         showAssignee={staff}
         showRequester={staff}
       />

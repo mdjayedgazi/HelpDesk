@@ -54,6 +54,18 @@ function ticket(overrides: Partial<Ticket>): Ticket {
   }
 }
 
+function ticketPage(items: Ticket[]) {
+  return {
+    items,
+    total: items.length,
+    page: 1,
+    page_size: 100,
+    total_pages: 1,
+    has_next: false,
+    has_previous: false,
+  }
+}
+
 function queryResult<T>(data: T) {
   return {
     isPending: false,
@@ -72,16 +84,20 @@ describe('AgentDashboard', () => {
 
   it('prioritises urgent active work and shows the queue context', () => {
     useAssignedTicketsMock.mockReturnValue(
-      queryResult([
-        ticket({ ticket_number: 1001, status: 'IN_PROGRESS', priority: 'NORMAL' }),
-        ticket({ ticket_number: 1002, status: 'OPEN', priority: 'URGENT', title: 'Site down' }),
-        ticket({ ticket_number: 1003, status: 'WAITING_ON_CUSTOMER', title: 'Waiting reply' }),
-      ]),
+      queryResult(
+        ticketPage([
+          ticket({ ticket_number: 1001, status: 'IN_PROGRESS', priority: 'NORMAL' }),
+          ticket({ ticket_number: 1002, status: 'OPEN', priority: 'URGENT', title: 'Site down' }),
+          ticket({ ticket_number: 1003, status: 'WAITING_ON_CUSTOMER', title: 'Waiting reply' }),
+        ]),
+      ),
     )
     useTicketsMock.mockReturnValue(
-      queryResult([
-        ticket({ ticket_number: 1004, assignee_user_id: null, title: 'Unclaimed' }),
-      ]),
+      queryResult(
+        ticketPage([
+          ticket({ ticket_number: 1004, assignee_user_id: null, title: 'Unclaimed' }),
+        ]),
+      ),
     )
 
     renderPage(<AgentDashboard me={me} />)
@@ -99,8 +115,8 @@ describe('AgentDashboard', () => {
   })
 
   it('shows the empty state when the agent has nothing assigned', () => {
-    useAssignedTicketsMock.mockReturnValue(queryResult([]))
-    useTicketsMock.mockReturnValue(queryResult([]))
+    useAssignedTicketsMock.mockReturnValue(queryResult(ticketPage([])))
+    useTicketsMock.mockReturnValue(queryResult(ticketPage([])))
 
     renderPage(<AgentDashboard me={me} />)
 

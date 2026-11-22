@@ -50,6 +50,18 @@ function ticket(overrides: Partial<Ticket>): Ticket {
   }
 }
 
+function ticketPage(items: Ticket[]) {
+  return {
+    items,
+    total: items.length,
+    page: 1,
+    page_size: 100,
+    total_pages: 1,
+    has_next: false,
+    has_previous: false,
+  }
+}
+
 function queryResult<T>(data: T) {
   return {
     isPending: false,
@@ -67,13 +79,15 @@ describe('CustomerDashboard', () => {
 
   it('summarises the customer’s own tickets and calls out a waiting reply', () => {
     useTicketsMock.mockReturnValue(
-      queryResult([
-        ticket({ ticket_number: 1001, status: 'OPEN' }),
-        ticket({ ticket_number: 1002, status: 'IN_PROGRESS' }),
-        ticket({ ticket_number: 1003, status: 'WAITING_ON_CUSTOMER', title: 'Need your reply' }),
-        ticket({ ticket_number: 1004, status: 'RESOLVED' }),
-        ticket({ ticket_number: 1005, status: 'CLOSED' }),
-      ]),
+      queryResult(
+        ticketPage([
+          ticket({ ticket_number: 1001, status: 'OPEN' }),
+          ticket({ ticket_number: 1002, status: 'IN_PROGRESS' }),
+          ticket({ ticket_number: 1003, status: 'WAITING_ON_CUSTOMER', title: 'Need your reply' }),
+          ticket({ ticket_number: 1004, status: 'RESOLVED' }),
+          ticket({ ticket_number: 1005, status: 'CLOSED' }),
+        ]),
+      ),
     )
 
     renderPage(<CustomerDashboard me={me} />)
@@ -85,7 +99,7 @@ describe('CustomerDashboard', () => {
   })
 
   it('shows the empty state when the customer has no tickets', () => {
-    useTicketsMock.mockReturnValue(queryResult([]))
+    useTicketsMock.mockReturnValue(queryResult(ticketPage([])))
 
     renderPage(<CustomerDashboard me={me} />)
 
