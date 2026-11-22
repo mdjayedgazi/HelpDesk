@@ -1,4 +1,5 @@
-import { Button, SimpleGrid, Stack } from '@chakra-ui/react'
+import { Box, Button, SimpleGrid, Stack } from '@chakra-ui/react'
+import { ArrowLeft } from 'lucide-react'
 import { Mail, MessageSquare, PenLine } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -54,6 +55,16 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
     setSearchParams(next, { replace: true })
   }
 
+  // Mobile single-panel flow: on narrow screens the list and the conversation
+  // are shown one at a time (like a mail app), driven by the `conversation` URL
+  // parameter — no viewport listeners. Desktop keeps the split pane.
+  const clearSelection = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('conversation')
+    setSearchParams(next, { replace: true })
+  }
+  const mobileShowConversation = Boolean(requested)
+
   return (
     <>
       <PageHeader
@@ -104,14 +115,32 @@ function StaffMessagesPage({ viewerId }: { viewerId: string }) {
           />
         ) : (
           <SimpleGrid columns={{ base: 1, lg: 3 }} gap='6' alignItems='start'>
-            <ConversationList
-              conversations={items}
-              activeId={activeId}
-              onSelect={select}
-              title='Your conversations'
-            />
+            <Box display={{ base: mobileShowConversation ? 'none' : 'block', lg: 'block' }} minW='0'>
+              <ConversationList
+                conversations={items}
+                activeId={activeId}
+                onSelect={select}
+                title='Your conversations'
+              />
+            </Box>
 
-            <Stack gridColumn={{ lg: 'span 2' }} minW='0'>
+            <Stack
+              gridColumn={{ lg: 'span 2' }}
+              minW='0'
+              display={{ base: mobileShowConversation ? 'flex' : 'none', lg: 'flex' }}
+            >
+              <Button
+                size='sm'
+                variant='ghost'
+                alignSelf='flex-start'
+                px='2'
+                color={palette.textSecondary}
+                display={{ base: 'inline-flex', lg: 'none' }}
+                onClick={clearSelection}
+              >
+                <ArrowLeft size={16} aria-hidden />
+                Conversations
+              </Button>
               {activeId ? (
                 <ConversationPanel
                   key={activeId}
