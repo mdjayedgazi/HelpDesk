@@ -527,7 +527,10 @@ defect.
 - Trivy image gate is `exit-code: 0` with `ignore-unfixed: true` — image CVEs are
   reported, not blocking. This is a documented, deliberate choice; noted as a
   residual (Part T), not a defect.
-- `main` CI is green; the new branch's PR checks are reported in Part V.
+- `main` CI is green. PR #35 CI (run `45132719473`) is **all green**:
+  Alembic migrations ✅, backend lint/SQLite ✅, frontend typecheck/lint/tests/build
+  ✅, PostgreSQL integration ✅, Docker images ✅, Helm ✅, production dependency
+  audit ✅, static security (gitleaks + CodeQL) ✅, Trivy ✅.
 
 ---
 
