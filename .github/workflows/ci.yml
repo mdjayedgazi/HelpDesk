@@ -566,3 +566,34 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+
+  repo-hygiene:
+    name: Repository hygiene (historical docs must not be emptied)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # data.md has been accidentally truncated to zero bytes three times in this
+      # repository's history (commits f7986f5, 1b01543, 405ff8f). It is the
+      # central chronological engineering record, so an empty commit of it must
+      # never pass CI. This guard fails loudly instead of relying on a human to
+      # notice the next time it is clobbered.
+      - name: Fail if data.md is empty or was gutted
+        run: |
+          set -euo pipefail
+          if [ ! -s data.md ]; then
+            echo "::error::data.md is empty (0 bytes). Restore it from git history."
+            exit 1
+          fi
+          lines="$(wc -l < data.md)"
+          if [ "$lines" -lt 300 ]; then
+            echo "::error::data.md has only $lines lines; it is expected to hold the"
+            echo "::error::full historical review corpus. Refusing a suspiciously small file."
+            exit 1
+          fi
+          echo "data.md OK: $lines lines, $(wc -c < data.md) bytes."
