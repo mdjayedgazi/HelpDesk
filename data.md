@@ -80,11 +80,13 @@ page 1 on filter/search change; lookup consumers use a flat
 
 ### HD-AUD-05 — blocking image security gate
 Both Dockerfiles apply distro security updates at build (`apt-get upgrade` /
-`apk upgrade`). Measured fixable CRITICAL/HIGH dropped **backend 44 → 0**,
-**frontend 58 → 0**. CI keeps producing/validating/uploading SARIF, then runs an
-explicit `jq` policy step that fails the job if any result remains
-(`severity: CRITICAL,HIGH`, `ignore-unfixed: true`). Gate verified to pass at 0
-and fail at 44. No blanket suppression; no exception list needed at zero baseline.
+`apk upgrade`), and the backend image additionally removes its unused **system
+pip + setuptools** (which carried a stale setuptools wheel scanners flag). With a
+fresh Trivy DB, fixable CRITICAL/HIGH dropped **backend 44 → 0**, **frontend
+58 → 0**. CI keeps producing/validating/uploading SARIF, then runs an explicit
+`jq` policy step that fails the job if any result remains (`severity:
+CRITICAL,HIGH`, `ignore-unfixed: true`). Gate verified to pass at 0 and fail at
+44. No blanket suppression; no exception list needed at zero baseline.
 
 ### Coverage (D)
 Backend: `pytest-cov`, branch coverage, `fail_under = 75` (measured 75.8%

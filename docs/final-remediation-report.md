@@ -180,14 +180,22 @@ change. Lookup consumers (display-name resolution, the account-request picker)
 use a `useUserDirectoryList` helper that fetches the maximum page and unwraps
 `items`, so their behaviour is unchanged.
 
-**HD-AUD-05 — blocking image gate.** Both Dockerfiles now run the distro package
-upgrade during build (`apt-get upgrade` / `apk upgrade`), which removed all
-fixable CRITICAL/HIGH findings (measured: backend 44→0, frontend 58→0). The CI
-keeps producing and validating SARIF (uploaded to the Security tab) and then runs
-an explicit policy step that fails the job if the SARIF contains any result, with
-`severity: CRITICAL,HIGH` and `ignore-unfixed: true`. Gate logic verified: passes
-at 0 results, fails at 44. No blanket suppression was added; because the baseline
-is now zero fixable, no exception entry was required.
+**HD-AUD-05 — blocking image gate.** Resolving the CVEs took two steps. First,
+both Dockerfiles apply the distro package upgrade during build
+(`apt-get upgrade` / `apk upgrade`), which cleared the OS-package findings.
+Second, the runtime image was carrying the base image's bundled **system
+pip/setuptools**, whose stale setuptools wheel scanners flag as fixable
+CRITICAL/HIGH even though the runtime never imports it (dependencies live in the
+uv-built venv). The backend Dockerfile now upgrades pip during the build and then
+**uninstalls the system pip + setuptools from the final image entirely** — dead
+weight here — which removed the last finding. Measured with a fresh Trivy DB:
+backend **44 → 0**, frontend **58 → 0** fixable CRITICAL/HIGH.
+
+The CI keeps producing and validating SARIF (uploaded to the Security tab) and
+then runs an explicit policy step that fails the job if the SARIF contains any
+result, with `severity: CRITICAL,HIGH` and `ignore-unfixed: true`. Gate logic
+verified: passes at 0 results, fails at 44. No blanket suppression was added;
+because the baseline is now zero fixable, no exception entry was required.
 
 **Coverage (D).** Backend: `pytest-cov`, branch coverage, `fail_under = 75`
 (measured 75.8% combined; ~80% line excluding the two bulk seed-fixture scripts,
@@ -329,12 +337,21 @@ Note: tracing the non-root user required running through the image's entrypoint
 
 ## 15. Trivy results
 
-Local Trivy 0.70.0, `--severity CRITICAL,HIGH --ignore-unfixed`:
+Local Trivy 0.70.0 with a freshly downloaded DB, `--severity CRITICAL,HIGH
+--ignore-unfixed`:
 
 | Image | Before | After |
 | --- | --- | --- |
 | Backend (`python:3.13.1-slim-bookworm`) | 44 | **0** |
 | Frontend (`nginx:1.29-alpine`) | 58 | **0** |
+
+Backend breakdown: the first pass (`apt-get upgrade`) cleared the OS-package
+findings; a fresh-DB rescan then surfaced a stale **system pip/setuptools**
+bundle (a piptest reproduced it from `pip install --upgrade pip` alone). Since
+the runtime uses only the uv-built venv, the build now uninstalls the system
+pip + setuptools from the final layer, which removed the last finding and keeps
+the app importable (verified: `import app.main` succeeds; `alembic` and
+`uvicorn` present in the venv).
 
 Policy gate logic verified by feeding the pre-upgrade SARIF (44 results) to the
 `jq` gate — it fails correctly — and the post-upgrade SARIF (0 results) — it
