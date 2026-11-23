@@ -25,11 +25,26 @@ RUN apt-get update \
     && mkdir -p /data/uploads \
     && chown -R app:app /data
 
+# The runtime does not use the system pip: dependencies live in the uv-built
+# venv at /app/.venv. The base image's bundled pip ships a stale setuptools
+# wheel whose metadata image scanners flag, even though it is never imported at
+# runtime. Upgrade pip during the build (so any build-time use is patched), then
+# remove the system pip + setuptools from the final image entirely — they are
+# dead weight here — which also removes the false-positive finding.
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools \
+    && python -m pip uninstall -y pip setuptools
+
 WORKDIR /app
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --chown=app:app pyproject.toml uv.lock .python-version README.md ./
-RUN uv sync --frozen --no-dev --no-install-project
+# Install without leaving the uv download/unpack cache in the runtime image. The
+# cache (~130 MB) is not needed at runtime and can carry stale build-time wheels
+# (e.g. an older setuptools) that image scanners flag as vulnerable even though
+# the application never imports them. UV_NO_CACHE keeps the final image clean.
+RUN UV_NO_CACHE=1 uv sync --frozen --no-dev --no-install-project \
+    && rm -rf /root/.cache/uv \
+    && rm -f /usr/local/bin/uv /usr/local/bin/uvx
 
 COPY --chown=app:app . .
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
