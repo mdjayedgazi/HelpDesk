@@ -99,7 +99,7 @@ async def _reconcile_owner_for(user: User, *, session, clerk_user=None) -> User:
     """
     try:
         from app.core.config import settings
-        from app.services.owner_identity import reconcile_owner
+        from app.services.owner_identity import normalize_email, reconcile_owner
 
         configured = settings.owner_email
         if configured is None:
@@ -116,6 +116,20 @@ async def _reconcile_owner_for(user: User, *, session, clerk_user=None) -> User:
         # unaffected: that person is not yet OWNER, so they take the full path and
         # are promoted exactly as before.
         if user.role == Role.OWNER:
+            return user
+
+        # Second fast path: reconciliation can only ever promote the candidate
+        # whose stored email matches ``OWNER_EMAIL`` (this is exactly the
+        # condition ``owner_identity.find_candidate_by_email`` — used by startup
+        # reconciliation and the manual command — relies on). For every *other*
+        # authenticated user the outcome is always a no-op, so taking the
+        # transaction-scoped advisory lock and making a live Clerk call on each
+        # of their requests only serialises all non-owner traffic behind one
+        # global lock and adds an external round-trip, with no possible effect on
+        # the role. The intended owner's local email is populated from their
+        # verified Clerk primary address when the account is provisioned, so
+        # their promotion is unaffected.
+        if normalize_email(user.email) != configured:
             return user
 
         decision = await reconcile_owner(
