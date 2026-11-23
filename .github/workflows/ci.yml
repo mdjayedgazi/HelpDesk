@@ -181,20 +181,33 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Serves harness.html: the real app rendered against fixture HTTP
-      # responses with an in-repo Clerk stand-in (no production identity).
-      - name: Start the browser harness
+      # responses with an in-repo Clerk stand-in (no production identity). The
+      # server and the matrix run in ONE step so the background process is alive
+      # for the probes (each `run:` is a separate shell).
+      - name: Browser + responsive matrix
         working-directory: frontend
         run: |
-          npx --no-install vp dev --config vite.harness.config.ts >/tmp/harness.log 2>&1 &
-          for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:5183/harness.html >/dev/null; then break; fi
+          node_modules/.bin/vp dev --config vite.harness.config.ts >/tmp/harness.log 2>&1 &
+          harness_pid=$!
+          ready=""
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5183/harness.html >/dev/null 2>&1; then
+              ready="1"; break
+            fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:5183/harness.html >/dev/null
-
-      - name: Run browser + responsive matrix
-        working-directory: frontend
-        run: npm run test:browser
+          if [ -z "$ready" ]; then
+            echo "Harness did not start; log follows:"
+            cat /tmp/harness.log
+            kill "$harness_pid" 2>/dev/null || true
+            exit 1
+          fi
+          echo "Harness is up."
+          set +e
+          npm run test:browser
+          status=$?
+          kill "$harness_pid" 2>/dev/null || true
+          exit $status
 
   dependency-audit:
     name: Production dependency audit

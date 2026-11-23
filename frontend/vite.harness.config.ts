@@ -25,5 +25,7 @@ export default defineConfig({
       '@clerk/react': clerkStub,
     },
   },
-  server: { port: 5183, strictPort: true },
+  // Bind explicitly to IPv4 loopback. CI runners may resolve `localhost` to
+  // IPv6 (::1) first, so a probe against 127.0.0.1 would never connect.
+  server: { host: '127.0.0.1', port: 5183, strictPort: true },
 })
