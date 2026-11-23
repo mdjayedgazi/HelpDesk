@@ -4,8 +4,8 @@
 **Repository:** `mdjayedgazi/HelpDesk`
 **Review branch:** `audit/full-project-review`
 **Base commit:** `e757445` (`main`, merge of PR #34)
-**Head commit:** fixes on `audit/full-project-review` (see Part V)
-**Pull request:** opened from `audit/full-project-review` (see Part V)
+**Head commit:** `d3bc653` (docs) on top of `1d3110e` (fix) — see Part V
+**Pull request:** [#35](https://github.com/mdjayedgazi/HelpDesk/pull/35)
 **Review scope:** Every first-party backend, frontend, database, migration, test, CI and infrastructure file in the repository, plus a read-only review of the deployment configuration.
 **Verdict:** **DEMO READY / DEVELOPMENT READY — NOT PRODUCTION READY.** One confirmed high-impact concurrency/performance defect was fixed and regression-tested. Several external operational guarantees remain unverified (see Parts Q, T and W).
 
@@ -644,9 +644,10 @@ left uncovered by the existing tests in the areas changed by this review.
 ## Part V — Git and PR delivery
 
 - **Branch:** `audit/full-project-review` (from `main` @ `e757445`).
-- **Commits:** the fix commit and the documentation commit (see PR).
-- **PR:** opened via `gh` against `main`. CI/merge state reported from
-  `gh pr checks` / `gh pr view` (not merged, not deployed).
+- **Commits:** `1d3110e` (fix) and `d3bc653` (docs/data.md).
+- **PR:** [#35](https://github.com/mdjayedgazi/HelpDesk/pull/35), OPEN,
+  `MERGEABLE`, base `main`. Not merged; no deployment was triggered. CI status is
+  available via `gh pr checks 35` — see Part P.
 - No push force; no history rewrite; `data.md` restored additively.
 
 ---
