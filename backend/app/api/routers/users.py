@@ -18,6 +18,7 @@ from app.enums.enums import AssignableRole, Role
 from app.models.user import User
 from app.schemas.users import (
     UserAdminUpdate,
+    UserPage,
     UserRead,
     UserRoleUpdate,
     UserStatusUpdate,
@@ -217,25 +218,38 @@ async def sync_my_avatar(
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=list[UserRead])
+@router.get("", response_model=UserPage)
 async def list_users(
     session: session_Dependency,
     _admin: admin_dependency,
     role: Annotated[Role | None, Query()] = None,
     is_active: Annotated[bool | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=120)] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[User]:
-    """List users with optional filters and pagination (admin/owner)."""
-    statement = select(User)
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> UserPage:
+    """List one page of the user directory (admin/owner), with exact metadata.
+
+    Filtering happens in SQL *before* the LIMIT/OFFSET window and the COUNT query
+    is built from exactly the same WHERE clause as the data query, so ``total``
+    can never disagree with the rows on the page. Ordering is deterministic
+    (``created_at DESC, id DESC``): the unique id tie-breaker keeps rows with an
+    identical ``created_at`` (bulk provisioning) from shifting between pages.
+
+    The page rows and the total are returned in a single round-trip via a
+    ``count(*) OVER ()`` window (the same technique the ticket list uses), which
+    halves database latency on a high-latency database such as Neon. Only a page
+    that comes back empty (a deep, out-of-range page) falls back to a separate
+    COUNT, because a windowed count produces no row to read.
+    """
+    conditions = []
     if role is not None:
-        statement = statement.where(User.role == role)
+        conditions.append(User.role == role)
     if is_active is not None:
-        statement = statement.where(User.is_active == is_active)
+        conditions.append(User.is_active == is_active)
     if q:
         like = f"%{q.lower()}%"
-        statement = statement.where(
+        conditions.append(
             or_(
                 User.username.ilike(like),
                 User.email.ilike(like),
@@ -243,9 +257,21 @@ async def list_users(
             )
         )
 
-    statement = statement.order_by(User.created_at.desc()).limit(limit).offset(offset)
-    result = await session.exec(statement)
-    return list(result.all())
+    offset = (page - 1) * page_size
+    items, total = await _count_and_page_users(
+        session, conditions, limit=page_size, offset=offset
+    )
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    return UserPage(
+        items=[UserRead.model_validate(user) for user in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1,
+    )
 
 
 @router.get("/{user_id}", response_model=UserRead)
@@ -367,6 +393,61 @@ async def update_user_status(
     await session.commit()
     await session.refresh(target)
     return target
+
+
+# ---------------------------------------------------------------------------
+# Pagination helpers
+# ---------------------------------------------------------------------------
+
+# The User columns, read from the model so this can never drift from the schema.
+_USER_COLUMN_NAMES = tuple(column.name for column in User.__table__.columns)
+
+
+async def _count_users(session, conditions: list) -> int:
+    """Count users matching ``conditions`` using the same WHERE as the list."""
+    statement = select(func.count()).select_from(User)
+    if conditions:
+        statement = statement.where(*conditions)
+    return int((await session.exec(statement)).one())
+
+
+async def _count_and_page_users(
+    session,
+    conditions: list,
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[User], int]:
+    """Return one page of users **and** the total in a single round-trip.
+
+    ``count(*) OVER ()`` is evaluated over the same filtered set as the page
+    (before LIMIT), so the total can never disagree with the rows. An empty page
+    (deep/out-of-range) has no row to read the window from, so it falls back to a
+    separate COUNT — correct, and only for the non-hot out-of-range path.
+
+    Ordering is deterministic: ``created_at DESC, id DESC``. The id tie-breaker
+    removes the ambiguity between rows that share a ``created_at``, which would
+    otherwise let them shift order across OFFSET windows.
+    """
+    columns = [getattr(User, name) for name in _USER_COLUMN_NAMES]
+    ordered = select(*columns)
+    if conditions:
+        ordered = ordered.where(*conditions)
+    ordered = ordered.order_by(User.created_at.desc(), User.id.desc())
+
+    total_column = func.count().over().label("__total")
+    windowed = ordered.add_columns(total_column).limit(limit).offset(offset)
+    result = (await session.exec(windowed)).all()
+
+    if not result:
+        return [], await _count_users(session, conditions)
+
+    items = [
+        User(**dict(zip(_USER_COLUMN_NAMES, tuple(row)[:-1], strict=True)))
+        for row in result
+    ]
+    total = int(tuple(result[0])[-1])
+    return items, total
 
 
 # ---------------------------------------------------------------------------
