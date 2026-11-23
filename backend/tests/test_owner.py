@@ -27,7 +27,7 @@ async def test_owner_can_list_and_inspect_users(client, make_user):
         "/api/v1/users", headers={"X-Test-User": owner.username}
     )
     assert directory.status_code == 200
-    ids = {u["id"] for u in directory.json()}
+    ids = {u["id"] for u in directory.json()["items"]}
     assert str(owner.id) in ids and str(target.id) in ids
 
     detail = await client.get(

@@ -563,8 +563,25 @@ export type UserListParams = {
   role?: Role
   is_active?: boolean
   q?: string
-  limit?: number
-  offset?: number
+  page?: number
+  page_size?: number
+}
+
+/**
+ * One page of the user directory plus authoritative pagination metadata.
+ *
+ * Mirrors the backend `UserPage` envelope (and the ticket-list `TicketPage`).
+ * The metadata is the source of truth for whether another page exists; the UI
+ * must never infer it from `items.length === page_size`.
+ */
+export interface UserPage {
+  items: User[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
 }
 
 export type NotificationListParams = {

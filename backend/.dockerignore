@@ -2,6 +2,7 @@
 .venv
 __pycache__
 *.py[cod]
+*.egg-info
 .pytest_cache
 .ruff_cache
 .idea
@@ -13,3 +14,4 @@ tests
 htmlcov
 .coverage
 coverage.xml
+coverage.json

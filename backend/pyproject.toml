@@ -25,6 +25,7 @@ dev = [
     "pyrefly==1.4.0",
     "pytest>=8.0",
     "pytest-asyncio>=1.0",
+    "pytest-cov>=7.0",
     "ruff>=0.17.1",
 ]
 
@@ -32,6 +33,39 @@ dev = [
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+# Measure the application package; omit tests, migrations scaffolding and the
+# process entrypoints that only wire up the app. Branch coverage is on so an
+# untaken error path is visible, not just an unexecuted line.
+source = ["app"]
+branch = true
+omit = [
+    "app/main.py",
+    "*/__init__.py",
+    # The two bulk operator seed-fixture scripts (1000+ literal demo rows) are
+    # exercised by the dedicated PostgreSQL seed suites
+    # (tests/test_demo_seed_postgres.py, tests/test_qa_seed_postgres.py) in the
+    # CI `postgres-integration` job, not by the fast SQLite job whose coverage
+    # this gate measures. Keeping them out of *this* denominator avoids a
+    # misleading drop; they remain fully covered where they actually run.
+    "app/commands/seed_demo_data.py",
+    "app/commands/seed_qa_data.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+# Regression gate, not an aspiration. The measured baseline is ~75.8% combined
+# (line ~80%, branch ~58%) on the SQLite job. The floor is set a little below
+# that so ordinary churn does not break CI, while a real coverage regression
+# (e.g. a new untested router or service) fails the job. Raise deliberately
+# after adding meaningful tests; never lower it to make a red build green.
+fail_under = 75
+
+[tool.coverage.paths]
+source = ["app"]
 
 [tool.ruff]
 # Explicit project policy (Ruff 0.17 changed its isolated defaults, so the gate

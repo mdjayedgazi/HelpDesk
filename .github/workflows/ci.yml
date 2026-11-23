@@ -70,6 +70,25 @@ jobs:
         working-directory: backend
         run: uv run pytest -q
 
+      - name: Backend coverage (line/branch gate + artefacts)
+        working-directory: backend
+        run: >-
+          uv run pytest -q
+          --cov
+          --cov-report=term
+          --cov-report=xml:coverage.xml
+          --cov-report=json:coverage.json
+
+      - name: Upload backend coverage artefact
+        if: ${{ !cancelled() && hashFiles('backend/coverage.xml') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: backend-coverage
+          path: |
+            backend/coverage.xml
+            backend/coverage.json
+          if-no-files-found: warn
+
   frontend:
     name: Frontend typecheck, lint, tests, build
     runs-on: ubuntu-latest
@@ -116,9 +135,79 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      - name: Frontend coverage (line/branch/function gate + lcov)
+        working-directory: frontend
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage artefact
+        if: ${{ !cancelled() && hashFiles('frontend/coverage/lcov.info') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: warn
+
       - name: Production build
         working-directory: frontend
         run: npm run build
+
+  browser-verify:
+    name: Browser + responsive verification (harness)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      # No job needs push credentials; don't leave the checkout token in git
+      # config where an install script could read it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.15.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Use the project's npm version
+        run: npm install --global npm@12.2.0
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # Serves harness.html: the real app rendered against fixture HTTP
+      # responses with an in-repo Clerk stand-in (no production identity). The
+      # server and the matrix run in ONE step so the background process is alive
+      # for the probes (each `run:` is a separate shell).
+      - name: Browser + responsive matrix
+        working-directory: frontend
+        run: |
+          node_modules/.bin/vp dev --config vite.harness.config.ts >/tmp/harness.log 2>&1 &
+          harness_pid=$!
+          ready=""
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5183/harness.html >/dev/null 2>&1; then
+              ready="1"; break
+            fi
+            sleep 1
+          done
+          if [ -z "$ready" ]; then
+            echo "Harness did not start; log follows:"
+            cat /tmp/harness.log
+            kill "$harness_pid" 2>/dev/null || true
+            exit 1
+          fi
+          echo "Harness is up."
+          set +e
+          npm run test:browser
+          status=$?
+          kill "$harness_pid" 2>/dev/null || true
+          exit $status
 
   dependency-audit:
     name: Production dependency audit
@@ -264,6 +353,7 @@ jobs:
           tests/test_postgres_integration.py
           tests/test_support_workflows_postgres.py
           tests/test_internal_messages_postgres.py
+          tests/test_user_pagination_postgres.py
           tests/test_qa_seed_postgres.py
 
       - name: Demo seed suite (dedicated empty database)
@@ -310,10 +400,21 @@ jobs:
           test "$(docker exec helpdesk-web-ci id -u)" = "101"
           docker stop helpdesk-web-ci
 
-      # Image scanning is reported to the Security tab as SARIF. Gating on the
-      # result is intentionally opt-in: the base images are pinned by tag, so an
-      # unfixed base-image CVE must not fail every PR. Once the baseline is
-      # reviewed, change `exit-code` to "1" (and keep `ignore-unfixed: true`).
+      # Image scanning is reported to the Security tab as SARIF and gated here.
+      #
+      # The policy (agreed after reviewing the baseline) is:
+      #   * CRITICAL and HIGH severities are blocking;
+      #   * `ignore-unfixed: true` — a CVE with no vendor fix cannot be
+      #     remediated by this repository, and failing every PR on an unfixed
+      #     base-image CVE would only be muted. Only *fixable* findings block.
+      # The Dockerfiles apply upstream security updates at build time
+      # (`apt-get upgrade` / `apk upgrade`), so the baseline is zero fixable
+      # CRITICAL/HIGH before this gate runs.
+      #
+      # The scan itself uses `exit-code: "0"` so the SARIF artefact is always
+      # produced and uploaded even when findings exist (the Security tab needs
+      # the report). A separate, explicit gate step then fails the job when the
+      # SARIF contains any blocking finding.
       #
       # The `version` input is pinned explicitly. The previous pin relied on the
       # action default (v0.65.0), which has no published release assets, so
@@ -348,6 +449,22 @@ jobs:
           sarif_file: trivy-backend.sarif
           category: trivy-backend
 
+      # Fails the job when the backend SARIF holds any CRITICAL/HIGH result.
+      # Runs after the upload so the finding is always visible in the Security
+      # tab, and only when the scan produced a report.
+      - name: Enforce backend image vulnerability policy
+        if: ${{ !cancelled() && steps.backend_sarif.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          count="$(jq '[.runs[].results[]?] | length' trivy-backend.sarif)"
+          if [ "$count" -gt 0 ]; then
+            echo "Backend image has $count fixable CRITICAL/HIGH finding(s):"
+            jq -r '.runs[].results[]? | "  \(.ruleId) \(.message.text)"' \
+              trivy-backend.sarif
+            exit 1
+          fi
+          echo "Backend image: no fixable CRITICAL/HIGH findings."
+
       - name: Trivy image scan (frontend)
         id: frontend_scan
         if: ${{ !cancelled() && steps.frontend_build.outcome == 'success' }}
@@ -376,6 +493,20 @@ jobs:
         with:
           sarif_file: trivy-frontend.sarif
           category: trivy-frontend
+
+      # Fails the job when the frontend SARIF holds any CRITICAL/HIGH result.
+      - name: Enforce frontend image vulnerability policy
+        if: ${{ !cancelled() && steps.frontend_sarif.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          count="$(jq '[.runs[].results[]?] | length' trivy-frontend.sarif)"
+          if [ "$count" -gt 0 ]; then
+            echo "Frontend image has $count fixable CRITICAL/HIGH finding(s):"
+            jq -r '.runs[].results[]? | "  \(.ruleId) \(.message.text)"' \
+              trivy-frontend.sarif
+            exit 1
+          fi
+          echo "Frontend image: no fixable CRITICAL/HIGH findings."
 
   helm:
     name: Helm chart validation

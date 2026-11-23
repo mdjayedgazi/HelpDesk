@@ -377,15 +377,18 @@ async def test_directory_search_and_pagination(client, make_user):
         params={"q": "findme"},
     )
     assert found.status_code == 200
-    assert len(found.json()) == 2
+    assert found.json()["total"] == 2
+    assert len(found.json()["items"]) == 2
 
     page = await client.get(
         "/api/v1/users",
         headers={"X-Test-User": admin.username},
-        params={"limit": 1},
+        params={"page": 1, "page_size": 1},
     )
     assert page.status_code == 200
-    assert len(page.json()) == 1
+    assert page.json()["page_size"] == 1
+    assert len(page.json()["items"]) == 1
+    assert page.json()["total"] >= 3
 
 
 @pytest.mark.asyncio
@@ -416,7 +419,9 @@ async def test_reserved_test_domain_email_is_serialized(client, make_user):
     admin = await make_user(role=Role.ADMIN)
     listing = await client.get("/api/v1/users", headers={"X-Test-User": admin.username})
     assert listing.status_code == 200
-    assert any(u["email"] == "qa.reserved@example.test" for u in listing.json())
+    assert any(
+        u["email"] == "qa.reserved@example.test" for u in listing.json()["items"]
+    )
 
 
 @pytest.mark.asyncio

@@ -104,3 +104,27 @@ class UserRead(SQLModel):
     image_url: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class UserPage(SQLModel):
+    """One page of the user directory plus authoritative pagination metadata.
+
+    Mirrors the ticket-list envelope (``app.schemas.tickets.TicketPage``). The
+    previous contract returned a bare list, so the admin directory had to *guess*
+    whether a further page existed (``len(items) == page_size``), which is wrong
+    for a partial last page and lets the UI walk past the real end of the result
+    set. The envelope states the truth: the total number of matching users, the
+    requested page, the effective page size, the derived ``total_pages`` and
+    explicit ``has_next`` / ``has_previous`` flags.
+
+    ``items`` keeps exactly the ``UserRead`` shape, so any per-user consumer is
+    unaffected; only the outer container changed.
+    """
+
+    items: list[UserRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool

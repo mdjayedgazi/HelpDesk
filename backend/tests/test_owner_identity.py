@@ -653,3 +653,47 @@ async def test_startup_reconciliation_never_raises(monkeypatch):
     )
     # Pointing at an empty in-memory DB with no tables triggers an OperationalError.
     await main_module._reconcile_owner_on_startup()  # must not raise
+
+
+async def test_request_path_non_matching_user_skips_clerk_and_lock(
+    client, make_user, session_factory, monkeypatch
+):
+    """A non-owner whose email is not the configured OWNER_EMAIL is a pure no-op.
+
+    Reconciliation can only ever promote the account whose stored email matches
+    the configured owner address, so every other authenticated request must not
+    pay a live Clerk call or take the global transaction-scoped advisory lock.
+    Regression for the per-request Clerk round-trip and lock contention that
+    serialised all non-owner traffic while an Owner is configured.
+    """
+    from app.core import auth as auth_module
+    from app.core import config as config_module
+    from app.services import owner_identity as svc
+
+    customer = await make_user(role=Role.CUSTOMER, email="just-a-customer@example.com")
+    monkeypatch.setattr(config_module.settings, "OWNER_EMAIL", "owner@example.com")
+    monkeypatch.setattr(config_module.settings, "INITIAL_ADMIN_EMAIL", None)
+
+    clerk_calls = {"n": 0}
+    lock_calls = {"n": 0}
+
+    async def _spy(user_id: str):
+        clerk_calls["n"] += 1
+        return _FakeClerkUser(primary="someone-else@example.com")
+
+    orig_lock = svc._lock_ownership
+
+    async def _lock_spy(session):
+        lock_calls["n"] += 1
+        return await orig_lock(session)
+
+    monkeypatch.setattr(auth_module.clerk_client.users, "get_async", _spy)
+    monkeypatch.setattr(svc, "_lock_ownership", _lock_spy)
+
+    response = await client.get(
+        "/api/v1/users/me", headers={"X-Test-User": customer.username}
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "customer"
+    assert clerk_calls["n"] == 0, "a non-matching user must not call Clerk"
+    assert lock_calls["n"] == 0, "a non-matching user must not take the owner lock"
