@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UPLOAD_DIR=/data/uploads
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install --no-install-recommends -y gosu \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 app \

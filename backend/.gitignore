@@ -46,3 +46,6 @@ uploads/
 *.egg-info/
 dist/
 build/
+
+# Coverage JSON summary (CI uploads coverage.xml; the JSON is regenerated)
+coverage.json
