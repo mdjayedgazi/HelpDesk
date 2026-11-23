@@ -9,6 +9,7 @@ import type {
   SupportAnalytics,
   User,
   UserListParams,
+  UserPage,
 } from '../lib/types.ts'
 import { useApi } from '../lib/useApi.ts'
 
@@ -49,13 +50,40 @@ export function useAgents(enabled = true) {
   })
 }
 
+/**
+ * One page of the user directory, with authoritative pagination metadata.
+ *
+ * The backend returns a `UserPage` envelope; consumers must use its `total` /
+ * `total_pages` / `has_next` rather than inferring a page from the row count.
+ * `keepPreviousData` keeps the current page visible while the next loads.
+ */
 export function useAdminUsers(params?: UserListParams, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: queryKeys.admin.users.list(params),
-    queryFn: () => api.request<User[]>('/api/v1/users', { query: params }),
+    queryFn: () => api.request<UserPage>('/api/v1/users', { query: params }),
     placeholderData: keepPreviousData,
     enabled,
+  })
+}
+
+/**
+ * A flat list of users for lookups (display names, pickers), NOT pagination.
+ *
+ * These callers need the whole eligible set at once, so this fetches the
+ * directory with the maximum page size and unwraps `items`. It is only enabled
+ * for admins/owners (the backend returns 403 to everyone else). For a paginated
+ * directory view use `useAdminUsers` instead.
+ */
+export function useUserDirectoryList(enabled = true) {
+  const api = useApi()
+  return useQuery({
+    queryKey: queryKeys.admin.users.list({ page: 1, page_size: 100 }),
+    queryFn: () =>
+      api.request<UserPage>('/api/v1/users', { query: { page: 1, page_size: 100 } }),
+    enabled,
+    staleTime: 60_000,
+    select: (page) => page.items,
   })
 }
 

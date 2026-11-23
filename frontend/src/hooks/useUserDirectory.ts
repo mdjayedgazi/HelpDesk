@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import { useAdminUsers } from './useAdmin.ts'
+import { useUserDirectoryList } from './useAdmin.ts'
 import { useMe } from './useMe.ts'
 import { isAdmin } from '../lib/roles.ts'
 import type { Role, User } from '../lib/types.ts'
@@ -23,7 +23,7 @@ export function useUserDirectory(): UserDirectory {
   const me = useMe()
   const role: Role | undefined = me.data?.role
   const canList = isAdmin(role)
-  const { data } = useAdminUsers({ limit: 100 }, canList)
+  const { data } = useUserDirectoryList(canList)
 
   const map = useMemo(() => {
     const next = new Map<string, User>()

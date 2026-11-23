@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, TableSkeleton } from '../../components/StateVie
 import { Surface } from '../../components/Surface.tsx'
 import { toaster } from '../../components/Toaster.tsx'
 import { useAccountRequests, useCreateAccountRequest } from '../../hooks/useAccountRequests.ts'
-import { useAdminUsers } from '../../hooks/useAdmin.ts'
+import { useUserDirectoryList } from '../../hooks/useAdmin.ts'
 import { useMe } from '../../hooks/useMe.ts'
 import { useTickets } from '../../hooks/useTickets.ts'
 import { useUserDirectory } from '../../hooks/useUserDirectory.ts'
@@ -326,7 +326,7 @@ function CreateRequestDialog({
   const admin = isAdmin(role)
 
   const tickets = useTickets({ page: 1, page_size: 100 })
-  const users = useAdminUsers({ limit: 100 }, admin)
+  const users = useUserDirectoryList(admin)
   const create = useCreateAccountRequest()
 
   const form = useForm<CreateValues>({

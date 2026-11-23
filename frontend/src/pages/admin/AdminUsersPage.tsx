@@ -60,15 +60,25 @@ export function AdminUsersPage() {
   }, [debouncedSearch, role, active])
 
   const users = useAdminUsers({
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
+    page,
+    page_size: PAGE_SIZE,
     q: debouncedSearch || undefined,
     role: role || undefined,
     is_active: active === '' ? undefined : active === 'active',
   })
 
-  const items = users.data ?? []
-  const hasNext = items.length === PAGE_SIZE
+  const pageData = users.data
+  const items = pageData?.items ?? []
+
+  // Reconcile the requested page with the server's truth. If users were removed
+  // (or a filter shrank the set) while the viewer was on a high page, snap back
+  // to the last valid page instead of showing an empty "page N". The server
+  // envelope's `total_pages` is authoritative.
+  useEffect(() => {
+    if (!pageData) return
+    const lastValid = Math.max(1, pageData.total_pages)
+    if (page > lastValid) setPage(lastValid)
+  }, [pageData, page])
 
   const selectStyles = {
     bg: palette.surface,
@@ -240,8 +250,9 @@ export function AdminUsersPage() {
             <Pagination
               page={page}
               pageSize={PAGE_SIZE}
-              itemCount={items.length}
-              hasNext={hasNext}
+              total={pageData?.total ?? 0}
+              totalPages={pageData?.total_pages ?? 1}
+              isLoading={users.isFetching}
               onPageChange={setPage}
             />
           </Box>
