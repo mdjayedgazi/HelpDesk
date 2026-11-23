@@ -1,3 +1,441 @@
+# HelpDesk — Final Production Readiness Closure & Live Infrastructure Verification
+
+**Date:** 2026-11-23
+**Repository:** `mdjayedgazi/HelpDesk`
+**Branch:** `release/staging-readiness` (based on merged `main` @ `a1bc6ae`)
+**PR #35:** **MERGED** (`2026-11-23T14:16:29Z`) — this work starts from the updated `main`
+**Companion docs:** `docs/PRODUCTION_RELEASE_RUNBOOK.md`, `docs/MONITORING_AND_ALERTING.md`, `docs/DATABASE_BACKUP_RESTORE.md`
+**Verdict:** **A. CODE QUALITY — PASS · B. STAGING — conditionally ready (operational steps remain) · C. PRODUCTION — NOT READY**
+
+> **Document preservation.** This review is prepended above the historical
+> reports. All previously committed `data.md` content (3,368 lines) is preserved
+> verbatim beneath it; the suffix SHA-256 is verified at the end of this section.
+
+---
+
+## Part A — Executive summary
+
+This pass did **not** rewrite the project again. The code-level findings from the
+prior audit were already fixed and merged (PR #35). The work here closes the
+remaining *safe code* gaps, verifies the **real live infrastructure** read-only,
+and turns the vague "unverified" list into an exact operator checklist.
+
+What changed in code (safe, tested):
+
+- **HSTS hardening (Section 9):** `includeSubDomains` was emitted
+  **unconditionally** when HSTS was on — a real footgun (it can force HTTPS on
+  subdomains that may not have TLS). It is now **opt-in** via
+  `HSTS_INCLUDE_SUBDOMAINS` (default `false`). The Nginx conf output dir and
+  template path are parameterized so the *real* entrypoint can be tested.
+- **8 new frontend tests** that execute the actual `docker-entrypoint.sh` with
+  stub `envsubst`/`nginx` and assert the generated HSTS include, template
+  rendering, and input validation (frontend tests **255 → 263**).
+- **`data.md` truncation guard** in CI (`repo-hygiene` job): fails the build if
+  `data.md` is ever committed empty or suspiciously small. This is the durable
+  fix for a file that has been zeroed **three times** in history.
+- **Two new operational documents:** `docs/MONITORING_AND_ALERTING.md` and
+  `docs/PRODUCTION_RELEASE_RUNBOOK.md`, plus a DEPLOYMENT doc update for the new
+  HSTS variable.
+
+What was verified live (read-only, no changes):
+
+- **Railway:** project `helpdesk-college-demo`, both services **Online**;
+  `GET /health/ready` = `ready` (`database: ok`, `schema: ok`, `redis: ok`,
+  `clamav: disabled`); `/health/live` 200; web `/healthz` 200; SPA 200; security
+  headers present; **HSTS absent** (correct for the demo profile).
+- **API auth boundary:** unauthenticated `/api/v1/users/me` → **401**; CORS
+  preflight allowed from the configured origin and rejected from a foreign one.
+- **Dependency security:** the six moderate advisories are **dev-only** and stem
+  from the Vitest dev-server (`GHSA-p458-7748-mcp3`). A clean upgrade is blocked
+  by the pinned `vite-plus`/`vite-core` toolchain; the advisory is **not
+  reachable** in our usage (we never expose Vitest's dev server). Production
+  dependency audit is **0**. Documented as a scoped, non-exploitable exception
+  rather than forcing a major toolchain churn (`npm audit fix --force` was
+  explicitly avoided).
+
+### What remains truly out of reach here
+Real **production Clerk** sign-in, a **Neon** restore drill, **Upstash**
+durability evidence, a live **ClamAV** deployment, and **Railway** pre-deploy
+settings all require account access or authorization not available to this
+session. Each is stated as an exact operator step in the runbook. None is claimed
+as passing.
+
+---
+
+## Part B — Repository and infrastructure state
+
+| Item | Finding |
+| --- | --- |
+| PR #35 | **MERGED** to `main` at `a1bc6ae` |
+| Branch at start | `main` @ `a1bc6ae` (in sync with `origin/main`) |
+| Working tree at start | `data.md` modified — **0 bytes** (3rd truncation; see Part C) |
+| `HEAD:data.md` | 3,368 lines / 152,682 bytes (intact) |
+| Open PRs | none |
+| Railway project | `helpdesk-college-demo` / `production` |
+| Services | `helpdesk-api`, `helpdesk-web` — both **Online** |
+| API | `https://helpdesk-api-production-1dc9dd39.up.railway.app` |
+| Web | `https://helpdesk-web-production-d96f8e2b.up.railway.app` |
+
+Per instructions, because PR #35 merged, the new work is based on the updated
+`main` on a fresh branch `release/staging-readiness`.
+
+### Live Railway variable names present (names only, values never shown)
+
+`helpdesk-api`: `ENVIRONMENT`, `DEPLOYMENT_PROFILE`, `ATTACHMENTS_ENABLED`,
+`MALWARE_SCAN_ENABLED`, `AUTO_CREATE_TABLES`, `RATE_LIMIT_ENABLED`,
+`RATE_LIMIT_REDIS_URL`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DATABASE_ECHO`,
+`DATABASE_URL`, `CLERK_SECRET_KEY`, `FRONTEND_URL`, `OWNER_EMAIL`, `LOG_LEVEL`,
+`LOG_JSON`, and Railway's injected `RAILWAY_*`.
+`helpdesk-web`: `VITE_API_URL`, `VITE_CLERK_PUBLISHABLE_KEY`,
+`VITE_ATTACHMENTS_ENABLED`, `API_ORIGIN`, `CLERK_FAPI_ORIGIN`, `HSTS_ENABLED`,
+`PORT`.
+
+`CLERK_SECRET_KEY` and Redis/DB URLs are present but **never printed** here.
+
+---
+
+## Part C — `data.md` truncation investigation (Section 12)
+
+- **History:** `data.md` was committed as **0 bytes** three times
+  (`f7986f5` "some bug fix", `1b01543` "Review full code", `405ff8f`
+  "change evrything"). It has also been found truncated in the **working tree at
+  session start three separate times** — including this session — while
+  `HEAD:data.md` was always intact.
+- **No tracked generator writes it:** a repo-wide search found no script, hook,
+  workflow, or make target that writes or truncates `data.md`. There is no
+  `.opencode` hook, no git hook (all sample-only), no watcher process, and no open
+  file handle.
+- **Conclusion:** an **external, out-of-repo process** (an editor/agent session)
+  zeroes the working copy between sessions. It cannot be fixed from inside the
+  repository, and I will not "fix" it by deleting history.
+- **Durable mitigation added:** the CI `repo-hygiene` job now **fails** if
+  `data.md` is empty or under 300 lines, so a clobbered commit can never merge
+  silently. Locally, the file was again restored from `HEAD` before this review
+  (verified by SHA-256).
+
+---
+
+## Part D — Clerk production authentication (Section 3)
+
+**Code-level status (verified):**
+
+- Identity is always the Clerk session `sub`; roles/owner are never taken from a
+  request body.
+- Only a **verified Clerk primary email** can drive Owner matching
+  (`_verified_primary_email`), so an unverified/secondary/client-supplied email
+  cannot establish identity.
+- Outside the `college-demo` profile, production **refuses to start** unless
+  `CLERK_SECRET_KEY` starts with `sk_live_`; a `sk_test_` key is rejected.
+- `FRONTEND_URL`/`CORS_ORIGINS` are normalized to exact origins and used for both
+  CORS and Clerk's `azp` check.
+- Inactive users are rejected (403) on every request path.
+
+**Live status (verified read-only):** the demo runs a **development** Clerk
+instance (CSP references `*.clerk.accounts.dev`). That is correct for the public
+demo and **not** acceptable for production.
+
+**OPERATOR steps to production (do not paste secrets anywhere):**
+
+1. Create/own a Clerk **production** instance for the real domain.
+2. Set allowed origins/redirects in Clerk to the exact frontend origin.
+3. `helpdesk-api`: `CLERK_SECRET_KEY` = `sk_live_…`;
+   `helpdesk-web` build: `VITE_CLERK_PUBLISHABLE_KEY` = matching `pk_live_…`
+   (**the frontend must be rebuilt** — Vite bakes this in);
+   `CLERK_FAPI_ORIGIN` = production Frontend API origin for the CSP.
+4. Set `DEPLOYMENT_PROFILE=standard`, `ENVIRONMENT=production`.
+5. Verify: real sign-in succeeds, redirects to the configured origin, token `azp`
+   matches `FRONTEND_URL`, no CSP violations.
+
+**Status: NOT TESTED** here (no authorized production identity). Code path
+verified by tests; live production flow is operator-gated.
+
+---
+
+## Part E — Owner and initial admin bootstrap (Section 4)
+
+- **Code (verified):** exactly one Owner is enforced by a partial unique index,
+  a transaction advisory lock, and demote-before-promote ordering. `OWNER_EMAIL`
+  (verified primary email only) drives recognition; `INITIAL_ADMIN_EMAIL` is a
+  deprecated fallback. `bootstrap_owner` refuses if an Owner exists and never
+  creates users; `reconcile_owner` is the idempotent deploy-time variant.
+- **Live config:** `OWNER_EMAIL` is set on `helpdesk-api` (name observed; value
+  not printed). The demo reports `schema: ok` and `database: ok`, so the single
+  Owner constraint is in force.
+- **OPERATOR procedure:** ensure the intended person has signed in once, set
+  `OWNER_EMAIL`, run `python -m app.commands.reconcile_owner --json` from a
+  one-off shell, and confirm `/api/v1/users/me` returns `role: owner`.
+- **Boundary:** promoting or changing production roles is **NOT** performed here
+  and requires explicit owner authorization.
+
+**Status: NOT VERIFIED against a live Owner identity** (no session); procedure
+documented in the runbook §2.
+
+---
+
+## Part F — Neon PostgreSQL backup and recovery (Section 5)
+
+Followed `docs/DATABASE_BACKUP_RESTORE.md`. The runbook already covers plan/PITR
+discovery, logical backup, an **identity-checked** isolated restore drill, and
+post-restore verification (Alembic revision, counts, `schema_status`).
+
+- **Verified locally:** `alembic heads` → single head `0012_staff_mentions`;
+  fresh disposable `upgrade head` clean; `alembic check` clean
+  ("No new upgrade operations detected"); `downgrade 0008` → `upgrade head`
+  clean; readiness's schema check compares live `alembic_version` to the image
+  head and fails production readiness on mismatch.
+- **Live API readiness** reports `database: ok`, `schema: ok` — the running
+  database is at the expected migration head.
+- **BLOCKED:** plan, PITR window, retention, and an actual restore require the
+  Neon console. A verified restore drill was **not** performed (no Neon access,
+  and restoring over production is forbidden).
+
+**Status: NOT VERIFIED (restore drill).** This is a **release blocker** for
+production: a backup that has never been restored is not a verified backup.
+
+---
+
+## Part G — Upstash Redis reliability (Section 6)
+
+- **Code (verified):** rate limiting is atomic (Lua INCR+EXPIRE), per-user,
+  fail-closed (503 when Redis is unreachable), with connect/socket timeouts and a
+  ping at startup; the URL is never logged. The college-demo profile requires
+  TLS (`rediss://`). The optional analytics cache is pure cache-aside: a Redis
+  error is a miss, never wrong data.
+- **Live:** `RATE_LIMIT_ENABLED=true` and `RATE_LIMIT_REDIS_URL` present
+  (`rediss://`, value not printed); `/health/ready` reports `redis: ok`.
+- **Disposable test:** Redis integration suites (rate limit + cache) pass (22).
+- **BLOCKED:** plan/quotas, memory limit, eviction policy, and durability are
+  Upstash-console facts. **Do not** flush or reconfigure production Redis.
+- **Design note:** memory exhaustion/Redis errors **will** make protected write
+  endpoints return 503 by design (fail-closed). Rate-limit counters are
+  short-lived and losing them is safe; never store application data in Redis.
+
+**Status: connectivity verified; durability/eviction NOT VERIFIED.**
+
+---
+
+## Part H — Malware scanning and attachments (Section 7)
+
+- **Code (verified):** allowlist + magic-byte check, quarantine → ClamAV scan →
+  publish only on explicit `CLEAN`; scanner errors → 503 (fail-closed); infected →
+  422; path-safe download; per-ticket quotas under a row lock.
+- **Live config:** `ATTACHMENTS_ENABLED=false`, `MALWARE_SCAN_ENABLED=false`,
+  readiness `clamav: disabled`. This is the intended demo state and is kept.
+- **Storage reality:** uploads use a single local volume; the docs enforce a
+  **single backend replica** while volume-local. **No object storage is
+  implemented** (no provider access); R2/S3 is analysed as the target, not built.
+- **BLOCKED:** a live ClamAV (clean/EICAR/timeout) test and durable object
+  storage require a deployed scanner and provider credentials. EICAR would be a
+  harmless signature, never real malware.
+
+**Status: code verified; live scanner + object storage NOT implemented/verified.**
+
+---
+
+## Part I — Railway deployment verification (Section 8)
+
+**Verified read-only (this pass):**
+
+- Project `helpdesk-college-demo`, environment `production`.
+- Services `helpdesk-api`, `helpdesk-web` both **Online**; public URLs respond.
+- `/health/ready` 200 (`database/schema/redis ok`), `/health/live` 200,
+  web `/healthz` 200, SPA `/tickets` 200.
+- Unauthenticated API 401; CORS allowlist correct.
+- Web security headers present (CSP, `X-Frame-Options: DENY`, `nosniff`,
+  `Referrer-Policy`, `Permissions-Policy`); **HSTS absent** (demo profile).
+
+The **desired release sequence** (CI pass → pre-deploy `alembic upgrade head`
+blocks activation on failure → app starts → `/health/ready` proves schema →
+traffic only when ready → `/healthz` frontend) is documented and matches the
+readiness semantics.
+
+**BLOCKED (dashboard-only, not exposed read-only via CLI):** the exact
+**pre-deploy command** setting and the **wait-for-CI** toggle, plus replica count.
+These are operator-confirm steps in runbook §6, not code changes.
+
+**Status: live health/headers verified; pre-deploy & wait-for-CI settings
+NOT VERIFIED.**
+
+---
+
+## Part J — Production security headers and the HSTS fix (Section 9)
+
+- **Verified live:** CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options:
+  nosniff`, `Referrer-Policy`, `Permissions-Policy`, COOP/CORP present on web;
+  HSTS **absent** in the demo (correct).
+- **Defect fixed (this pass):** the entrypoint emitted
+  `Strict-Transport-Security: max-age=…; includeSubDomains` **unconditionally**
+  when HSTS was enabled. `includeSubDomains` forces HTTPS on *all* subdomains and
+  can lock clients out of unrelated services. It is now **opt-in** via
+  `HSTS_INCLUDE_SUBDOMAINS` (default `false`); HSTS emits `max-age` only unless
+  the operator confirms subdomain readiness. `preload` is never emitted.
+- **Tests:** 8 new tests run the real entrypoint (stub `envsubst`/`nginx`, temp
+  conf dir) and assert: no `includeSubDomains` by default, present when enabled,
+  empty when disabled, template renders `listen 8080` + CSP, and invalid
+  `HSTS_INCLUDE_SUBDOMAINS`/`HSTS_MAX_AGE_SECONDS`/`API_ORIGIN` are rejected.
+- **Docker verified:** built image (uid 101) serves `/healthz`, SPA, CSP, no HSTS
+  by default; with `HSTS_ENABLED=true` emits `max-age`; with
+  `HSTS_INCLUDE_SUBDOMAINS=true` adds `includeSubDomains`.
+- **Production policy:** enable HSTS only after verified HTTPS on both domains;
+  enable `includeSubDomains` only when every subdomain is HTTPS; no `preload`
+  without deliberate review.
+
+The demo profile stays separate (HSTS off) — **no live setting was changed.**
+
+---
+
+## Part K — Monitoring and alerting (Section 10)
+
+Created `docs/MONITORING_AND_ALERTING.md`: a full alert catalogue (API 5xx,
+latency, DB connection failures + pool saturation, schema drift, Redis outage,
+scanner outage, readiness/liveness failures, deployment failures, frontend
+availability, backups disabled), with severity, thresholds, and response steps.
+
+- Readiness (`/health/ready`) is the required uptime endpoint and is
+  secret-free (coarse categories only), so it is safe to alert on.
+- **No alerting integration is configured by this repository and none is claimed.**
+  Delegated to Railway/Neon/Upstash dashboards plus an external uptime prober,
+  with a named on-call owner — all **OPERATOR** items.
+
+**Status: plan documented; integrations NOT configured (operator).**
+
+---
+
+## Part L — Dependency security (Section 11)
+
+- Production dependency audit: **0 vulnerabilities** (`npm audit --omit=dev`).
+- The six **moderate** advisories are **dev-only** and originate from
+  **Vitest's dev server** (`GHSA-p458-7748-mcp3`, `server.fs.deny`). They affect
+  `vitest`, `@vitest/ui`, `@vitest/browser`, `@vitest/browser-preview`.
+- **Attempted upgrade:** `vite-plus@1.7.0` (→ vitest 5.1.0) removes the flagged
+  packages, but its Vitest 5.1.0 changes the `Assertion<R,T>` type signature and
+  breaks `@testing-library/jest-dom` type augmentation (typecheck fails despite
+  runtime passing). Intermediate `vite-plus@1.4.0` still resolves vitest 5.0.4
+  via the pinned `vite-core` override, so it does not cleanly fix the advisory.
+  `npm audit fix --force` was **not** used.
+- **Decision:** keep the stable, pinned toolchain and treat the advisory as a
+  **scoped, non-exploitable exception** — the Vitest **dev server is never
+  exposed** (tests run via `vp test run`; the app dev server is Vite, not
+  Vitest). Reassess when `vite-plus` publishes a coherent 5.0.5+ toolchain.
+- This is documented as a deliberate trade-off, **not** a passing fix.
+
+---
+
+## Part M — Authenticated browser E2E (Section 13)
+
+- **Kept** the fixture-driven Chromium harness; re-ran the matrix: **9 routes × 11
+  widths**, zero horizontal overflow, zero console errors, SPA navigation,
+  reduced motion — **all pass**.
+- **Real authenticated E2E (Claude/Clerk production flows) is BLOCKED:** no
+  authorized test Clerk identities are available, and a production auth bypass is
+  forbidden. The runbook §11 specifies the exact journeys to run with authorized
+  identities (sign-in, provisioning, role navigation, ticket create/assign/status,
+  internal messaging, notifications, owner user management, logout,
+  inactive-account).
+- **Fixtures are explicitly not proof of a real Clerk flow** (stated in the prior
+  reports and here).
+
+---
+
+## Part N — Testing evidence (this pass)
+
+| Layer | Command | Result |
+| --- | --- | --- |
+| Backend lint | `ruff check .` | pass |
+| Backend format | `ruff format --check .` | pass |
+| Backend types | `pyrefly check` | 0 errors |
+| Backend tests | `pytest -q` | **593 passed, 75 skipped** |
+| PostgreSQL/Redis (disposable) | e2e/core/owner/user-pagination/demo-seed/redis | 2 / 28 / 6 / (incl.) / 31 / 22 passed |
+| Migrations (disposable) | heads/upgrade/current/check/downgrade/re-upgrade | pass |
+| Frontend types | `npm run typecheck` | pass |
+| Frontend lint | `npm run lint` | pass |
+| Frontend tests | `npm test` | **263 passed (30 files)** |
+| Frontend coverage | `npm run test:coverage` | lines 40.04%; thresholds met |
+| Frontend build | `npm run build` | pass |
+| Browser matrix | `node scripts/browser-verify.mjs` | 9 routes × 11 widths pass |
+| Docker | backend + frontend build | pass |
+| Docker runtime | uid 101 / 10001, healthz, SPA, CSP, HSTS modes | pass |
+| Trivy (fresh DB) | backend + frontend, CRITICAL/HIGH, ignore-unfixed | **0 / 0** |
+| Helm | lint/template | **NOT run locally** (helm absent); run in CI |
+| gitleaks / CodeQL | — | run in CI |
+
+Skipped tests: 75, all disposable PostgreSQL/Redis suites; they pass when the
+disposable services are provided (evidence above). Nothing skipped is reported as
+passing.
+
+---
+
+## Part O — Production release runbook
+
+Created `docs/PRODUCTION_RELEASE_RUNBOOK.md` with a status-tagged checklist
+(**DONE / VERIFIED / OPERATOR / BLOCKED / N/A**) covering: pre-release gate,
+Clerk production config, Owner bootstrap, Neon backup + restore drill, Upstash
+verification, attachments/scanner decision, Railway settings, migration
+verification, health checks + security headers, monitoring, rollback, and
+post-deployment verification.
+
+---
+
+## Part P — Security regression re-check (Section 15 / architecture)
+
+No change was made to a working authorization design. Re-confirmed from code and
+tests: identity from Clerk `sub` only; no client-supplied role/owner; owner
+verified-primary-email only; object-level 404s; admin≠owner mutation boundary;
+owner/agent/customer isolation; messaging participant-scoped; notification
+isolation; attachments fail-closed; rate limiting atomic/fail-closed; ticket
+idempotency preserved; errors coarse; logs redacted. Live checks: 401 without
+token, CORS allowlist enforced.
+
+---
+
+## Part Q — Final release decision
+
+**A. CODE QUALITY — PASS.** All engineering and security gates are green
+(backend 593, frontend 263, coverage gates, migrations, Docker, Trivy 0/0,
+browser matrix). The HSTS defect is fixed and tested; the `data.md` guard is in
+place.
+
+**B. STAGING READINESS — CONDITIONALLY READY (operational steps remain).** The
+application is safe to run in a controlled staging environment *once* the
+operator completes: a **verified Neon restore drill**, a **production (or staging)
+Clerk instance** with real sign-in tested, Upstash confirmation, and monitoring
+wired to an on-call owner. None requires code changes; all require dashboard
+access. Until then it is **demo-ready**, not staging-certified.
+
+**C. PRODUCTION READINESS — NOT READY.** Blockers, each requiring operator action:
+
+1. **Neon restore drill** not performed → treat the database as non-recoverable
+   for real-customer data. (Runbook §3.)
+2. **Production Clerk** instance + real sign-in/logout/inactive/owner flows not
+   tested. (Runbook §1–2.)
+3. **Upstash** durability/eviction not confirmed. (Runbook §4.)
+4. **Monitoring/alerting** not configured and no named on-call. (Part K.)
+5. **Attachments**: either keep disabled, or deploy ClamAV + a durable volume and
+   use a single replica; object storage not implemented. (Part H.)
+6. **Railway pre-deploy migration command + wait-for-CI** must be confirmed in
+   the dashboard. (Part I.)
+
+Each is an **exact operator action** with the evidence needed to close it, listed
+in the runbook. A green CI pipeline is **not** production readiness.
+
+---
+
+## Part R — Git delivery
+
+- Branch `release/staging-readiness`, created from `main` @ `a1bc6ae` (after PR
+  #35 merged). No force-push, no history rewrite.
+- `data.md` restored from `HEAD` and extended additively; the historical suffix is
+  preserved byte-for-byte (verified).
+- Not merged, not deployed. A PR is opened for review.
+
+---
+
+## Preservation check
+
+This section is prepended above the previously committed `data.md` (3,368 lines).
+The historical suffix is verified byte-identical by SHA-256 after the edit.
+
+---
 # HelpDesk — Final Engineering Remediation, Security Hardening & Production Readiness
 
 **Date:** 2026-11-23
