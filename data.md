@@ -1,3 +1,323 @@
+# HelpDesk — Final Engineering Remediation, Security Hardening & Production Readiness
+
+**Date:** 2026-11-23
+**Repository:** `mdjayedgazi/HelpDesk`
+**Branch:** `audit/full-project-review` (extends PR #35)
+**Base:** `main` @ `e757445`; audit commit reviewed `6371349`
+**Full report:** [`docs/final-remediation-report.md`](docs/final-remediation-report.md)
+**Verdict:** **C — DEMO / DEVELOPMENT READY** (not production ready; external verification outstanding).
+
+> **Document preservation.** This remediation review is prepended above the
+> existing historical reports. Everything beneath it is preserved verbatim (see
+> the preservation check at the end of this section).
+
+---
+
+## Part A — Executive summary
+
+Every confirmed, safely fixable finding from the prior audit is now remediated,
+and the measurement/verification infrastructure the audit flagged as missing is
+now in place. All automated gates reproduce green here; external-service items
+are reported with the exact evidence available and no fabricated results.
+
+| Finding | Before | After |
+| --- | --- | --- |
+| HD-AUD-03 stale `HelpDeskApi` contract | unused, wrong `listTickets` type | removed (typecheck/lint/tests green) |
+| HD-AUD-04 admin user pagination | length-guessed, bare list | real server envelope + windowed count + tests |
+| HD-AUD-05 Trivy gate | non-blocking | **blocking**; baseline 44/58 → **0/0** fixable CRITICAL/HIGH |
+| Coverage measurement | none | backend 75% gate (75.8%), frontend floor 38/38/30/40 (40.04% lines) |
+| Frontend integration tests | 231 tests | **255 tests** (5 new page suites) |
+| Browser verification | broken harness (`/tmp` alias) | self-contained harness; **9 routes × 11 widths** verified |
+| PostgreSQL/migrations | not re-run | full gate + all integration suites pass |
+
+**One data-handling incident:** on entry `data.md` was again **0 bytes** in the
+working tree while `HEAD:data.md` held the full 3,046 lines. The empty working
+copy was preserved to `/tmp` as evidence and the file was restored from HEAD
+(SHA-256 `ae70fe87…`). No history was lost.
+
+---
+
+## Part B — Repository state at start
+
+- Branch `audit/full-project-review`; PR **#35 OPEN**, all CI green, mergeable.
+- HEAD `6371349`; `origin` in sync.
+- Working tree: only `data.md` modified (empty — see Incident above).
+- Per instructions, the work **extends PR #35's branch**; no duplicate PR created.
+
+---
+
+## Part C — Confirmed problems reproduced
+
+1. `grep HelpDeskApi` → single self-declaration only; dead code with a stale
+   `Promise<Ticket[]>` list contract.
+2. `GET /api/v1/users` returned `list[UserRead]`; the page inferred "next" from
+   `items.length === PAGE_SIZE` (wrong for a partial last page).
+3. Trivy `exit-code: "0"`; a local 0.70.0 scan found 44 (backend) / 58 (frontend)
+   fixable CRITICAL/HIGH.
+4. `vite.harness.config.ts` aliased `@clerk/react` to `/tmp/opencode/...`, a path
+   absent on a clean checkout.
+5. No `pytest-cov` / Vitest coverage provider installed.
+
+---
+
+## Part D — Fixes implemented
+
+### HD-AUD-03 — remove the stale contract
+Deleted the unused `HelpDeskApi` interface, its `TicketStatus` re-export, and the
+now-unused `./types.ts` import block in `frontend/src/lib/api.ts`. No runtime
+change.
+
+### HD-AUD-04 — real server-side user pagination
+`GET /api/v1/users` now accepts `page` (≥1) and `page_size` (1–100), returns a
+typed `UserPage` envelope (`items,total,page,page_size,total_pages,has_next,
+has_previous`) computed in **one round-trip** via `count(*) OVER ()`, ordered
+`created_at DESC, id DESC` for deterministic paging, with a separate `COUNT`
+fallback only for an empty out-of-range page. Authorization is unchanged
+(`admin_dependency`; agent/customer → 403). Frontend `AdminUsersPage` drives
+Prev/Next/numbers from server metadata, clamps out-of-range pages, and resets to
+page 1 on filter/search change; lookup consumers use a flat
+`useUserDirectoryList` helper so their behaviour is unchanged.
+
+### HD-AUD-05 — blocking image security gate
+Both Dockerfiles apply distro security updates at build (`apt-get upgrade` /
+`apk upgrade`). Measured fixable CRITICAL/HIGH dropped **backend 44 → 0**,
+**frontend 58 → 0**. CI keeps producing/validating/uploading SARIF, then runs an
+explicit `jq` policy step that fails the job if any result remains
+(`severity: CRITICAL,HIGH`, `ignore-unfixed: true`). Gate verified to pass at 0
+and fail at 44. No blanket suppression; no exception list needed at zero baseline.
+
+### Coverage (D)
+Backend: `pytest-cov`, branch coverage, `fail_under = 75` (measured 75.8%
+combined). Frontend: Vitest v8 with `lcov`/`json-summary`, explicit `src/**`
+include, thresholds 38 lines/statements · 30 functions · 40 branches. Both upload
+CI artefacts. Thresholds documented as regression floors, not quality targets.
+
+### Integration tests (E)
+New page suites for the agent queue, ticket detail, notifications, account
+requests and admin users, covering loading/empty/error, role-dependent controls,
+pagination (server metadata, next/prev, reset-on-search), mark-read and claim.
+jsdom gained inert `ResizeObserver`/`matchMedia` polyfills so real Chakra/Zag
+widgets render instead of being mocked away.
+
+### Browser verification (F)
+Repaired the harness into a self-contained, reproducible tool: an in-repo Clerk
+stand-in reachable only via the harness alias (confirmed absent from the
+production bundle) plus fixtures for every toured endpoint. `scripts/browser-verify.mjs`
+drives real Chromium across the route × width matrix.
+
+### PostgreSQL / migrations (G)
+Full migration gate and every disposable PostgreSQL/Redis integration suite
+reproduced (Section M).
+
+---
+
+## Part E — New regression tests
+
+- Backend: `test_admin.py` pagination battery (envelope shape, empty,
+  exact-full-page, multi-page partition, partial last page, out-of-range true
+  total, invalid bounds → 422, max size, filter totals, admin/owner-only);
+  `test_user_pagination_postgres.py` (windowed count, `created_at`+`id` tie-break,
+  out-of-range fallback count).
+- Frontend: `AdminUsersPage` (7), `AgentQueuePage` (4), `NotificationsPage` (5),
+  `TicketDetailPage` (4), `AccountRequestsPage` (4).
+
+No existing test was weakened or removed.
+
+---
+
+## Part F — Files modified
+
+**Backend:** `app/api/routers/users.py`, `app/schemas/users.py`, `pyproject.toml`
+(pytest-cov + coverage config), `Dockerfile`, `.gitignore`, `uv.lock`,
+`tests/{test_admin,test_owner,test_regressions_qa}.py`,
+`tests/test_user_pagination_postgres.py` (new).
+
+**Frontend:** `src/lib/api.ts`, `src/lib/types.ts`, `src/hooks/useAdmin.ts`,
+`src/hooks/useUserDirectory.ts`, `src/pages/admin/AdminUsersPage.tsx`,
+`src/pages/staff/AccountRequestsPage.tsx`, `src/test/setup.ts`, `vite.config.ts`,
+`vite.harness.config.ts`, `src/harness-fixtures.ts`,
+`src/test/harness-clerk.tsx` (new), `scripts/browser-verify.mjs` (new),
+5 new page test files, `Dockerfile`, `package.json`/`package-lock.json`.
+
+**CI:** `.github/workflows/ci.yml` — coverage steps + artefacts, blocking Trivy
+policy steps, new `browser-verify` job, new PG pagination test in integration job.
+
+---
+
+## Part G — Backend results
+
+| Command | Result |
+| --- | --- |
+| `uv run ruff check .` | All checks passed |
+| `uv run ruff format --check .` | 128 files already formatted |
+| `uv run pyrefly check` | 0 errors |
+| `uv run pytest -q` | **593 passed, 75 skipped** |
+| `uv run pytest -q --cov` | 75.8% combined; gate 75% reached |
+
+---
+
+## Part H — Frontend results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` | pass |
+| `npm run lint` | pass |
+| `npm test` | **255 passed, 29 files** |
+| `npm run test:coverage` | 255 passed; lines 40.04%, branches 41.96%, functions 32.14%; thresholds met |
+| `npm run build` | success |
+
+---
+
+## Part I — Coverage
+
+- Backend: 75.8% combined (line ~80%, branch ~58%, excluding the two bulk
+  seed-fixture scripts that the PostgreSQL seed suites cover); gate 75%.
+- Frontend: 40.04% lines / 41.96% branches / 32.14% functions / 39.98% statements;
+  floors 38/38/30/40. The remaining gap is lazy-loaded page layout/JSX, covered by
+  the browser matrix rather than unit mocks.
+
+---
+
+## Part J — PostgreSQL and migrations
+
+Disposable PostgreSQL 16 + Redis 7, disposable-database guard satisfied:
+
+| Suite | Result |
+| --- | --- |
+| e2e support flow | 2 passed |
+| core PG (postgres_integration + support_workflows + internal_messages + qa_seed) | 25 passed |
+| owner identity PG | 6 passed |
+| **user pagination PG (new)** | 3 passed |
+| demo seed (dedicated DB) | 31 passed |
+| rate limit + analytics cache | 22 passed |
+
+Migration gate (`migrate_verify` database): `alembic heads` → single head
+`0012_staff_mentions`; `upgrade head` clean; `current` = head; `check` → "No new
+upgrade operations detected"; `downgrade 0008` → `upgrade head` clean; offline
+`--sql` renders 62 statements. The `UserPage` change touches no table, so no
+migration is required and `alembic check` confirms no drift.
+
+---
+
+## Part K — Docker and Trivy
+
+- Backend image builds (non-root uid 10001 via entrypoint); frontend builds
+  (uid 101, `/healthz` ok, SPA `/tickets` 200, CSP present).
+- Trivy 0.70.0 (`CRITICAL,HIGH`, `--ignore-unfixed`): backend **44 → 0**,
+  frontend **58 → 0**. Gate verified fail-at-44 / pass-at-0.
+
+---
+
+## Part L — Browser and responsive results
+
+Real Chromium (Playwright 1.65.1), harness-rendered real app: **9 routes × 11
+widths** (320, 360, 390, 480, 640, 768, 1024, 1280, 1440, 1920, 2560). Zero
+horizontal overflow, zero uncaught console errors, per-role route landmarks
+present, SPA navigation preserved, reduced-motion renders correctly. **All
+passed.**
+
+**Not performed:** live browser E2E against a real Clerk **production** session —
+no authorized identity is available and auth bypass is disallowed. The harness is
+explicitly fixture-driven, not proof of the production auth flow.
+
+---
+
+## Part M — External services (read-only, no changes)
+
+**Railway** — project `helpdesk-college-demo` / `production`; services
+`helpdesk-web`, `helpdesk-api` (both public, waking on demand). API config
+(coarse only): `ENVIRONMENT=production`, `DEPLOYMENT_PROFILE=college-demo`,
+`ATTACHMENTS_ENABLED=false`, `MALWARE_SCAN_ENABLED=false`,
+`AUTO_CREATE_TABLES=false`, `RATE_LIMIT_ENABLED=true`, `RATE_LIMIT_REDIS_URL`
+uses `rediss://`, `DB_POOL_SIZE=1`, `LOG_JSON=true`, `OWNER_EMAIL` set.
+(Handling note: a Railway variables listing displayed secret values on screen;
+none are reproduced here and none were copied to a file or committed.)
+
+**Live API** — `/health/live` 200; `/health/ready` 200 with
+`database: ok, schema: ok, redis: ok, clamav: disabled`; unauthenticated
+`/api/v1/users/me` → 401; CORS preflight from the configured origin 200, from a
+foreign origin no allow-origin (correct).
+
+**Live web** — `/healthz` 200; `/tickets` 200; CSP + `X-Frame-Options: DENY` +
+`nosniff` + `Referrer-Policy` + `Permissions-Policy` present; **HSTS absent**
+(college-demo); CSP references a Clerk **development** FAPI host — consistent with
+the demo profile.
+
+**Not verified (exact external requirement):** Clerk production sign-in/session/
+provisioning/logout and inactive/Owner flows (authorized Clerk production test
+user + browser session); Neon backup/PITR/retention and a restore drill (Neon
+console or isolated restore target + operator approval); Upstash
+durability/eviction/memory limits (Upstash console; no flush/scan performed);
+ClamAV clean/infected/timeout in production (disposable ClamAV + harmless test
+signature); Railway pre-deploy migration command and wait-for-CI flag (dashboard
+settings not exposed read-only via CLI); monitoring/alerting/on-call ownership.
+
+**Monitoring gap:** the API has structured redacted logs and a dependency
+readiness probe, and Railway restarts on health failure, but no alerting was found
+for 5xx rate, latency, database/Redis/scanner availability, deployment failures or
+health-check failures. Recommendation: external uptime probe on `/health/ready`,
+route Railway events to an alert channel, and name an on-call owner for the
+recovery runbook in `docs/PRODUCTION_READINESS.md`.
+
+**Attachments:** disabled in the live demo, so production durability is not
+exercised; enabling requires ClamAV + an absolute persistent `UPLOAD_DIR`
+(unverified here).
+
+---
+
+## Part N — Security regression (I)
+
+No change to a working authorization design. Re-confirmed: identity is always the
+Clerk `sub`; role/owner never taken from a body; the customer/agent/admin/owner
+matrix is unchanged; the new users endpoint stays `admin_dependency` (agent/
+customer → 403); object-level access returns 404; Owner identity and the PR #35
+performance fix are intact; messaging/mentions/notifications remain
+participant-scoped and isolated; attachments remain fail-closed; rate limiting
+atomic/fail-closed; CORS/CSP/headers live-verified; ticket idempotency preserved;
+the new endpoint exposes no new user fields. Negative tests cover 401, 403, 404,
+422 (invalid pagination bounds) and inactive filtering.
+
+---
+
+## Part O — Outstanding blockers
+
+1. External verification in Part M (Clerk production, Neon restore, Upstash,
+   ClamAV, Railway pre-deploy settings, monitoring) — requires credentials/console
+   access/operator approval not available here.
+2. Frontend coverage depth (40% baseline) — the floor is a regression guard, not a
+   target; deeper coverage would require heavier mocking, so the browser matrix is
+   the intended complement.
+3. Dev-only npm advisories on the existing `vitest 5.0.4` toolchain (6 moderate,
+   dev-only); production dependency audit remains **0**. Deferred to a dedicated
+   tooling bump to avoid an unsolicited major-version change.
+4. Recurring external truncation of `data.md`'s working copy between sessions;
+   content is preserved each time, but the operator should identify the process.
+
+---
+
+## Part P — Verdict
+
+**C — DEMO / DEVELOPMENT READY.**
+
+Code quality, correctness, authorization, database integrity, migrations, Docker
+builds, image security, coverage measurement, browser responsiveness and the live
+API/web health + header posture are verified. Production readiness additionally
+requires evidence for production Clerk auth, Neon recovery, Upstash durability, a
+real scanner, monitoring and the Railway pre-deploy gate — none verified here, so
+a "production ready" verdict would be dishonest. To reach **STAGING READY**:
+complete the external verification in Part M, run an authorized authenticated
+browser journey per role, and perform a Neon restore drill on an isolated target.
+
+---
+
+## Preservation check
+
+This section was prepended; the entire previously committed `data.md` (3,046
+lines) follows verbatim beneath it. Verified by byte-identical SHA-256 of the
+historical suffix after the edit.
+
+---
+
 # HelpDesk — Complete Full-Stack Engineering Audit and Release Readiness Review
 
 **Review date:** 2026-11-23
