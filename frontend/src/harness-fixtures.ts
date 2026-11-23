@@ -173,7 +173,38 @@ export function installFixtureFetch() {
     if (path.endsWith('/notifications')) return json(notifications)
     if (path.endsWith('/tickets/assigned')) return json(ticketPage(url, tickets.slice(0, 12)))
     if (path.endsWith('/tickets')) return json(ticketPage(url, tickets))
-    if (path.endsWith('/users')) return json(people)
+    if (path.endsWith('/users')) {
+      // Mirror the backend `UserPage` envelope (server-side pagination).
+      const page = Math.max(1, Number(url.searchParams.get('page') ?? 1))
+      const pageSize = Math.max(1, Number(url.searchParams.get('page_size') ?? 20))
+      const role = url.searchParams.get('role')
+      const active = url.searchParams.get('is_active')
+      const q = url.searchParams.get('q')?.toLowerCase()
+      let filtered = people
+      if (role) filtered = filtered.filter((u) => u.role === role)
+      if (active === 'true') filtered = filtered.filter((u) => u.is_active)
+      if (active === 'false') filtered = filtered.filter((u) => !u.is_active)
+      if (q) {
+        filtered = filtered.filter(
+          (u) =>
+            u.full_name.toLowerCase().includes(q) ||
+            u.username.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q),
+        )
+      }
+      const total = filtered.length
+      const totalPages = Math.max(1, Math.ceil(total / pageSize))
+      const offset = (page - 1) * pageSize
+      return json({
+        items: filtered.slice(offset, offset + pageSize),
+        total,
+        page,
+        page_size: pageSize,
+        total_pages: totalPages,
+        has_next: page < totalPages,
+        has_previous: page > 1,
+      })
+    }
     if (path.endsWith('/staff-messages/directory')) {
       const q = (url.searchParams.get('q') ?? '').toLowerCase().replace(/^@/, '')
       const staff = people.filter((u) => u.role !== 'customer')
@@ -225,6 +256,14 @@ export function installFixtureFetch() {
       ])
     }
     if (path.endsWith('/internal-messages/received')) return json([])
+    if (path.endsWith('/internal-messages/recipients')) {
+      const role = url.searchParams.get('role')
+      const eligible = people.filter(
+        (u) => u.role === 'agent' || u.role === 'admin',
+      )
+      return json(role ? eligible.filter((u) => u.role === role) : eligible)
+    }
+    if (path.endsWith('/internal-messages/sent')) return json([])
     if (path.endsWith('/account-requests')) return json([])
     if (path.endsWith('/attachments')) return json([])
     if (path.endsWith('/comments')) return json([])
