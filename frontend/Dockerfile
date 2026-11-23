@@ -25,7 +25,8 @@ RUN npm run build
 
 FROM nginx:1.29-alpine AS runtime
 
-RUN apk add --no-cache gettext
+RUN apk upgrade --no-cache \
+    && apk add --no-cache gettext
 
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

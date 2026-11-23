@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "vp lint",
     "test": "vp test run",
-    "check": "vp check"
+    "test:coverage": "vp test run --coverage",
+    "check": "vp check",
+    "dev:harness": "vp dev --config vite.harness.config.ts",
+    "test:browser": "node scripts/browser-verify.mjs"
   },
   "dependencies": {
     "@chakra-ui/react": "3.37.0",
@@ -26,12 +29,14 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
+    "@vitest/coverage-v8": "5.0.4",
     "jsdom": "27.4.0",
     "tailwindcss": "4.3.3",
     "typescript": "~6.0.2",
