@@ -65,15 +65,40 @@ case "$HSTS_MAX_AGE_SECONDS" in
         ;;
 esac
 
+# includeSubDomains is opt-in. It tells browsers to force HTTPS on *every*
+# subdomain of this host, so enabling it before every subdomain has valid TLS
+# can lock clients out of unrelated services. Only emit it when the operator has
+# explicitly confirmed that readiness (HSTS_INCLUDE_SUBDOMAINS=true).
+HSTS_INCLUDE_SUBDOMAINS="${HSTS_INCLUDE_SUBDOMAINS:-false}"
+case "$HSTS_INCLUDE_SUBDOMAINS" in
+    true|false) ;;
+    *)
+        echo "HSTS_INCLUDE_SUBDOMAINS must be 'true' or 'false'" >&2
+        exit 1
+        ;;
+esac
+# Nginx configuration output directory. Defaults to the image's real path; it is
+# overridable only so the entrypoint's HSTS logic can be exercised by tests
+# without writing to /etc. Production never sets it.
+NGINX_CONF_DIR="${NGINX_CONF_DIR:-/etc/nginx/conf.d}"
+
 if [ "${HSTS_ENABLED:-false}" = "true" ]; then
-    printf 'add_header Strict-Transport-Security "max-age=%s; includeSubDomains" always;\n' \
-        "$HSTS_MAX_AGE_SECONDS" > /etc/nginx/conf.d/hsts.inc
+    if [ "$HSTS_INCLUDE_SUBDOMAINS" = "true" ]; then
+        printf 'add_header Strict-Transport-Security "max-age=%s; includeSubDomains" always;\n' \
+            "$HSTS_MAX_AGE_SECONDS" > "$NGINX_CONF_DIR/hsts.inc"
+    else
+        printf 'add_header Strict-Transport-Security "max-age=%s" always;\n' \
+            "$HSTS_MAX_AGE_SECONDS" > "$NGINX_CONF_DIR/hsts.inc"
+    fi
 else
-    : > /etc/nginx/conf.d/hsts.inc
+    : > "$NGINX_CONF_DIR/hsts.inc"
 fi
 
+# Template location. Defaults to the image path; overridable only for tests.
+NGINX_TEMPLATE="${NGINX_TEMPLATE:-/etc/nginx/nginx.conf.template}"
+
 envsubst '${API_ORIGIN} ${CLERK_FAPI_ORIGIN}' \
-    < /etc/nginx/nginx.conf.template \
-    > /etc/nginx/conf.d/default.conf
+    < "$NGINX_TEMPLATE" \
+    > "$NGINX_CONF_DIR/default.conf"
 
 exec nginx -g 'daemon off;'

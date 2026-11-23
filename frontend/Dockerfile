@@ -44,7 +44,8 @@ RUN chown -R nginx:nginx /etc/nginx/conf.d /var/cache/nginx /var/log/nginx \
 USER 101:101
 
 ENV HSTS_ENABLED=false \
-    HSTS_MAX_AGE_SECONDS=31536000
+    HSTS_MAX_AGE_SECONDS=31536000 \
+    HSTS_INCLUDE_SUBDOMAINS=false
 
 EXPOSE 8080
 

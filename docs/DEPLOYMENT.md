@@ -164,6 +164,7 @@ without the volume cannot see the files.
    | `CLERK_FAPI_ORIGIN` | Optional Clerk Frontend API origin for a custom Clerk domain. Leave unset for the default Clerk development hosts; set an exact HTTPS origin for production custom domains. |
    | `HSTS_ENABLED` | `false` until the frontend custom domain has verified TLS and the smoke tests pass. |
    | `HSTS_MAX_AGE_SECONDS` | `31536000` after TLS verification. |
+   | `HSTS_INCLUDE_SUBDOMAINS` | `false` (default). Set `true` only when every subdomain of the frontend host has valid HTTPS. |
 
    The container refuses to start if `API_ORIGIN` is missing, not HTTPS, or
    contains a path/query/fragment or shell-injection characters.
@@ -251,8 +252,11 @@ application rollback.
    test Clerk sign-in/redirects.
 4. Only then set `HSTS_ENABLED=true` on both services. HSTS is intentionally
    opt-in: enabling it on an HTTP-only or misconfigured origin can lock clients
-   out. `includeSubDomains` is emitted; do not enable it if any subdomain is not
-   HTTPS.
+   out. On the frontend, `includeSubDomains` is **off by default**; set
+   `HSTS_INCLUDE_SUBDOMAINS=true` only after every subdomain of the frontend host
+   has valid HTTPS, because the directive tells browsers to force HTTPS on all of
+   them. `preload` is never emitted automatically; submit to the preload list only
+   after a deliberate review and a long `max-age` soak.
 5. Keep the API documentation routes disabled in production. `/docs`,
    `/redoc`, and `/openapi.json` should return `404`.
 6. Keep the backend CSP strict. Swagger/ReDoc receive a separate
