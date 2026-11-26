@@ -3,6 +3,7 @@ import { MessageSquare } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import { useMe } from '../hooks/useMe.ts'
+import { useViewportBoundHeight } from '../hooks/useViewportBoundHeight.ts'
 import {
   useMarkStaffConversationRead,
   useSendStaffMessage,
@@ -35,14 +36,27 @@ export function ConversationList({
   onSelect: (id: string) => void
   title?: string
 }) {
+  const pane = useViewportBoundHeight<HTMLDivElement>(true)
   return (
-    <Surface overflow='hidden'>
-      <Flex px='4' py='3' borderBottomWidth='1px' borderColor={palette.border}>
+    <Surface
+      ref={pane.ref}
+      overflow='hidden'
+      display='flex'
+      flexDirection='column'
+      maxH={pane.height ? `${pane.height}px` : undefined}
+    >
+      <Flex
+        px='4'
+        py='3'
+        borderBottomWidth='1px'
+        borderColor={palette.border}
+        flexShrink={0}
+      >
         <Text fontSize='sm' fontWeight='medium' color={palette.text}>
           {title}
         </Text>
       </Flex>
-      <Stack gap='0'>
+      <Stack gap='0' flex='1' minH='0' overflowY={{ base: 'visible', lg: 'auto' }}>
         {conversations.map((conversation) => (
           <ConversationRow
             key={conversation.id}
@@ -146,9 +160,14 @@ export function ConversationPanel({
   const me = useMe()
   const { mutate: markConversationRead } = useMarkStaffConversationRead(conversationId)
   const lastMarked = useRef<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const pane = useViewportBoundHeight<HTMLDivElement>(true, {
+    measureKey: detail.data?.conversation.id,
+  })
 
   const conversation = detail.data?.conversation
   const unread = conversation?.unread_count ?? 0
+  const messageCount = detail.data?.messages.length ?? 0
 
   useEffect(() => {
     if (!conversation || unread === 0) return
@@ -157,6 +176,13 @@ export function ConversationPanel({
     lastMarked.current = signature
     markConversationRead()
   }, [conversation, unread, markConversationRead])
+
+  // The pane scrolls itself now, so keep the newest message in view when the
+  // thread loads or a message is sent (the surrounding page no longer grows).
+  useEffect(() => {
+    const node = scrollRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [messageCount])
 
   if (detail.isPending) return <LoadingState label='Loading conversation…' minHeight='40vh' />
 
@@ -195,9 +221,15 @@ export function ConversationPanel({
   }
 
   return (
-    <Surface p={{ base: '5', md: '6' }}>
-      <Stack gap='5'>
-        <Stack gap='1'>
+    <Surface
+      ref={pane.ref}
+      p={{ base: '5', md: '6' }}
+      display='flex'
+      flexDirection='column'
+      maxH={pane.height ? `${pane.height}px` : undefined}
+    >
+      <Stack gap='5' flex='1' minH='0'>
+        <Stack gap='1' flexShrink={0}>
           <Text fontSize='md' fontWeight='medium' color={palette.text}>
             {counterpart}
           </Text>
@@ -206,58 +238,67 @@ export function ConversationPanel({
           </Text>
         </Stack>
 
-        {messages.length === 0 ? (
-          <EmptyState
-            compact
-            icon={MessageSquare}
-            title='No messages yet'
-            description='Write the first message below. Type @ to mention a teammate.'
-          />
-        ) : (
-          <Stack gap='0'>
-            {messages.map((message, index) => {
-              const isOwn = message.sender_user_id === viewerId
-              const authorName = labelFor(message.sender_user_id)
-              return (
-                <Flex
-                  key={message.id}
-                  gap='3.5'
-                  py='4'
-                  borderTopWidth={index === 0 ? '0' : '1px'}
-                  borderColor={palette.borderSubtle}
-                >
-                  <UserAvatar
-                    name={authorName}
-                    src={imageFor(message.sender_user_id)}
-                    tone={isOwn ? 'ink' : 'neutral'}
-                  />
-                  <Box flex='1' minW='0'>
-                    <Flex align='center' gap='2' wrap='wrap'>
-                      <Text fontSize='sm' fontWeight='medium' color={palette.text}>
-                        {authorName}
+        {/* The thread is the only scrolling region inside the panel, so a long
+            conversation never pushes the composer out of view. */}
+        <Box ref={scrollRef} flex='1' minH='0' overflowY={{ base: 'visible', lg: 'auto' }} pr={{ lg: '1' }}>
+          {messages.length === 0 ? (
+            <EmptyState
+              compact
+              icon={MessageSquare}
+              title='No messages yet'
+              description='Write the first message below. Type @ to mention a teammate.'
+            />
+          ) : (
+            <Stack gap='0'>
+              {messages.map((message, index) => {
+                const isOwn = message.sender_user_id === viewerId
+                const authorName = labelFor(message.sender_user_id)
+                return (
+                  <Flex
+                    key={message.id}
+                    gap='3.5'
+                    py='4'
+                    borderTopWidth={index === 0 ? '0' : '1px'}
+                    borderColor={palette.borderSubtle}
+                  >
+                    <UserAvatar
+                      name={authorName}
+                      src={imageFor(message.sender_user_id)}
+                      tone={isOwn ? 'ink' : 'neutral'}
+                    />
+                    <Box flex='1' minW='0'>
+                      <Flex align='center' gap='2' wrap='wrap'>
+                        <Text fontSize='sm' fontWeight='medium' color={palette.text}>
+                          {authorName}
+                        </Text>
+                        <Text fontSize='xs' color={palette.textFaint}>
+                          {formatDateTime(message.created_at)}
+                        </Text>
+                      </Flex>
+                      <Text
+                        mt='1.5'
+                        fontSize='sm'
+                        color={palette.text}
+                        whiteSpace='pre-wrap'
+                        wordBreak='break-word'
+                        lineHeight='1.6'
+                      >
+                        {message.body}
                       </Text>
-                      <Text fontSize='xs' color={palette.textFaint}>
-                        {formatDateTime(message.created_at)}
-                      </Text>
-                    </Flex>
-                    <Text
-                      mt='1.5'
-                      fontSize='sm'
-                      color={palette.text}
-                      whiteSpace='pre-wrap'
-                      wordBreak='break-word'
-                      lineHeight='1.6'
-                    >
-                      {message.body}
-                    </Text>
-                  </Box>
-                </Flex>
-              )
-            })}
-          </Stack>
-        )}
+                    </Box>
+                  </Flex>
+                )
+              })}
+            </Stack>
+          )}
+        </Box>
 
-        <Box borderTopWidth='1px' borderColor={palette.borderSubtle} pt='5'>
+        <Box
+          flexShrink={0}
+          borderTopWidth='1px'
+          borderColor={palette.borderSubtle}
+          pt='4'
+        >
           <StaffMentionComposer
             onSubmit={submit}
             isPending={send.isPending}

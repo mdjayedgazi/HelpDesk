@@ -1,6 +1,6 @@
 import { Box, Button, Flex, Spinner, Stack, Text, chakra } from '@chakra-ui/react'
 import { Send } from 'lucide-react'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 
 import { useDebounced } from '../hooks/useDebounced.ts'
 import { useStaffDirectory } from '../hooks/useStaffMessages.ts'
@@ -18,6 +18,12 @@ import { UserAvatar } from './UserAvatar.tsx'
 
 const MAX_LENGTH = 5000
 const MAX_SUGGESTIONS = 8
+/**
+ * The composer is a single-line bar that grows with the draft, then scrolls.
+ * Capping the textarea at 144 px keeps it horizontal and compact instead of
+ * turning the bottom of the thread into a tall card.
+ */
+const MAX_TEXTAREA_HEIGHT = 144
 
 export interface MentionComposerSubmit {
   body: string
@@ -79,6 +85,17 @@ export function StaffMentionComposer({
   useEffect(() => {
     setHighlighted(0)
   }, [debouncedQuery, mention?.start])
+
+  // Keep the input one line tall until the draft wraps, then grow up to a cap.
+  // `height:'auto'` first is required so the scrollHeight reflects the new
+  // content instead of the previous fixed height.
+  useLayoutEffect(() => {
+    const node = textareaRef.current
+    if (!node) return
+    node.style.height = 'auto'
+    node.style.height = `${Math.min(node.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`
+    node.style.overflowY = node.scrollHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden'
+  }, [body])
 
   const focusTextarea = useCallback(() => {
     textareaRef.current?.focus()
@@ -184,47 +201,98 @@ export function StaffMentionComposer({
         void submit()
       }}
     >
-      <Stack gap='3'>
+      <Stack gap='2'>
         <Box position='relative'>
-          <TextAreaInput
-            ref={textareaRef}
-            value={body}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onClick={syncMentionFromCaret}
-            onKeyUp={(event) => {
-              // Re-detect the mention whenever the caret moves without a text
-              // change (arrow keys, Home/End) so the panel tracks the caret.
-              if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-                syncMentionFromCaret()
+          {/*
+            One compact horizontal bar: the textarea owns the free width, the
+            send action sits on the right, and the whole surface carries the
+            border/focus ring. This keeps the composer slim at the bottom of the
+            thread instead of rendering a large vertical card.
+          */}
+          <Flex
+            align='flex-end'
+            gap='2'
+            px='3'
+            py='2'
+            bg={palette.surface}
+            borderWidth='1px'
+            borderColor={palette.border}
+            borderRadius='l4'
+            transition='border-color 0.16s ease, box-shadow 0.16s ease'
+            _focusWithin={{
+              borderColor: palette.ink,
+              boxShadow: `0 0 0 1px ${palette.ink}`,
+            }}
+          >
+            <TextAreaInput
+              ref={textareaRef}
+              value={body}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onClick={syncMentionFromCaret}
+              onKeyUp={(event) => {
+                // Re-detect the mention whenever the caret moves without a text
+                // change (arrow keys, Home/End) so the panel tracks the caret.
+                if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+                  syncMentionFromCaret()
+                }
+              }}
+              onBlur={() => {
+                // Delay so a click on a suggestion registers before the panel
+                // closes (pointer selection on mouse/touch).
+                window.setTimeout(() => setMention(null), 120)
+              }}
+              placeholder={placeholder}
+              rows={1}
+              resize='none'
+              flex='1'
+              minW='0'
+              minH='0'
+              px='1'
+              py='1.5'
+              borderWidth='0'
+              bg='transparent'
+              _hover={{ borderColor: 'transparent' }}
+              _focus={{ borderColor: 'transparent' }}
+              _focusVisible={{ outline: 'none' }}
+              maxLength={maxLength}
+              autoFocus={autoFocus}
+              aria-label={ariaLabel}
+              aria-invalid={Boolean(error)}
+              aria-autocomplete='list'
+              aria-expanded={open}
+              aria-controls={open ? listboxId : undefined}
+              aria-activedescendant={
+                open && results[highlighted] ? `${listboxId}-option-${highlighted}` : undefined
               }
-            }}
-            onBlur={() => {
-              // Delay so a click on a suggestion registers before the panel
-              // closes (pointer selection on mouse/touch).
-              window.setTimeout(() => setMention(null), 120)
-            }}
-            placeholder={placeholder}
-            minH='24'
-            maxLength={maxLength}
-            autoFocus={autoFocus}
-            aria-label={ariaLabel}
-            aria-invalid={Boolean(error)}
-            aria-autocomplete='list'
-            aria-expanded={open}
-            aria-controls={open ? listboxId : undefined}
-            aria-activedescendant={
-              open && results[highlighted] ? `${listboxId}-option-${highlighted}` : undefined
-            }
-            role='combobox'
-          />
+              role='combobox'
+            />
+
+            <Button
+              type='submit'
+              size='sm'
+              flexShrink={0}
+              disabled={isPending || !body.trim()}
+              aria-label={submitLabel}
+              title={submitLabel}
+              bg={palette.ink}
+              color={palette.textOnInk}
+              _hover={{ bg: palette.inkHover }}
+              loading={isPending}
+              onClick={() => focusTextarea()}
+            >
+              <Send size={14} aria-hidden />
+            </Button>
+          </Flex>
 
           {open ? (
             <Box
               position='absolute'
               left='0'
               right='0'
-              top='calc(100% + 4px)'
+              // The bar is anchored to the bottom of the thread, so suggestions
+              // open upward where there is room instead of dropping off-pane.
+              bottom='calc(100% + 6px)'
               zIndex='20'
               bg={palette.elevated}
               borderWidth='1px'
@@ -296,29 +364,25 @@ export function StaffMentionComposer({
           </Flex>
         ) : null}
 
-        <Flex align='center' justify='space-between' gap='3' wrap='wrap'>
+        <Flex align='center' justify='space-between' gap='3' px='1' minW='0'>
           <Text
-            fontSize='xs'
-            color={error ? palette.text : palette.textMuted}
+            fontSize='2xs'
+            color={error ? palette.semantic.danger : palette.textMuted}
             role={error ? 'alert' : undefined}
+            truncate
           >
-            {error ??
-              `${body.trim().length}/${maxLength} · Type @ to mention a teammate`}
+            {error ?? (
+              <>
+                <Box as='span' display={{ base: 'none', sm: 'inline' }}>
+                  Enter to send · Shift+Enter for a new line ·{' '}
+                </Box>
+                @ to mention a teammate
+              </>
+            )}
           </Text>
-          <Button
-            type='submit'
-            size='sm'
-            disabled={isPending || !body.trim()}
-            aria-label={submitLabel}
-            bg={palette.ink}
-            color={palette.textOnInk}
-            _hover={{ bg: palette.inkHover }}
-            loading={isPending}
-            onClick={() => focusTextarea()}
-          >
-            <Send size={14} aria-hidden />
-            {submitLabel}
-          </Button>
+          <Text fontSize='2xs' color={palette.textFaint} whiteSpace='nowrap' flexShrink={0}>
+            {body.trim().length}/{maxLength}
+          </Text>
         </Flex>
       </Stack>
     </form>
