@@ -1,13 +1,17 @@
 import { Box, type BoxProps, Flex, Heading, Stack, Text } from '@chakra-ui/react'
-import type { ReactNode } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 
 import { palette } from '../theme/palette.ts'
 import { Reveal } from './Reveal.tsx'
 
 /** A restrained white panel used to group related content. */
-export function Surface({ children, ...rest }: BoxProps) {
+export const Surface = forwardRef<HTMLDivElement, BoxProps>(function Surface(
+  { children, ...rest },
+  ref,
+) {
   return (
     <Box
+      ref={ref}
       bg={palette.surface}
       borderWidth='1px'
       borderColor={palette.border}
@@ -17,7 +21,7 @@ export function Surface({ children, ...rest }: BoxProps) {
       {children}
     </Box>
   )
-}
+})
 
 export function SectionHeader({
   title,
